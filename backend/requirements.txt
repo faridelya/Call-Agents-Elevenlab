@@ -1,0 +1,46 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+pgvector==0.3.6
+
+# Redis
+redis[asyncio]==5.2.1
+
+# Background tasks
+arq==0.26.1
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# HTTP client
+httpx[asyncio]==0.28.1
+
+# External SDKs
+twilio==9.3.3
+openai==1.59.4
+
+# Config
+pydantic-settings==2.7.0
+pydantic[email]==2.10.4
+
+# Encryption (API keys at rest)
+cryptography==44.0.0
+
+# Retry logic
+tenacity==9.0.0
+
+# Structured logging
+structlog==24.4.0
+
+# Async file I/O (KB document processing)
+aiofiles==24.1.0
+
+# WebSocket client (bridge → ElevenLabs)
+websockets==14.1

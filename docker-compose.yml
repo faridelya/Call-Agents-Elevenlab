@@ -1,0 +1,97 @@
+# Voxara — full-stack compose
+# Ports:  frontend=3742  backend=8001  postgres=5434  redis=6382
+# Usage:  ./start.sh            (start / restart)
+#         ./start.sh --build    (rebuild images + start)
+#         ./start.sh --stop     (stop all)
+#         ./start.sh --logs     (tail logs)
+
+services:
+
+  # ── Databases ─────────────────────────────────────────────────────────────
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: voxara-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     voxara
+      POSTGRES_PASSWORD: voxara_dev
+      POSTGRES_DB:       voxara
+    ports:
+      - "5434:5432"
+    volumes:
+      - voxara_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U voxara"]
+      interval: 5s
+      timeout:  5s
+      retries:  10
+
+  redis:
+    image: redis:7-alpine
+    container_name: voxara-redis
+    restart: unless-stopped
+    ports:
+      - "6382:6379"
+    volumes:
+      - voxara_redis_data:/data
+    healthcheck:
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout:  3s
+      retries:  10
+
+  # ── Backend ───────────────────────────────────────────────────────────────
+
+  backend:
+    build:
+      context:  ./backend
+      # BuildKit cache mounts make dep installs a cache-hit after first build
+      args: {}
+    container_name: voxara-backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    env_file: ./backend/.env
+    environment:
+      # Override DB / Redis URLs with Docker service names
+      DATABASE_URL: postgresql+asyncpg://voxara:voxara_dev@postgres:5432/voxara
+      REDIS_URL:    redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Hot-reload app code without rebuilding (uvicorn --reload watches /app/app)
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - ./backend/alembic.ini:/app/alembic.ini
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8001
+               --reload --reload-dir /app/app"
+
+  # ── Frontend ──────────────────────────────────────────────────────────────
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Inlined at build time by Next.js — browser calls go to localhost:8001
+        NEXT_PUBLIC_API_URL: http://localhost:8001
+    container_name: voxara-frontend
+    restart: unless-stopped
+    ports:
+      - "3742:3742"
+    environment:
+      PORT:                "3742"
+      NEXT_PUBLIC_API_URL: http://localhost:8001
+    depends_on:
+      - backend
+
+# ── Volumes ───────────────────────────────────────────────────────────────
+
+volumes:
+  voxara_postgres_data:
+  voxara_redis_data:

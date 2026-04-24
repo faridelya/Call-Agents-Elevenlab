@@ -1,0 +1,15 @@
+# Build artefacts
+node_modules
+.next
+
+# Secrets
+.env
+.env.*
+.env*.local
+
+# Dev / CI
+.git
+.gitignore
+.dockerignore
+*.md
+.claude

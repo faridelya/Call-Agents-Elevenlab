@@ -1,0 +1,26 @@
+{
+  "name": "voxara",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch server.ts",
+    "build": "next build",
+    "start": "NODE_ENV=production tsx server.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.99.2",
+    "next": "15.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "twilio": "^5.5.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}

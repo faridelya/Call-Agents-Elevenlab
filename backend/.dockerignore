@@ -1,0 +1,23 @@
+# Python artefacts
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Secrets — never bake into image
+.env
+.env.*
+
+# Dev / CI artefacts
+.git
+.gitignore
+.dockerignore
+Makefile
+tests/
+*.md
+*.log
+docker-compose.yml
