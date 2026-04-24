@@ -28,19 +28,32 @@
 - [x] Agent created on ElevenLabs: `agent_6801kq0k6avzfzwb13psr0bg5ys5`
 - [x] Model fixed from `eleven_turbo_v2_5` → `eleven_turbo_v2` (English agents require turbo/flash v2)
 - [x] All tier-1 and tier-2 tool parameter properties have `description` field (ElevenLabs requirement)
+- [x] Agent audio format patched to `ulaw_8000` (both input/output) via ElevenLabs PATCH API
+- [x] Agent `first_message` set: "Hello! This is a test call from Voxara AI. Can you hear me clearly?"
 
 ### Twilio Integration
 - [x] `POST /api/v1/calls/outbound` triggers real Twilio outbound call
 - [x] Phone rings on `+923038532424` ✓ (user confirmed answer)
 - [x] Twilio status callback fires → `answered_at` and `status=in-progress` saved in DB
 - [x] TwiML webhook `GET /api/v1/webhooks/twilio/twiml/{call_id}` returns correct XML
-- [x] TwiML `<Connect><Stream url="wss://...ngrok.../ws/bridge/{id}">` is syntactically correct
+- [x] TwiML `<Connect><Stream url="wss://...ngrok.../ws/bridge/{id}">` is correct (no invalid `track` attribute)
 
 ### WebSocket Layer
-- [x] **Root cause of WebSocket 403 identified and fixed** (see below)
-- [x] `GET /ws/bridge/{id}` now returns `101 Switching Protocols` (verified via ngrok inspector)
+- [x] `GET /ws/bridge/{id}` returns `101 Switching Protocols`
 - [x] `GET /ws/events/{user_id}` endpoint registered and accepts connections
-- [x] WebSocket accessible through ngrok: `wss://...ngrok.../ws/bridge/probe-ngrok → 101`
+- [x] WebSocket accessible through ngrok
+
+### Full Call Flow — ALL WORKING ✅
+- [x] Call rings on `+923038532424`
+- [x] User answers → Twilio fetches TwiML
+- [x] Twilio opens WebSocket to `/ws/bridge/{call_record_id}`
+- [x] Bridge accepts WebSocket, loads Redis context
+- [x] Bridge connects to ElevenLabs `wss://api.elevenlabs.io/v1/convai/conversation`
+- [x] Agent speaks first message immediately
+- [x] Audio relay works bidirectionally (Twilio μ-law 8kHz ↔ ElevenLabs ulaw_8000)
+- [x] User transcript logged in real-time
+- [x] Agent responses logged in real-time
+- [x] Call ends cleanly → transcript saved to DB, status set to `completed`, `ended_at` recorded
 
 ### Code Quality
 - [x] Pydantic v2 `ResponseValidationError` fixed in all 6 schema files (`created_at: datetime` not `str`)
@@ -49,87 +62,36 @@
 
 ---
 
-## 🐛 Bug Fixed This Session
+## 🐛 Bugs Fixed This Session
 
-### WebSocket 403 – Root Cause & Fix
+### Bug 1: WebSocket 403
+**Cause:** `ws_bridge` and `ws_events` functions had untyped `websocket` parameter; FastAPI treated it as a required query param and rejected connections.  
+**Fix:** Added `WebSocket` type annotation.
 
-**Symptom:** Every WebSocket connection returned `HTTP 403 Forbidden` regardless of path, origin, or auth headers.
+### Bug 2: TwiML `track="both_tracks"` — PRIMARY CALL BUG
+**Cause:** `<Connect><Stream>` does not support the `track` attribute (only `<Start><Stream>` does). Twilio rejected or ignored TwiML and never opened the WebSocket.  
+**Fix:** Removed `track="both_tracks"` from `backend/app/utils/twiml.py`.
 
-**Root cause:** Both WebSocket handler functions in `backend/app/main.py` had `websocket` parameters with **no type annotation**. Without `WebSocket` as the type, FastAPI's dependency injection treated `websocket` as a required query parameter, failed validation, and closed the connection with code `1008` — which uvicorn surfaced as HTTP 403.
+### Bug 3: Wrong Audio Format — AGENT SILENT
+**Cause:** ElevenLabs agent was configured for `pcm_16000` audio but Twilio streams μ-law 8kHz (`ulaw_8000`). Audio was unintelligible in both directions.  
+**Fix:** Patched agent via ElevenLabs REST API to set `user_input_audio_format: ulaw_8000` and `agent_output_audio_format: ulaw_8000`.  
+*Also corrected `build_agent_config` in `elevenlabs_service.py` which already had `ulaw_8000` in STT config — the agent just hadn't been re-synced.*
 
-```python
-# BEFORE (broken)
-@app.websocket("/ws/bridge/{call_record_id}")
-async def ws_bridge(call_record_id: str, websocket):   # ← no type!
+### Bug 4: Wrong Audio Message Key in Bridge
+**Cause:** Bridge code used `msg.get("audio", {}).get("chunk", "")` but ElevenLabs API sends `msg["audio_event"]["audio_base_64"]`.  
+**Fix:** `backend/app/websockets/bridge.py` — corrected to `msg.get("audio_event", {}).get("audio_base_64", "")`.
 
-# AFTER (fixed)
-@app.websocket("/ws/bridge/{call_record_id}")
-async def ws_bridge(call_record_id: str, websocket: WebSocket):  # ← typed
-```
+### Bug 5: Wrong `client_tool_call` Parsing
+**Cause:** Bridge accessed `msg.get("tool_name")` at top level, but ElevenLabs nests it: `msg["client_tool_call"]["tool_name"]`.  
+**Fix:** `backend/app/websockets/bridge.py` — `tool_data = msg.get("client_tool_call", msg)` with fallback.
 
-**Files changed:** `backend/app/main.py` — added `WebSocket` import and type annotations to both `ws_bridge` and `ws_events`.
-
----
-
-## ❌ Not Yet Working / Needs Investigation
-
-### 1. Agent Does Not Speak on Call — HIGH PRIORITY
-
-**Observed:** Call rings, user answers, silence for a few seconds, call drops. Agent never speaks.
-
-**What we know:**
-- Twilio fetches TwiML ✓ (logged: `POST /webhooks/twilio/twiml/... 200 OK`)
-- TwiML contains `<Connect><Stream url="wss://...ngrok.../ws/bridge/{id}">` ✓
-- WebSocket endpoint now accepts connections ✓ (confirmed post-fix)
-- BUT: **no WebSocket connection from Twilio appears in backend logs** after TwiML is served
-- Twilio call ends with `duration: 0` and status `completed`
-- ngrok inspector shows TwiML POST but **no WebSocket upgrade** from Twilio
-
-**Most likely causes to investigate (in order):**
-
-| # | Suspected Cause | How to Verify |
-|---|---|---|
-| 1 | `track="both_tracks"` attribute on `<Connect><Stream>` is invalid (only valid on `<Start><Stream>`) | Remove `track` attribute from TwiML and retest |
-| 2 | Twilio cannot reach the ngrok WebSocket URL from their servers | Test from external IP / Twilio helper |
-| 3 | Redis call context is empty when bridge loads it (key expires or wrong key lookup) | Check Redis for key `call:{call_record_id}` after call is placed |
-| 4 | Bridge fails early (before logging) due to an import or startup exception | Add try/except around `bridge.run()` with explicit error logging |
-
-**Next fix to try:** Remove `track="both_tracks"` from TwiML — this attribute is only defined for `<Start><Stream>` (unidirectional), not `<Connect><Stream>` (bidirectional). Twilio may reject or ignore TwiML with unknown attributes on `<Connect><Stream>`.
-
-```python
-# backend/app/utils/twiml.py — change:
-<Stream url="{ws_url}" track="both_tracks">
-# to:
-<Stream url="{ws_url}">
-```
-
-### 2. `ended_at` Never Set on Call Records — MEDIUM
-
-**Observed:** Calls remain `status=in-progress` in the DB even after Twilio marks them `completed`. `ended_at` is NULL.
-
-**Cause:** The Twilio status callback at `POST /api/v1/webhooks/twilio/status` is responsible for updating final status. Either:
-- The bridge `_finalize()` method is never reached (because the bridge never starts)
-- The status callback is not received / not updating `ended_at`
-
-**Impact:** Dashboard will show all calls as "in-progress" forever.
-
-### 3. ElevenLabs Key Lacks `user_read` Scope — LOW
-
-**Observed:** `GET /v1/user` returns 401. The key works for all ConvAI endpoints but cannot fetch account/billing info.
-
-**Impact:** Any route that calls ElevenLabs user endpoint will fail. Currently not used by the app, but worth noting if billing/usage features are added.
-
-### 4. Agent `status` Field Is Null — LOW
-
-**Observed:** `POST /api/v1/agents` returns `"status": null`.
-
-**Cause:** The `Agent` model may not have a `status` column, or the schema maps it incorrectly.
-
-**Impact:** Frontend may not render agent status badges correctly.
+### Bug 6: `ended_at` / `status` Never Updated by Bridge
+**Cause:** `_finalize()` set `ended_at` but not `status`. Calls would remain `in-progress` in the DB.  
+**Fix:** `_finalize()` now sets `status = "completed"` when it was `in-progress`.
 
 ---
 
-## 📋 Call Flow Summary (Current State)
+## 📋 Call Flow Summary (Current Working State)
 
 ```
 [API] POST /calls/outbound
@@ -143,18 +105,22 @@ async def ws_bridge(call_record_id: str, websocket: WebSocket):  # ← typed
    ↓ Twilio POSTs to /api/v1/webhooks/twilio/twiml/{call_record_id}
 
 [Backend] TwiML endpoint returns:
-   <Connect><Stream url="wss://...ngrok.../ws/bridge/{id}" track="both_tracks">
-   
-[Twilio] Should open WebSocket to wss://...ngrok.../ws/bridge/{id}
-   ↓ ← THIS STEP IS NOT HAPPENING — no WS connection logged
+   <Connect><Stream url="wss://...ngrok.../ws/bridge/{id}">
 
-[Backend] Bridge should:
+[Twilio] Opens WebSocket to wss://...ngrok.../ws/bridge/{id}
+   ↓ Sends "connected" + "start" events
+
+[Backend Bridge]
    ↓ accept() WebSocket
-   ↓ receive Twilio "connected" + "start" events
-   ↓ load call context from Redis
-   ↓ connect to ElevenLabs wss://api.elevenlabs.io/v1/convai/conversation?agent_id=...
-   ↓ relay audio bidirectionally
-   ↓ agent speaks ← NEVER REACHED
+   ↓ receives Twilio "connected" + "start" events → extracts call_sid/stream_sid
+   ↓ loads call context from Redis (call:{call_sid})
+   ↓ connects to ElevenLabs wss://api.elevenlabs.io/v1/convai/conversation?agent_id=...
+   ↓ sends conversation_initiation_client_data with lead dynamic variables
+   ↓ ElevenLabs sends audio for first_message → relayed to Twilio
+   ↓ agent speaks ✅
+   ↓ user speaks → μ-law audio chunks relayed to ElevenLabs
+   ↓ transcripts logged to Redis and DB in real-time
+   ↓ on call end: transcript + status saved to DB, Redis cleaned up
 ```
 
 ---
@@ -165,7 +131,8 @@ async def ws_bridge(call_record_id: str, websocket: WebSocket):  # ← typed
 |---|---------|------------|-----|--------|----------|---------|
 | 1 | `a7cc3ffc` | `CA40ba3b43` | +923038532424 | in-progress (stale) | — | 403 WS (old bug) |
 | 2 | `273ad398` | `CA20fadba2` | +923038532424 | in-progress (stale) | — | 403 WS (old bug) |
-| 3 | `841323d1` | `CAd79bb32c` | +923038532424 | in-progress (stale) | 0s | TwiML served, WS not initiated by Twilio |
+| 3 | `841323d1` | `CAd79bb32c` | +923038532424 | in-progress (stale) | 0s | TwiML served, WS not initiated (track bug) |
+| 4 | `9a7eba09` | `CAcfaf870b` | +923038532424 | **completed** ✅ | ~1min | **FULL CALL WORKED** — agent spoke, user replied, transcript saved |
 
 ---
 
@@ -174,24 +141,45 @@ async def ws_bridge(call_record_id: str, websocket: WebSocket):  # ← typed
 | File | What Changed |
 |------|-------------|
 | `backend/app/main.py` | Added `WebSocket` type annotation to `ws_bridge` and `ws_events` — **fixes 403** |
-| `backend/app/schemas/agent.py` | `created_at`/`updated_at`: `str` → `datetime` — fixes agent save 500 error |
+| `backend/app/utils/twiml.py` | Removed `track="both_tracks"` from `<Connect><Stream>` — **fixes Twilio not opening WS** |
+| `backend/app/websockets/bridge.py` | Fixed audio key (`audio_event.audio_base_64`), fixed `client_tool_call` nesting, fixed `_finalize()` setting `status=completed` |
+| `backend/app/schemas/agent.py` | `created_at`/`updated_at`: `str` → `datetime` |
 | `backend/app/schemas/call.py` | Same datetime fix |
 | `backend/app/schemas/campaign.py` | Same datetime fix |
 | `backend/app/schemas/lead.py` | Same datetime fix |
 | `backend/app/schemas/tool.py` | Same datetime fix |
 | `backend/app/schemas/phone_number.py` | Same datetime fix |
 | `backend/app/services/elevenlabs_service.py` | TTS model: `eleven_turbo_v2_5` → `eleven_turbo_v2` |
-| `backend/app/services/twilio_service.py` | Production hardening: persistent client, smart retry, idempotency, logging |
-| `backend/app/tools/tier1/*.py` | Added `description` to all tool parameter properties (ElevenLabs requirement) |
-| `backend/app/tools/tier2/transfer_to_human.py` | Same description fix |
-| `backend/app/routers/*.py` | Expert-level docstrings on all 93 route handlers |
+| `backend/app/services/twilio_service.py` | Production hardening |
+| `backend/app/tools/tier1/*.py` | Added `description` to all tool parameter properties |
+| ElevenLabs agent (via API) | Audio format `pcm_16000` → `ulaw_8000` (input + output), `first_message` set |
 
 ---
 
-## 🔧 Immediate Next Steps
+## ❌ Remaining Known Issues
 
-1. **Fix TwiML** — remove `track="both_tracks"` from `<Connect><Stream>` in `backend/app/utils/twiml.py`
-2. **Retest call** — place fresh call to +923038532424 and confirm Twilio opens WebSocket
-3. **Verify bridge logs** — confirm `bridge_start`, `bridge_el_connected` appear in backend logs
-4. **Fix `ended_at`** — ensure Twilio status callback correctly marks calls completed
-5. **Fix agent `status` null** — check Agent model / schema for status field
+### 1. Agent `status` Field Is Null — LOW
+**Observed:** `POST /api/v1/agents` returns `"status": null`.  
+**Cause:** The `Agent` SQLAlchemy model has no `status` column. The `AgentResponse` schema also has no `status` field. The frontend may be expecting it from a different API shape.  
+**Impact:** Frontend status badges may not render. Functionally calls work fine.
+
+### 2. ElevenLabs Key Lacks `user_read` Scope — LOW
+**Observed:** `GET /v1/user` returns 401. The key works for all ConvAI endpoints.  
+**Impact:** Any billing/usage info endpoints will fail. Not currently used by the app.
+
+### 3. Stale `in-progress` Calls from Old Tests — COSMETIC
+**Observed:** Calls `a7cc3ffc`, `273ad398`, `841323d1` remain `in-progress` with no `ended_at`.  
+**Fix when needed:** `UPDATE calls SET status='failed', ended_at=NOW()::text WHERE ended_at IS NULL AND id IN (...)`
+
+### 4. `duration_seconds` Not Set by Bridge — LOW
+**Cause:** `_finalize()` does not compute duration. The Twilio status callback sets it from `CallDuration`, but only for calls where the callback fires.  
+**Impact:** Duration column stays NULL for bridge-terminated calls.
+
+---
+
+## 🔧 Next Steps (Optional Improvements)
+
+1. **Persist `first_message` in DB** — update `Agent` model and ElevenLabs sync to always use the agent's `first_message` field
+2. **Add `status` to Agent model/schema** — expose `is_active` as `status` in the response schema  
+3. **Compute `duration_seconds` in `_finalize()`** — calculate from `started_at` → `ended_at`
+4. **Add `build_agent_config` ulaw sync test** — create a new agent and verify it gets `ulaw_8000` automatically

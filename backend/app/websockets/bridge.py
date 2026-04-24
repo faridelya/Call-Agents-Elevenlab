@@ -215,8 +215,8 @@ class Bridge:
                 msg_type = msg.get("type")
 
                 if msg_type == "audio":
-                    audio_event = msg.get("audio", {})
-                    payload = audio_event.get("chunk", "")
+                    audio_event = msg.get("audio_event", {})
+                    payload = audio_event.get("audio_base_64", "")
                     if payload and self.stream_sid:
                         await self.twilio_ws.send_text(json.dumps({
                             "event": "media",
@@ -233,10 +233,11 @@ class Bridge:
                         }))
 
                 elif msg_type == "client_tool_call":
+                    tool_data = msg.get("client_tool_call", msg)
                     tool_call = ToolCall(
-                        tool_name=msg.get("tool_name", ""),
-                        tool_call_id=msg.get("tool_call_id", ""),
-                        parameters=msg.get("parameters", {}),
+                        tool_name=tool_data.get("tool_name", ""),
+                        tool_call_id=tool_data.get("tool_call_id", ""),
+                        parameters=tool_data.get("parameters", {}),
                     )
                     log.info("tool_call", call_id=self.call_record_id, tool=tool_call.tool_name)
                     result = await execute_tool(tool_call, self.ctx, db, redis)
@@ -304,6 +305,8 @@ class Bridge:
                         call.stage_timeline = stages
                     if not call.ended_at:
                         call.ended_at = datetime.now(timezone.utc).isoformat()
+                    if call.status == "in-progress":
+                        call.status = "completed"
                     await db.commit()
         except Exception as e:
             log.error("bridge_finalize_error", error=str(e))
