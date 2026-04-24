@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
@@ -68,12 +68,12 @@ from app.websockets.event_bus import run_event_ws  # noqa: E402
 
 
 @app.websocket("/ws/bridge/{call_record_id}")
-async def ws_bridge(call_record_id: str, websocket):
+async def ws_bridge(call_record_id: str, websocket: WebSocket):
     bridge = Bridge(call_record_id=call_record_id, twilio_ws=websocket)
     await bridge.run()
 
 
 @app.websocket("/ws/events/{user_id}")
-async def ws_events(user_id: str, websocket):
+async def ws_events(user_id: str, websocket: WebSocket):
     """Real-time event stream for frontend (call status, campaign progress)."""
     await run_event_ws(user_id, websocket)
