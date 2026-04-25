@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from typing import Any
 
 
@@ -86,6 +86,11 @@ class AgentResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def status(self) -> str:
+        return "active" if self.is_active else "inactive"
 
     class Config:
         from_attributes = True

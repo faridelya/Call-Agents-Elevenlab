@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useAgent, useCreateAgent, useUpdateAgent, useSyncAgent, useVoices } from '@/lib/hooks/useAgents';
 import type { AgentCreate } from '@/lib/api';
-import { TestCallPanel } from './TestCallPanel';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -13,7 +12,6 @@ const tabs = [
   { id: 'voice',     label: 'Voice',     icon: 'M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2' },
   { id: 'script',    label: 'Script',    icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8' },
   { id: 'advanced',  label: 'Advanced',  icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z' },
-  { id: 'test',      label: 'Test Call', icon: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.06 1.25h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.08a16 16 0 0 0 6.88 6.88l1.41-1.41a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z' },
 ];
 
 const LLM_MODELS = [
@@ -98,6 +96,7 @@ function FInput({ style, ...props }: React.InputHTMLAttributes<HTMLInputElement>
   const [focused, setFocused] = useState(false);
   return (
     <input
+      autoComplete={props.type === 'password' ? 'new-password' : 'off'}
       {...props}
       style={{ ...baseField, ...style, borderColor: focused ? 'rgba(124,110,250,0.5)' : 'rgba(255,255,255,0.09)', boxShadow: focused ? '0 0 0 3px rgba(124,110,250,0.07)' : 'none' }}
       onFocus={() => setFocused(true)}
@@ -293,7 +292,7 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
   async function handleSave() {
     setIsSaving(true);
     try {
-      if (isNew) { await createAgent.mutateAsync(buildBody()); showToast('Agent created!', 'success'); }
+      if (isNew) { await createAgent.mutateAsync(buildBody()); showToast('Agent created!', 'success'); onBack(); }
       else { await updateAgent.mutateAsync(buildBody()); showToast('Agent saved!', 'success'); }
     } catch (e: unknown) { showToast(e instanceof Error ? e.message : 'Save failed', 'error'); }
     finally { setIsSaving(false); }
@@ -354,19 +353,21 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
             </span>
           )}
 
-          <button onClick={handleSave} disabled={isSaving} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '7px 16px', fontFamily: 'var(--font-inter)', fontSize: 13, fontWeight: 500, color: '#94A3B8', cursor: 'pointer', opacity: isSaving ? 0.5 : 1, transition: 'all 0.15s' }}>
-            {isSaving ? 'Saving…' : 'Save'}
-          </button>
+          {!isNew && (
+            <button onClick={handleSave} disabled={isSaving} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '7px 16px', fontFamily: 'var(--font-inter)', fontSize: 13, fontWeight: 500, color: '#94A3B8', cursor: 'pointer', opacity: isSaving ? 0.5 : 1, transition: 'all 0.15s' }}>
+              {isSaving ? 'Saving…' : 'Save Changes'}
+            </button>
+          )}
 
           {!isNew && (
             <button onClick={handleSync} disabled={isSyncing} style={{ background: isSyncing ? 'rgba(124,110,250,0.5)' : '#7C6EFA', border: 'none', borderRadius: 8, padding: '8px 18px', fontFamily: 'var(--font-inter)', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, transition: 'all 0.15s', boxShadow: isSyncing ? 'none' : '0 0 16px rgba(124,110,250,0.3)' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              {isSyncing ? 'Syncing…' : 'Go Live'}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              {isSyncing ? 'Syncing…' : 'Sync to ElevenLabs'}
             </button>
           )}
           {isNew && (
-            <button onClick={handleSave} disabled={isSaving} style={{ background: '#7C6EFA', border: 'none', borderRadius: 8, padding: '8px 18px', fontFamily: 'var(--font-inter)', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer', opacity: isSaving ? 0.5 : 1, boxShadow: '0 0 16px rgba(124,110,250,0.3)', transition: 'all 0.15s' }}>
-              Create Agent
+            <button onClick={handleSave} disabled={isSaving} style={{ background: 'linear-gradient(135deg, #7C6EFA 0%, #6B5FE8 100%)', border: 'none', borderRadius: 8, padding: '8px 20px', fontFamily: 'var(--font-inter)', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer', opacity: isSaving ? 0.5 : 1, boxShadow: '0 0 20px rgba(124,110,250,0.4)', transition: 'all 0.15s' }}>
+              {isSaving ? 'Creating…' : 'Create Agent'}
             </button>
           )}
         </div>
@@ -406,13 +407,12 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
       </div>
 
       {/* ── Content ── */}
-      <div style={{ flex: 1, overflowY: tab === 'test' ? 'hidden' : 'auto', padding: tab === 'test' ? 0 : '24px 28px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         {tab === 'config'   && <ConfigTab callType={callType} setCallType={setCallType} language={language} setLanguage={setLanguage} systemPrompt={systemPrompt} setSystemPrompt={setSystemPrompt} firstMessage={firstMessage} setFirstMessage={setFirstMessage} companyName={companyName} setCompanyName={setCompanyName} productName={productName} setProductName={setProductName} description={description} setDescription={setDescription} />}
         {tab === 'tools'    && <ToolsTab enabledTools={enabledTools} setEnabledTools={setEnabledTools} toolConfigs={toolConfigs} setToolConfigs={setToolConfigs} />}
         {tab === 'voice'    && <VoiceTab voices={voices} selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice} stability={stability} setStability={setStability} similarity={similarity} setSimilarity={setSimilarity} />}
         {tab === 'script'   && <ScriptTab opener={scriptOpener} setOpener={setScriptOpener} discovery={scriptDiscovery} setDiscovery={setScriptDiscovery} pitch={scriptPitch} setPitch={setScriptPitch} objection={scriptObjection} setObjection={setScriptObjection} closing={scriptClosing} setClosing={setScriptClosing} faq={scriptFaq} setFaq={setScriptFaq} />}
         {tab === 'advanced' && <AdvancedTab maxDuration={maxDuration} setMaxDuration={setMaxDuration} silenceTimeout={silenceTimeout} setSilenceTimeout={setSilenceTimeout} llmModel={llmModel} setLlmModel={setLlmModel} temperature={temperature} setTemperature={setTemperature} />}
-        {tab === 'test'     && <TestCallPanel agentId={agentId} agentName={agentName} isSynced={synced} />}
       </div>
     </div>
   );

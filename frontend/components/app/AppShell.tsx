@@ -36,29 +36,32 @@ export function Icon({
 
 export function AppLogo() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <div
         style={{
-          width: 28,
-          height: 28,
-          background: 'rgba(124,110,250,0.2)',
-          borderRadius: 8,
-          border: '1px solid rgba(124,110,250,0.3)',
+          width: 32,
+          height: 32,
+          background: 'linear-gradient(135deg, rgba(124,110,250,0.3) 0%, rgba(34,211,238,0.15) 100%)',
+          borderRadius: 10,
+          border: '1px solid rgba(124,110,250,0.35)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          boxShadow: '0 0 16px rgba(124,110,250,0.2), inset 0 1px 0 rgba(255,255,255,0.08)',
+          flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-          {[5, 9, 14, 9, 5].map((h, i) => (
+        <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          {[4, 8, 13, 8, 4].map((h, i) => (
             <div
               key={i}
               style={{
-                width: 2,
+                width: 2.5,
                 height: h,
-                background: '#7C6EFA',
-                borderRadius: 1,
-                opacity: [0.5, 0.75, 1, 0.75, 0.5][i],
+                background: i === 2
+                  ? 'linear-gradient(to top, #7C6EFA, #22D3EE)'
+                  : 'rgba(168,154,249,0.7)',
+                borderRadius: 2,
               }}
             />
           ))}
@@ -67,10 +70,10 @@ export function AppLogo() {
       <span
         style={{
           fontFamily: 'var(--font-syne), sans-serif',
-          fontWeight: 700,
-          fontSize: 16,
+          fontWeight: 800,
+          fontSize: 17,
           color: '#F1F5F9',
-          letterSpacing: '-0.02em',
+          letterSpacing: '-0.03em',
         }}
       >
         voxara
@@ -91,6 +94,9 @@ export const navItems = [
   { id: 'settings',   label: 'Settings',   icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z' },
 ];
 
+// Group dividers — show a subtle line before Analytics and Settings
+const groupBreaks = new Set(['analytics', 'settings']);
+
 // ─── App shell ────────────────────────────────────────────────────────────────
 
 export function AppShell({
@@ -104,24 +110,53 @@ export function AppShell({
 }) {
   return (
     <div style={{ display: 'flex', height: '100vh', background: '#080B14', overflow: 'hidden' }}>
+      <style>{`
+        @keyframes nav-dot  { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.45;transform:scale(0.65)} }
+        @keyframes nav-glow { 0%,100%{opacity:0.6} 50%{opacity:1} }
+        @keyframes shimmer  { 0%,100%{opacity:0.5} 50%{opacity:1} }
+        @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.3} }
+      `}</style>
+
       {/* Sidebar */}
       <div
         style={{
-          width: 220,
-          background: '#0C1120',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
+          width: 224,
+          background: 'linear-gradient(180deg, #0C1225 0%, #090E1C 60%, #080B18 100%)',
+          borderRight: '1px solid rgba(255,255,255,0.055)',
           display: 'flex',
           flexDirection: 'column',
           flexShrink: 0,
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        {/* Top violet haze */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 180,
+          background: 'radial-gradient(ellipse 120% 100% at 50% -10%, rgba(124,110,250,0.12) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        {/* Bottom cyan haze */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: 120,
+          background: 'radial-gradient(ellipse 100% 80% at 50% 120%, rgba(34,211,238,0.05) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+
+        {/* Logo */}
+        <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
           <AppLogo />
         </div>
 
-        <nav style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: '10px 10px', overflowY: 'auto', position: 'relative' }}>
           {navItems.map((item) => (
-            <NavButton key={item.id} item={item} active={activeView === item.id} onNav={onNav} />
+            <div key={item.id}>
+              {groupBreaks.has(item.id) && (
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', margin: '8px 4px', borderRadius: 1 }} />
+              )}
+              <NavButton item={item} active={activeView === item.id} onNav={onNav} />
+            </div>
           ))}
         </nav>
 
@@ -147,6 +182,7 @@ function NavButton({
   onNav: (id: string) => void;
 }) {
   const [hov, setHov] = useState(false);
+
   return (
     <button
       onClick={() => onNav(item.id)}
@@ -157,22 +193,56 @@ function NavButton({
         display: 'flex',
         alignItems: 'center',
         gap: 10,
-        padding: '8px 10px',
-        borderRadius: 8,
+        padding: '9px 11px 9px 12px',
+        borderRadius: 9,
         border: 'none',
         cursor: 'pointer',
         marginBottom: 2,
-        background: active ? 'rgba(124,110,250,0.12)' : hov ? 'rgba(255,255,255,0.04)' : 'transparent',
-        color: active ? '#A89AF9' : hov ? '#94A3B8' : '#475569',
+        position: 'relative',
+        background: active
+          ? 'linear-gradient(90deg, rgba(124,110,250,0.16) 0%, rgba(124,110,250,0.05) 100%)'
+          : hov
+          ? 'rgba(255,255,255,0.04)'
+          : 'transparent',
+        color: active ? '#C4B8FD' : hov ? '#94A3B8' : '#4A5568',
         fontFamily: 'var(--font-inter), sans-serif',
         fontSize: 13,
-        fontWeight: 500,
+        fontWeight: active ? 600 : 500,
         textAlign: 'left',
-        transition: 'all 0.15s',
+        transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+        // Left accent bar
+        borderLeft: `2px solid ${active ? '#7C6EFA' : 'transparent'}`,
+        letterSpacing: active ? '-0.01em' : '0',
       }}
     >
-      <Icon d={item.icon} size={15} color="currentColor" />
-      {item.label}
+      {/* Icon with drop-shadow glow when active */}
+      <span style={{
+        display: 'flex',
+        alignItems: 'center',
+        transition: 'filter 0.2s',
+        filter: active
+          ? 'drop-shadow(0 0 5px rgba(124,110,250,0.75))'
+          : hov
+          ? 'drop-shadow(0 0 3px rgba(124,110,250,0.3))'
+          : 'none',
+      }}>
+        <Icon d={item.icon} size={14} color="currentColor" />
+      </span>
+
+      <span style={{ flex: 1 }}>{item.label}</span>
+
+      {/* Active indicator dot */}
+      {active && (
+        <span style={{
+          width: 5,
+          height: 5,
+          borderRadius: '50%',
+          background: '#7C6EFA',
+          boxShadow: '0 0 8px rgba(124,110,250,0.9), 0 0 16px rgba(124,110,250,0.4)',
+          animation: 'nav-dot 2.4s ease-in-out infinite',
+          flexShrink: 0,
+        }} />
+      )}
     </button>
   );
 }
@@ -184,25 +254,41 @@ function UserBadge({ onNav }: { onNav: (id: string) => void }) {
     : '?';
   const tier = user?.subscription_tier
     ? user.subscription_tier.charAt(0).toUpperCase() + user.subscription_tier.slice(1) + ' Plan'
-    : '';
+    : 'Free Plan';
 
   return (
     <div
       onClick={() => onNav('settings')}
-      style={{ padding: '12px 14px', borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer' }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+      style={{
+        padding: '12px 14px',
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        cursor: 'pointer',
+        transition: 'background 0.15s',
+        position: 'relative',
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(124,110,250,0.05)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #7C6EFA, #22D3EE)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #7C6EFA, #22D3EE)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0,
+          boxShadow: '0 0 12px rgba(124,110,250,0.35)',
+          fontFamily: 'var(--font-inter), sans-serif',
+        }}>
           {initials}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#CBD5E1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#CBD5E1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'var(--font-inter), sans-serif' }}>
             {user?.full_name ?? 'Loading…'}
           </div>
-          <div style={{ fontSize: 10, color: '#334155' }}>{tier}</div>
+          <div style={{ fontSize: 10, color: '#334155', fontFamily: 'var(--font-inter), sans-serif', marginTop: 1 }}>{tier}</div>
         </div>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#334155" strokeWidth="2" strokeLinecap="round">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
       </div>
     </div>
   );

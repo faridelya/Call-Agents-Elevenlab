@@ -81,10 +81,10 @@ class ElevenLabsService:
                         "use_speaker_boost": True,
                     },
                     "optimize_streaming_latency": 3,
+                    "output_format": "ulaw_8000",
                 },
                 "stt": {
                     "quality": "high",
-                    "user_input_audio_format": "ulaw_8000",
                 },
                 "turn": {
                     "turn_timeout": agent.silence_timeout_seconds,

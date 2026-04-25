@@ -1,10 +1,10 @@
-import httpx
 from datetime import datetime, timezone
 from sqlalchemy import select
 from app.tools.registry import register_tool
 from app.tools.schemas import CallContext
 from app.models.call import Call
-from app.config import settings
+from app.models.user import User as UserModel
+from app.services.twilio_service import get_twilio_service
 
 PARAMS = {
     "type": "object",
@@ -24,7 +24,7 @@ PARAMS = {
     name="end_call",
     tier=1,
     execution="client",
-    description="End the call gracefully when the conversation goal has been achieved or the contact wants to hang up.",
+    description="End the call. IMPORTANT: Before calling this tool, always say a proper closing line to the contact and give them a chance to respond or ask anything else. Only call end_call after you have verbally said goodbye and the contact has acknowledged or there is a clear natural end to the conversation. Never cut the call abruptly mid-sentence or without a warm closing.",
     parameters=PARAMS,
 )
 async def handler(params: dict, ctx: CallContext, db, redis) -> str:
@@ -41,19 +41,13 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
     # Store end signal in Redis for bridge to pick up
     await redis.hset(f"call:{ctx.call_sid}", mapping={"end_requested": "1", "end_reason": reason})
 
-    # End the Twilio call via REST API
-    account_sid = settings.twilio_account_sid
-    auth_token = settings.twilio_auth_token
-
-    if ctx.call_sid and account_sid:
+    # End the Twilio call via REST API using the user's Twilio credentials
+    if ctx.call_sid and ctx.user_id:
         try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{ctx.call_sid}.json",
-                    data={"Status": "completed"},
-                    auth=(account_sid, auth_token),
-                    timeout=5.0,
-                )
+            user_result = await db.execute(select(UserModel).where(UserModel.id == ctx.user_id))
+            user = user_result.scalar_one_or_none()
+            twilio = get_twilio_service(user)
+            await twilio.end_call(ctx.call_sid)
         except Exception:
             pass
 

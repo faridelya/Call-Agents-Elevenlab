@@ -268,7 +268,9 @@ export const calls = {
   end: (id: string) =>
     apiFetch<{ message: string }>(`/api/v1/calls/${id}/end`, { method: 'POST' }),
 
-  active: () => apiFetch<CallRecord[]>('/api/v1/calls/active'),
+  active: () =>
+    apiFetch<{ active_calls: CallRecord[]; bridge_count: number }>('/api/v1/calls/active')
+      .then((r) => r.active_calls ?? []),
 };
 
 // ── Campaigns ─────────────────────────────────────────────────────────────────
