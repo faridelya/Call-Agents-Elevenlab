@@ -42,7 +42,7 @@ app.add_middleware(
 )
 
 # ── Routers ──────────────────────────────────────────────────────────────────
-from app.routers import auth, agents, calls, campaigns, leads, phone_numbers, tools, webhooks, analytics, settings as settings_router, knowledge_base  # noqa: E402
+from app.routers import auth, agents, calls, campaigns, leads, phone_numbers, tools, webhooks, el_tools, analytics, settings as settings_router, knowledge_base  # noqa: E402
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(agents.router, prefix="/api/v1")
@@ -52,6 +52,7 @@ app.include_router(leads.router, prefix="/api/v1")
 app.include_router(phone_numbers.router, prefix="/api/v1")
 app.include_router(tools.router, prefix="/api/v1")
 app.include_router(webhooks.router, prefix="/api/v1")
+app.include_router(el_tools.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(knowledge_base.router, prefix="/api/v1")
@@ -62,15 +63,8 @@ async def health():
     return {"status": "ok", "version": "1.0.0"}
 
 
-# WebSocket bridge — Twilio Media Streams connect here
-from app.websockets.bridge import Bridge  # noqa: E402
+# WebSocket events — real-time frontend fan-out
 from app.websockets.event_bus import run_event_ws  # noqa: E402
-
-
-@app.websocket("/ws/bridge/{call_record_id}")
-async def ws_bridge(call_record_id: str, websocket: WebSocket):
-    bridge = Bridge(call_record_id=call_record_id, twilio_ws=websocket)
-    await bridge.run()
 
 
 @app.websocket("/ws/events/{user_id}")

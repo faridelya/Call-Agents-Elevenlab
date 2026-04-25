@@ -11,7 +11,7 @@ import { SiteFooter } from '@/components/website/Footer';
 export default function WebsitePage() {
   const router = useRouter();
 
-  const goToApp = () => router.push('/dashboard');
+  const goToApp = () => router.push('/login');
 
   const handleNav = (label: string) => {
     if (label === 'app') {

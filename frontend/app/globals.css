@@ -68,9 +68,9 @@
   --brand-secondary: var(--color-cyan-400);
   --brand-glow:     rgba(124, 110, 250, 0.25);
 
-  --font-display: 'Space Grotesk', sans-serif;
+  --font-display: 'Syne', sans-serif;
   --font-syne:    'Syne', sans-serif;
-  --font-ui:      'Inter', sans-serif;
+  --font-ui:      'Plus Jakarta Sans', sans-serif;
   --font-mono:    'JetBrains Mono', monospace;
 
   --shadow-sm:    0 1px 3px rgba(0,0,0,0.4);
@@ -92,7 +92,7 @@ html {
 body {
   background: #080B14;
   color: #F1F5F9;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -101,7 +101,7 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 3px; }
 
-input, textarea, select, button { font-family: 'Inter', sans-serif; }
+input, textarea, select, button { font-family: 'Plus Jakarta Sans', sans-serif; }
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 @keyframes spin  { to { transform: rotate(360deg); } }

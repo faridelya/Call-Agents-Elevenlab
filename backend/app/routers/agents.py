@@ -14,6 +14,7 @@ from app.dependencies import get_current_user
 from app.models.agent import Agent
 from app.models.base import new_uuid
 from app.models.call import Call
+from app.models.phone_number import PhoneNumber
 from app.models.tool import Tool
 from app.models.user import User
 from app.schemas.agent import AgentCreate, AgentResponse, AgentToolsUpdate, AgentUpdate, VoiceOption
@@ -52,6 +53,62 @@ async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
     agent.el_last_synced_at = datetime.now(timezone.utc).isoformat()
 
 
+# ── Phone number helpers ──────────────────────────────────────────────────────
+
+async def _get_inbound_number(agent_id: str, db: AsyncSession) -> str | None:
+    """Return the inbound phone number linked to this agent, or None."""
+    result = await db.execute(
+        select(PhoneNumber.phone_number).where(
+            PhoneNumber.inbound_agent_id == agent_id,
+            PhoneNumber.is_active == True,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _handle_inbound_phone(agent_id: str, user_id: str, number: str | None, db: AsyncSession) -> None:
+    """Upsert or clear the PhoneNumber record used for inbound routing to this agent."""
+    # Unlink any existing inbound number pointing to this agent
+    old_result = await db.execute(
+        select(PhoneNumber).where(PhoneNumber.inbound_agent_id == agent_id)
+    )
+    for pn in old_result.scalars().all():
+        pn.inbound_agent_id = None
+        pn.inbound_enabled = False
+
+    if not number:
+        return
+
+    # Find existing record for this phone number or create a new one
+    existing_result = await db.execute(
+        select(PhoneNumber).where(PhoneNumber.phone_number == number)
+    )
+    existing = existing_result.scalar_one_or_none()
+
+    if existing:
+        if existing.user_id != user_id:
+            raise ConflictError("This phone number is already registered to another account")
+        existing.inbound_agent_id = agent_id
+        existing.inbound_enabled = True
+    else:
+        db.add(PhoneNumber(
+            id=new_uuid(),
+            user_id=user_id,
+            phone_number=number,
+            twilio_sid=None,
+            inbound_enabled=True,
+            inbound_agent_id=agent_id,
+        ))
+
+
+async def _with_inbound(agent: Agent, db: AsyncSession) -> AgentResponse:
+    """Build an AgentResponse with inbound_phone_number populated from the PhoneNumber table."""
+    resp = AgentResponse.model_validate(agent)
+    return resp.model_copy(update={"inbound_phone_number": await _get_inbound_number(agent.id, db)})
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
 @router.get("", response_model=PaginatedResponse[AgentResponse])
 async def list_agents(
     page: int = 1,
@@ -75,8 +132,23 @@ async def list_agents(
     )
     agents = result.scalars().all()
 
+    # Fetch all inbound numbers in one query to avoid N+1
+    agent_ids = [a.id for a in agents]
+    pn_result = await db.execute(
+        select(PhoneNumber.inbound_agent_id, PhoneNumber.phone_number).where(
+            PhoneNumber.inbound_agent_id.in_(agent_ids),
+            PhoneNumber.is_active == True,
+        )
+    )
+    inbound_map = {row.inbound_agent_id: row.phone_number for row in pn_result}
+
+    items = [
+        AgentResponse.model_validate(a).model_copy(update={"inbound_phone_number": inbound_map.get(a.id)})
+        for a in agents
+    ]
+
     return PaginatedResponse(
-        items=agents,
+        items=items,
         total=total,
         page=page,
         page_size=page_size,
@@ -90,19 +162,19 @@ async def create_agent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new agent, persist it to the DB, and attempt an initial sync to ElevenLabs.
-
-    ElevenLabs sync failures are non-fatal — the agent is still created and the
-    caller can trigger a manual sync via POST /agents/{id}/sync once credentials are valid.
-    """
+    """Create a new agent and attempt an initial sync to ElevenLabs."""
+    body_data = body.model_dump(exclude={"inbound_phone_number"}, exclude_none=True)
     agent = Agent(
         id=new_uuid(),
         user_id=current_user.id,
         signing_secret=new_uuid().replace("-", ""),
-        **body.model_dump(),
+        **body_data,
     )
     db.add(agent)
     await db.flush()
+
+    if body.inbound_phone_number:
+        await _handle_inbound_phone(agent.id, current_user.id, body.inbound_phone_number, db)
 
     try:
         await _sync_to_elevenlabs(agent, db)
@@ -111,7 +183,7 @@ async def create_agent(
 
     await db.commit()
     await db.refresh(agent)
-    return agent
+    return await _with_inbound(agent, db)
 
 
 @router.get("/voices", response_model=list[VoiceOption])
@@ -135,8 +207,9 @@ async def get_agent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Retrieve a single agent by ID. Returns 404 if not found or not owned by caller."""
-    return await get_agent_or_404(agent_id, current_user.id, db)
+    """Retrieve a single agent by ID."""
+    agent = await get_agent_or_404(agent_id, current_user.id, db)
+    return await _with_inbound(agent, db)
 
 
 @router.patch("/{agent_id}", response_model=AgentResponse)
@@ -146,15 +219,16 @@ async def update_agent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Partially update an agent's fields and re-sync to ElevenLabs.
-
-    Only fields present in the request body are updated (PATCH semantics).
-    ElevenLabs sync is skipped silently if an active call is in progress.
-    """
+    """Partially update an agent's fields and re-sync to ElevenLabs."""
     agent = await get_agent_or_404(agent_id, current_user.id, db)
 
-    for field, value in body.model_dump(exclude_none=True).items():
+    update_data = body.model_dump(exclude={"inbound_phone_number"}, exclude_unset=True)
+    for field, value in update_data.items():
         setattr(agent, field, value)
+
+    # Handle inbound phone only if the field was explicitly included in the request
+    if "inbound_phone_number" in body.model_fields_set:
+        await _handle_inbound_phone(agent.id, current_user.id, body.inbound_phone_number, db)
 
     try:
         await _sync_to_elevenlabs(agent, db)
@@ -163,7 +237,7 @@ async def update_agent(
 
     await db.commit()
     await db.refresh(agent)
-    return agent
+    return await _with_inbound(agent, db)
 
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -40,6 +40,19 @@ class TwilioService:
     def _url(self, path: str) -> str:
         return f"{self._base}/{path}"
 
+    # Human-readable explanations for common Twilio error codes
+    _ERROR_HINTS: dict[int, str] = {
+        20003: "Authentication failed — your Twilio account may be suspended (zero balance) or the Auth Token is incorrect. Check console.twilio.com → Account → Balance and verify your Auth Token in Settings.",
+        20404: "Twilio account not found — check your Account SID in Settings.",
+        21211: "Invalid destination number — use E.164 format, e.g. +923038532424.",
+        21212: "Invalid 'From' number — the outbound phone number is not on your Twilio account.",
+        21214: "Trial account restriction — you can only call numbers verified in the Twilio console. Verify the number or upgrade your account.",
+        21215: "International calling not enabled — enable Pakistan (or the destination country) in Twilio Console → Voice → Settings → Geographic Permissions.",
+        21216: "Twilio account is not authorized to call this number.",
+        21606: "From number is not a valid Twilio number on your account.",
+        30006: "Destination number is unreachable or is a landline with no voice capability.",
+    }
+
     def _check(self, r: httpx.Response, context: str) -> None:
         """Raise on non-2xx. 5xx raises _TwilioTransientError (retryable); 4xx raises ExternalServiceError (not retried)."""
         if r.status_code in (200, 201, 204):
@@ -48,8 +61,10 @@ class TwilioService:
         if r.status_code >= 500:
             logger.warning("twilio_transient context=%s http=%s twilio_code=%s", context, r.status_code, code)
             raise _TwilioTransientError(f"[{context}] {message} (HTTP {r.status_code})")
+        hint = self._ERROR_HINTS.get(code or 0, "")
+        human = hint if hint else f"[{context}] {message} (HTTP {r.status_code})"
         logger.error("twilio_error context=%s http=%s twilio_code=%s message=%s", context, r.status_code, code, message)
-        raise ExternalServiceError("Twilio", f"[{context}] {message} (HTTP {r.status_code})")
+        raise ExternalServiceError("Twilio", human)
 
     # ── Public API ────────────────────────────────────────────────────────────
 

@@ -64,6 +64,7 @@ export function NavHeader({ onNav }: NavHeaderProps) {
       </nav>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button
+          onClick={() => onNav('app')}
           style={{
             background: 'transparent',
             border: 'none',

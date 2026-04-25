@@ -18,9 +18,14 @@ class User(Base, TimestampMixin):
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255))
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255))
 
-    # BYO Twilio credentials (optional — platform creds used if absent)
+    # BYO credentials — all encrypted at rest, platform creds used as fallback
     twilio_account_sid: Mapped[str | None] = mapped_column(String(255))
-    twilio_auth_token: Mapped[str | None] = mapped_column(Text)  # encrypted at rest
+    twilio_auth_token: Mapped[str | None] = mapped_column(Text)
+    elevenlabs_api_key: Mapped[str | None] = mapped_column(Text)
+    elevenlabs_webhook_secret: Mapped[str | None] = mapped_column(Text)
+    openai_api_key: Mapped[str | None] = mapped_column(Text)
+    google_api_key: Mapped[str | None] = mapped_column(Text)
+    anthropic_api_key: Mapped[str | None] = mapped_column(Text)
 
     timezone: Mapped[str] = mapped_column(String(100), default="UTC")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

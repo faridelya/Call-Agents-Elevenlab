@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 import structlog
-from fastapi import APIRouter, Depends, WebSocket, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -17,10 +17,9 @@ from app.models.base import new_uuid
 from app.models.call import Call
 from app.models.lead import Lead
 from app.models.user import User
-from app.schemas.call import CallDetailResponse, CallResponse, EndCallRequest, OutboundCallRequest
+from app.schemas.call import CallDetailResponse, CallResponse, OutboundCallRequest
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.services.twilio_service import get_twilio_service
-from app.websockets.bridge import Bridge
 import json
 
 log = structlog.get_logger(__name__)
@@ -83,12 +82,11 @@ async def list_active_calls(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List calls that are currently in-progress, plus the in-process bridge count from memory."""
-    from app.websockets.bridge_manager import bridge_manager
+    """List calls that are currently in-progress."""
     result = await db.execute(
         select(Call).where(Call.user_id == current_user.id, Call.status == "in-progress")
     )
-    return {"active_calls": result.scalars().all(), "bridge_count": bridge_manager.active_count()}
+    return {"active_calls": result.scalars().all(), "bridge_count": 0}
 
 
 @router.post("/outbound", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
@@ -108,8 +106,14 @@ async def initiate_outbound_call(
     """
     agent = await get_agent_or_404(body.agent_id, current_user.id, db)
 
+    if not agent.is_active:
+        raise ValidationError("This agent is currently disabled and cannot place calls.")
+
     if not agent.elevenlabs_agent_id:
         raise ValidationError("Agent not synced to ElevenLabs. Save the agent first.")
+
+    if agent.call_type == "inbound":
+        raise ValidationError("This agent is configured for inbound calls only and cannot place outbound calls.")
 
     # Check for DNC if phone provided in lead_data
     phone = (body.lead_data or {}).get("phone") or body.to_number
@@ -121,7 +125,11 @@ async def initiate_outbound_call(
             raise ValidationError("This number is on the Do Not Call list")
 
     # Create call record before dialing (we need the ID for TwiML URL)
-    from_number = settings.twilio_phone_number
+    from_number = (
+        body.from_number
+        or agent.twilio_phone_number
+        or settings.twilio_phone_number
+    )
 
     call = Call(
         id=new_uuid(),
@@ -212,23 +220,23 @@ async def get_recording(
 @router.post("/{call_id}/end", response_model=MessageResponse)
 async def end_call(
     call_id: str,
-    body: EndCallRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
 ):
-    """Terminate an in-progress call via the Twilio REST API and mark it completed in the DB."""
+    """Terminate an in-progress call via Twilio, fetch transcript from EL, and emit call_ended."""
+    from app.routers.webhooks import _finalize_call
     call = await get_call_or_404(call_id, current_user.id, db)
     if call.twilio_call_sid:
         twilio = get_twilio_service(current_user)
-        await twilio.end_call(call.twilio_call_sid)
-    call.status = "completed"
-    call.ended_at = datetime.now(timezone.utc).isoformat()
-    await db.commit()
+        try:
+            await twilio.end_call(call.twilio_call_sid)
+        except Exception as exc:
+            log.warning("end_call_twilio_error", call_id=call_id, error=str(exc))
+    if call.status not in ("completed", "failed", "finalized"):
+        call.status = "completed"
+        call.ended_at = datetime.now(timezone.utc).isoformat()
+        await _finalize_call(call, redis, db)
+        await db.commit()
     return MessageResponse(message="Call ended")
 
-
-# WebSocket endpoint for the Twilio media stream bridge
-@router.websocket("/ws/bridge/{call_record_id}")
-async def ws_bridge(call_record_id: str, websocket: WebSocket):
-    bridge = Bridge(call_record_id=call_record_id, twilio_ws=websocket)
-    await bridge.run()

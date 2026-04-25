@@ -15,7 +15,7 @@ class PhoneNumber(Base, TimestampMixin):
     capabilities: Mapped[dict] = mapped_column(JSON, default=dict)  # {voice: true, sms: true}
 
     # Twilio
-    twilio_sid: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    twilio_sid: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     twilio_account_sid: Mapped[str | None] = mapped_column(String(255))
 
     # Inbound routing

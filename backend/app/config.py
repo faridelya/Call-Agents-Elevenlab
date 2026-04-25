@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # ElevenLabs
     elevenlabs_api_key: str = ""
     elevenlabs_base_url: str = "https://api.elevenlabs.io/v1"
+    # Secret used to verify ElevenLabs post_call_transcription webhooks.
+    # Set this in .env after configuring the webhook in the EL console.
+    elevenlabs_webhook_secret: str = ""
 
     # Twilio (platform-level)
     twilio_account_sid: str = ""

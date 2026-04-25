@@ -50,6 +50,9 @@ class Agent(Base, TimestampMixin):
     el_config_snapshot: Mapped[dict | None] = mapped_column(JSON)
     el_last_synced_at: Mapped[str | None] = mapped_column(String(50))
 
+    # Telephony — the Twilio number used for calls with this agent (E.164 format)
+    twilio_phone_number: Mapped[str | None] = mapped_column(String(50))
+
     # Security: per-agent secret sent in server tool HTTP calls
     signing_secret: Mapped[str] = mapped_column(String(64), default=new_uuid)
 

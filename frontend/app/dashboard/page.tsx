@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { AppShell } from '@/components/app/AppShell';
-import { DashboardView } from '@/components/app/Dashboard';
+import { DashboardView, AgentsView } from '@/components/app/Dashboard';
 import { AgentBuilder } from '@/components/app/AgentBuilder';
 import { CallLogView } from '@/components/app/CallLog';
 import { AnalyticsView } from '@/components/app/Analytics';
@@ -76,8 +76,10 @@ export default function DashboardPage() {
       content = <AgentBuilder agentId={selectedAgentId} onBack={() => nav('agents')} />;
       break;
     case 'agents':
+      content = <AgentsView onSelectAgent={handleSelectAgent} onNewAgent={handleNewAgent} />;
+      break;
     case 'dashboard':
-      content = <DashboardView onSelectAgent={handleSelectAgent} onNewAgent={handleNewAgent} />;
+      content = <DashboardView onNewAgent={handleNewAgent} onNav={nav} />;
       break;
     case 'campaigns':
       content = <CampaignsView />;
@@ -95,7 +97,7 @@ export default function DashboardPage() {
       content = <SettingsView />;
       break;
     default:
-      content = <DashboardView onSelectAgent={handleSelectAgent} onNewAgent={handleNewAgent} />;
+      content = <DashboardView onNewAgent={handleNewAgent} onNav={nav} />;
   }
 
   return (

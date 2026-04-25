@@ -21,7 +21,22 @@ async def post_call_processing(ctx: dict, call_id: str) -> None:
 
         call_key = f"call:{call.twilio_call_sid or call_id}"
 
-        # Assemble transcript from Redis if not already written by bridge
+        # Primary: if transcript still empty, fetch from ElevenLabs.
+        # _finalize_call runs immediately on call end; by the time this ARQ task
+        # fires (30s deferred) EL has almost always finished transcription.
+        if not call.transcript and call.elevenlabs_conversation_id:
+            from app.services.elevenlabs_service import elevenlabs_service
+            transcript = await elevenlabs_service.get_conversation_transcript(
+                call.elevenlabs_conversation_id
+            )
+            if transcript:
+                call.transcript = transcript
+                log.info("post_call_el_transcript_saved",
+                         call_id=call_id,
+                         msgs=len(transcript),
+                         conv_id=call.elevenlabs_conversation_id)
+
+        # Fallback: assemble from Redis bridge messages (legacy bridge mode only)
         if not call.transcript:
             raw = await redis.lrange(f"{call_key}:transcript", 0, -1)
             if raw:
