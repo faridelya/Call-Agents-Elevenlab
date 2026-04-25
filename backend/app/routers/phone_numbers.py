@@ -15,7 +15,6 @@ from app.models.user import User
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.phone_number import AvailableNumberSearch, PhoneNumberProvision, PhoneNumberResponse, PhoneNumberUpdate
 from app.services.twilio_service import get_twilio_service
-from app.utils.twiml import build_stream_twiml
 
 router = APIRouter(prefix="/phone-numbers", tags=["phone-numbers"])
 

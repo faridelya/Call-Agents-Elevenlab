@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 import structlog
-from fastapi import APIRouter, Depends, WebSocket, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -20,7 +20,6 @@ from app.models.user import User
 from app.schemas.call import CallDetailResponse, CallResponse, EndCallRequest, OutboundCallRequest
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.services.twilio_service import get_twilio_service
-from app.websockets.bridge import Bridge
 import json
 
 log = structlog.get_logger(__name__)
@@ -83,12 +82,11 @@ async def list_active_calls(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List calls that are currently in-progress, plus the in-process bridge count from memory."""
-    from app.websockets.bridge_manager import bridge_manager
+    """List calls that are currently in-progress."""
     result = await db.execute(
         select(Call).where(Call.user_id == current_user.id, Call.status == "in-progress")
     )
-    return {"active_calls": result.scalars().all(), "bridge_count": bridge_manager.active_count()}
+    return {"active_calls": result.scalars().all(), "bridge_count": 0}
 
 
 @router.post("/outbound", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
@@ -226,9 +224,3 @@ async def end_call(
     await db.commit()
     return MessageResponse(message="Call ended")
 
-
-# WebSocket endpoint for the Twilio media stream bridge
-@router.websocket("/ws/bridge/{call_record_id}")
-async def ws_bridge(call_record_id: str, websocket: WebSocket):
-    bridge = Bridge(call_record_id=call_record_id, twilio_ws=websocket)
-    await bridge.run()

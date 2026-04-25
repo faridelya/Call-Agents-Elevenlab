@@ -37,6 +37,9 @@ class Call(Base, TimestampMixin):
     recording_url: Mapped[str | None] = mapped_column(Text)
     recording_sid: Mapped[str | None] = mapped_column(String(255))
 
+    # ElevenLabs native integration
+    elevenlabs_conversation_id: Mapped[str | None] = mapped_column(String(255), index=True)
+
     # Post-call analysis
     sentiment_score: Mapped[float | None] = mapped_column(Float)
     talk_ratio: Mapped[float | None] = mapped_column(Float)
