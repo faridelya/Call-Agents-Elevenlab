@@ -32,8 +32,8 @@ export function useActiveCalls() {
 export function useOutboundCall() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ agent_id, to_number, phone_number_id }: { agent_id: string; to_number: string; phone_number_id?: string }) =>
-      calls.outbound(agent_id, to_number, phone_number_id),
+    mutationFn: ({ agent_id, to_number, phone_number_id, from_number }: { agent_id: string; to_number: string; phone_number_id?: string; from_number?: string }) =>
+      calls.outbound(agent_id, to_number, phone_number_id, from_number),
     onSuccess: () => qc.invalidateQueries({ queryKey: CALLS_KEY }),
   });
 }

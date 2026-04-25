@@ -67,7 +67,7 @@ class ElevenLabsService:
         """Register a Twilio call with ElevenLabs.
 
         Returns {"conversation_id": "conv_...", "twiml": "<?xml...>"}
-        ElevenLabs connects its WebSocket to Twilio natively — no custom bridge needed.
+        EL responds with raw TwiML (XML); conversation_id is embedded as a <Parameter>.
         """
         payload: dict = {
             "agent_id": agent_id,
@@ -81,23 +81,47 @@ class ElevenLabsService:
             }
 
         async with self._client() as c:
-            r = await c.post(f"{self._base}/convai/twilio/register_call", json=payload)
+            # Correct endpoint uses a hyphen, not underscore
+            r = await c.post(f"{self._base}/convai/twilio/register-call", json=payload)
             if r.status_code not in (200, 201):
                 log.error("el_register_call_failed",
                           status=r.status_code, body=r.text[:300])
                 raise ExternalServiceError("ElevenLabs", r.text)
 
-            data = r.json()
+            # EL returns raw TwiML (XML), not JSON
+            # Extract conversation_id from <Parameter name="conversation_id" value="conv_..."/>
+            twiml = r.text
+            conversation_id = ""
+            try:
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(twiml)
+                for param in root.iter("Parameter"):
+                    if param.get("name") == "conversation_id":
+                        conversation_id = param.get("value", "")
+                        break
+            except Exception:
+                pass
+
             log.info("el_register_call_ok",
                      agent_id=agent_id,
-                     conversation_id=data.get("call_id", ""),
+                     conversation_id=conversation_id,
                      direction=direction)
 
-            # Normalise field names — EL returns "call_id" for the conversation ID
             return {
-                "conversation_id": data.get("call_id") or data.get("conversation_id", ""),
-                "twiml": data.get("twiml", ""),
+                "conversation_id": conversation_id,
+                "twiml": twiml,
             }
+
+    async def get_conversation_status(self, conversation_id: str) -> str:
+        """Return the EL conversation status string: 'processing'|'done'|'failed'|'unknown'."""
+        try:
+            async with self._client() as c:
+                r = await c.get(f"{self._base}/convai/conversations/{conversation_id}")
+                if r.status_code == 200:
+                    return r.json().get("status", "unknown")
+        except Exception:
+            pass
+        return "unknown"
 
     async def get_conversation_transcript(self, conversation_id: str) -> list[dict]:
         """Fetch the full transcript for a completed ElevenLabs conversation.
@@ -131,7 +155,7 @@ class ElevenLabsService:
                 result = []
                 for entry in raw_transcript:
                     role = entry.get("role", "user")
-                    text = entry.get("message", "").strip()
+                    text = (entry.get("message") or "").strip()
                     if not text:
                         continue
                     time_offset = entry.get("time_in_call_secs", 0) or 0
@@ -210,7 +234,7 @@ class ElevenLabsService:
         base_url = _settings.public_url
         defs = []
 
-        # ── Tier 1 tools — server-side HTTP callbacks (native integration) ────
+        # ── Tier 1 tools — webhook callbacks (EL native integration) ─────────
         # EL will POST to these URLs when the agent calls a tier 1 tool.
         tier1_names = [
             "save_lead", "get_contact_info", "end_call",
@@ -220,16 +244,18 @@ class ElevenLabsService:
             tool = get_tool(name)
             if tool:
                 defs.append({
-                    "type": "server",
+                    "type": "webhook",
                     "name": name,
                     "description": tool["description"],
-                    "url": f"{base_url}/api/v1/el/tools/{name}",
-                    "method": "POST",
-                    "headers": {
-                        "X-Voxara-Secret": agent.signing_secret,
-                        "X-Agent-Id": agent.id,
+                    "api_schema": {
+                        "url": f"{base_url}/api/v1/el/tools/{name}",
+                        "method": "POST",
+                        "request_headers": {
+                            "X-Voxara-Secret": agent.signing_secret,
+                            "X-Agent-Id": agent.id,
+                        },
+                        "request_body_schema": tool["parameters"],
                     },
-                    "parameters": tool["parameters"],
                 })
 
         # ── Tier 2 client tools (transfer_to_human, leave_voicemail) ──────────
@@ -310,31 +336,35 @@ class ElevenLabsService:
                     })
             elif tool_name in tier2_server:
                 defs.append({
-                    "type": "server",
+                    "type": "webhook",
                     "name": tool_name,
                     "description": tier2_descriptions.get(tool_name, tool_name),
-                    "url": f"{base_url}/api/v1/tools/{tool_name}",
-                    "method": "POST",
-                    "headers": {
-                        "X-Voxara-Secret": agent.signing_secret,
-                        "X-Agent-Id": agent.id,
+                    "api_schema": {
+                        "url": f"{base_url}/api/v1/tools/{tool_name}",
+                        "method": "POST",
+                        "request_headers": {
+                            "X-Voxara-Secret": agent.signing_secret,
+                            "X-Agent-Id": agent.id,
+                        },
+                        "request_body_schema": tier2_parameters.get(tool_name, {"type": "object", "properties": {}}),
                     },
-                    "parameters": tier2_parameters.get(tool_name, {"type": "object", "properties": {}}),
                 })
 
         # ── Tier 3 custom tools ────────────────────────────────────────────────
         for ct in custom_tools:
             defs.append({
-                "type": "server",
+                "type": "webhook",
                 "name": ct["name"],
                 "description": ct["description"],
-                "url": f"{base_url}/api/v1/tools/custom/{ct['id']}",
-                "method": "POST",
-                "headers": {
-                    "X-Voxara-Secret": agent.signing_secret,
-                    "X-Agent-Id": agent.id,
+                "api_schema": {
+                    "url": f"{base_url}/api/v1/tools/custom/{ct['id']}",
+                    "method": "POST",
+                    "request_headers": {
+                        "X-Voxara-Secret": agent.signing_secret,
+                        "X-Agent-Id": agent.id,
+                    },
+                    "request_body_schema": ct["parameters_schema"],
                 },
-                "parameters": ct["parameters_schema"],
             })
 
         return defs

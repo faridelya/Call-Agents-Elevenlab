@@ -15,6 +15,8 @@ class AgentCreate(BaseModel):
     company_name: str | None = None
     product_name: str | None = None
     call_type: str = "outbound"
+    twilio_phone_number: str | None = None   # outbound FROM number
+    inbound_phone_number: str | None = None  # inbound number (stored in phone_numbers table)
     max_call_duration_seconds: int = 1800
     silence_timeout_seconds: int = 10
     llm_model: str = "gemini-1.5-flash"
@@ -39,6 +41,8 @@ class AgentUpdate(BaseModel):
     company_name: str | None = None
     product_name: str | None = None
     call_type: str | None = None
+    twilio_phone_number: str | None = None
+    inbound_phone_number: str | None = None
     max_call_duration_seconds: int | None = None
     silence_timeout_seconds: int | None = None
     llm_model: str | None = None
@@ -70,6 +74,8 @@ class AgentResponse(BaseModel):
     company_name: str | None
     product_name: str | None
     call_type: str
+    twilio_phone_number: str | None
+    inbound_phone_number: str | None = None  # populated from phone_numbers table, not agent column
     max_call_duration_seconds: int
     silence_timeout_seconds: int
     llm_model: str

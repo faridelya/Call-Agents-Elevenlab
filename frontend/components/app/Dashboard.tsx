@@ -511,7 +511,7 @@ function AgentCard({ agent, status, onEdit, onTestCall, onDelete, onToggle }: {
         </div>
 
         {/* Agent name */}
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#F1F5F9', marginBottom: 3, fontFamily: 'var(--font-syne), sans-serif', letterSpacing: '-0.01em', lineHeight: 1.25 }}>{agent.name}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#F1F5F9', marginBottom: 3, fontFamily: 'var(--font-syne), sans-serif', letterSpacing: '-0.01em', lineHeight: 1.45, paddingBottom: 1 }}>{agent.name}</div>
         <div style={{ fontSize: 11, color: '#475569', marginBottom: agent.description ? 10 : 14, fontFamily: 'var(--font-inter)' }}>
           {agent.call_type ? agent.call_type.charAt(0).toUpperCase() + agent.call_type.slice(1) : '—'} · {agent.language?.toUpperCase() ?? 'EN'}
           {agent.company_name ? ` · ${agent.company_name}` : ''}
@@ -714,8 +714,8 @@ export function AgentsView({
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.06 1.25h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.08a16 16 0 0 0 6.88 6.88l1.41-1.41a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                 </div>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#F1F5F9', fontFamily: 'var(--font-syne)' }}>Test Call</div>
-                  <div style={{ fontSize: 10, color: '#475569', fontFamily: 'var(--font-inter)' }}>{testCallAgent.name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#F1F5F9', fontFamily: 'var(--font-syne)', lineHeight: 1.4 }}>Test Call</div>
+                  <div style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-inter)', lineHeight: 1.45, paddingBottom: 1 }}>{testCallAgent.name}</div>
                 </div>
               </div>
               <button
@@ -732,6 +732,7 @@ export function AgentsView({
                 agentId={testCallAgent.id}
                 agentName={testCallAgent.name}
                 isSynced={!!testCallAgent.elevenlabs_agent_id && !!testCallAgent.el_last_synced_at}
+                agentPhoneNumber={testCallAgent.twilio_phone_number}
               />
             </div>
           </div>

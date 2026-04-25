@@ -69,11 +69,11 @@ export function AppLogo() {
       </div>
       <span
         style={{
-          fontFamily: 'var(--font-syne), sans-serif',
+          fontFamily: 'var(--font-brand), var(--font-syne), sans-serif',
           fontWeight: 800,
-          fontSize: 17,
+          fontSize: 18,
           color: '#F1F5F9',
-          letterSpacing: '-0.03em',
+          letterSpacing: '-0.01em',
         }}
       >
         voxara

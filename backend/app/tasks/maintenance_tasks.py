@@ -10,29 +10,50 @@ TRANSCRIPT_REDIS_TTL = 14400  # 4 hours (already set on write)
 
 
 async def cleanup_stale_calls(ctx: dict) -> None:
-    """Mark calls stuck in 'in-progress' for >4 hours as failed."""
+    """Finalize calls whose EL conversation is done but weren't caught by Twilio callbacks.
+    Also hard-fail any calls stuck in-progress for >4 hours."""
+    from app.models.call import Call
+    from app.services.elevenlabs_service import elevenlabs_service
+    from app.db.redis import get_redis_pool
+
     db_factory = ctx["db_factory"]
+    redis = ctx.get("redis") or await get_redis_pool()
 
     async with db_factory() as db:
-        from app.models.call import Call
+        # Find all in-progress calls that started more than 2 minutes ago
+        cutoff_recent = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+        cutoff_stale  = (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat()
 
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat()
         result = await db.execute(
             select(Call).where(
                 Call.status == "in-progress",
-                Call.started_at < cutoff,
+                Call.started_at < cutoff_recent,
             )
         )
-        stale = result.scalars().all()
+        calls = result.scalars().all()
 
-        for call in stale:
-            call.status = "failed"
-            call.ended_at = datetime.now(timezone.utc).isoformat()
-            log.warning("stale_call_closed", call_id=call.id)
+        for call in calls:
+            # Hard-fail calls stuck >4 hours regardless of EL status
+            if call.started_at and call.started_at < cutoff_stale:
+                call.status = "failed"
+                call.ended_at = datetime.now(timezone.utc).isoformat()
+                log.warning("stale_call_force_failed", call_id=call.id)
+                continue
 
-        if stale:
-            await db.commit()
-            log.info("stale_calls_cleaned", count=len(stale))
+            # For calls with an EL conversation ID, check if EL says it's done
+            if call.elevenlabs_conversation_id:
+                el_status = await elevenlabs_service.get_conversation_status(
+                    call.elevenlabs_conversation_id
+                )
+                if el_status in ("done", "failed"):
+                    call.status = "completed"
+                    call.ended_at = call.ended_at or datetime.now(timezone.utc).isoformat()
+                    from app.routers.webhooks import _finalize_call
+                    await _finalize_call(call, redis, db)
+                    log.info("sweep_finalized_call",
+                             call_id=call.id, el_status=el_status)
+
+        await db.commit()
 
 
 async def purge_old_calls(ctx: dict) -> None:

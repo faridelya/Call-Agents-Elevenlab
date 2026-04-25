@@ -195,9 +195,9 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [tab,           setTab]           = useState('config');
-  const [agentName,     setAgentName]     = useState('New Agent');
+  const [agentName,     setAgentName]     = useState('');
   const [description,   setDescription]   = useState('');
-  const [callType,      setCallType]      = useState<'outbound' | 'inbound'>('outbound');
+  const [callType,      setCallType]      = useState<'outbound' | 'inbound' | 'both'>('outbound');
   const [language,      setLanguage]      = useState('en');
   const [systemPrompt,  setSystemPrompt]  = useState('You are a friendly AI voice agent. Your goal is to qualify leads and schedule demos. Keep calls under 3 minutes. Always be professional and helpful.');
   const [firstMessage,  setFirstMessage]  = useState('Hi {{lead_first_name}}, this is calling from {{company_name}}. Do you have a minute?');
@@ -218,6 +218,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
   const [temperature,    setTemperature]    = useState(0.7);
   const [stability,      setStability]      = useState(0.5);
   const [similarity,     setSimilarity]     = useState(0.75);
+  const [twilioPhone,   setTwilioPhone]   = useState('');
+  const [inboundPhone,  setInboundPhone]  = useState('');
   const [isSaving,  setIsSaving]  = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -226,12 +228,14 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
     if (!existing) return;
     setAgentName(existing.name);
     setDescription(existing.description ?? '');
-    setCallType(existing.call_type === 'inbound' ? 'inbound' : 'outbound');
+    setCallType((existing.call_type === 'inbound' || existing.call_type === 'both') ? existing.call_type as 'inbound' | 'both' : 'outbound');
     setLanguage(existing.language ?? 'en');
     setSystemPrompt(existing.system_prompt ?? '');
     setFirstMessage(existing.first_message ?? '');
     setCompanyName(existing.company_name ?? '');
     setProductName(existing.product_name ?? '');
+    setTwilioPhone(existing.twilio_phone_number ?? '');
+    setInboundPhone(existing.inbound_phone_number ?? '');
     const tools = existing.enabled_tools ?? [];
     setEnabledTools([...new Set([...TIER1_IDS, ...tools])]);
     const savedCfg = (existing.tool_configs as Record<string, Record<string, string>>) ?? {};
@@ -281,6 +285,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
       name: agentName, description, call_type: callType, voice_id: voiceId || 'default',
       language, system_prompt: systemPrompt, first_message: firstMessage,
       company_name: companyName, product_name: productName,
+      twilio_phone_number: twilioPhone || null,
+      inbound_phone_number: inboundPhone || null,
       max_call_duration_seconds: maxDuration, silence_timeout_seconds: silenceTimeout,
       llm_model: llmModel, llm_temperature: temperature,
       voice_stability: stability, voice_similarity: similarity,
@@ -290,6 +296,7 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
   }
 
   async function handleSave() {
+    if (!agentName.trim()) { showToast('Agent name is required.', 'error'); setTab('config'); return; }
     setIsSaving(true);
     try {
       if (isNew) { await createAgent.mutateAsync(buildBody()); showToast('Agent created!', 'success'); onBack(); }
@@ -337,7 +344,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
           <input
             value={agentName}
             onChange={(e) => setAgentName(e.target.value)}
-            style={{ background: 'transparent', border: 'none', fontFamily: 'var(--font-syne), sans-serif', fontSize: 17, fontWeight: 700, color: '#F1F5F9', outline: 'none', letterSpacing: '-0.02em', width: 280 }}
+            placeholder="Agent Name"
+            style={{ background: 'transparent', border: 'none', fontFamily: 'var(--font-syne), sans-serif', fontSize: 17, fontWeight: 700, color: agentName ? '#F1F5F9' : '#334155', outline: 'none', letterSpacing: '-0.02em', width: 280, lineHeight: 1.5, padding: '4px 0 5px' }}
           />
         </div>
 
@@ -408,7 +416,7 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
 
       {/* ── Content ── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-        {tab === 'config'   && <ConfigTab callType={callType} setCallType={setCallType} language={language} setLanguage={setLanguage} systemPrompt={systemPrompt} setSystemPrompt={setSystemPrompt} firstMessage={firstMessage} setFirstMessage={setFirstMessage} companyName={companyName} setCompanyName={setCompanyName} productName={productName} setProductName={setProductName} description={description} setDescription={setDescription} />}
+        {tab === 'config'   && <ConfigTab agentName={agentName} setAgentName={setAgentName} callType={callType} setCallType={setCallType} language={language} setLanguage={setLanguage} systemPrompt={systemPrompt} setSystemPrompt={setSystemPrompt} firstMessage={firstMessage} setFirstMessage={setFirstMessage} companyName={companyName} setCompanyName={setCompanyName} productName={productName} setProductName={setProductName} description={description} setDescription={setDescription} twilioPhone={twilioPhone} setTwilioPhone={setTwilioPhone} inboundPhone={inboundPhone} setInboundPhone={setInboundPhone} />}
         {tab === 'tools'    && <ToolsTab enabledTools={enabledTools} setEnabledTools={setEnabledTools} toolConfigs={toolConfigs} setToolConfigs={setToolConfigs} />}
         {tab === 'voice'    && <VoiceTab voices={voices} selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice} stability={stability} setStability={setStability} similarity={similarity} setSimilarity={setSimilarity} />}
         {tab === 'script'   && <ScriptTab opener={scriptOpener} setOpener={setScriptOpener} discovery={scriptDiscovery} setDiscovery={setScriptDiscovery} pitch={scriptPitch} setPitch={setScriptPitch} objection={scriptObjection} setObjection={setScriptObjection} closing={scriptClosing} setClosing={setScriptClosing} faq={scriptFaq} setFaq={setScriptFaq} />}
@@ -420,23 +428,30 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
 
 // ─── Config tab ───────────────────────────────────────────────────────────────
 
-function ConfigTab({ callType, setCallType, language, setLanguage, systemPrompt, setSystemPrompt, firstMessage, setFirstMessage, companyName, setCompanyName, productName, setProductName, description, setDescription }: {
-  callType: string; setCallType: (t: 'outbound' | 'inbound') => void;
+function ConfigTab({ agentName, setAgentName, callType, setCallType, language, setLanguage, systemPrompt, setSystemPrompt, firstMessage, setFirstMessage, companyName, setCompanyName, productName, setProductName, description, setDescription, twilioPhone, setTwilioPhone, inboundPhone, setInboundPhone }: {
+  agentName: string; setAgentName: (v: string) => void;
+  callType: string; setCallType: (t: 'outbound' | 'inbound' | 'both') => void;
   language: string; setLanguage: (l: string) => void;
   systemPrompt: string; setSystemPrompt: (v: string) => void;
   firstMessage: string; setFirstMessage: (v: string) => void;
   companyName: string; setCompanyName: (v: string) => void;
   productName: string; setProductName: (v: string) => void;
   description: string; setDescription: (v: string) => void;
+  twilioPhone: string; setTwilioPhone: (v: string) => void;
+  inboundPhone: string; setInboundPhone: (v: string) => void;
 }) {
   return (
     <div style={{ maxWidth: 920 }}>
       <SectionCard title="Agent Identity">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+          <div style={{ gridColumn: '1/-1' }}>
+            <Label>Agent Name <span style={{ color: '#EF4444', fontSize: 10 }}>*</span></Label>
+            <FInput value={agentName} onChange={(e) => setAgentName(e.target.value)} placeholder="e.g. Sales Agent, Support Bot, Booking Assistant" />
+          </div>
           <div>
             <Label icon="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07">Agent type</Label>
             <div style={{ display: 'flex', gap: 8 }}>
-              {(['outbound', 'inbound'] as const).map((t) => (
+              {(['outbound', 'inbound', 'both'] as const).map((t) => (
                 <button key={t} onClick={() => setCallType(t)} style={{ flex: 1, padding: '9px', borderRadius: 8, border: `1px solid ${callType === t ? 'rgba(124,110,250,0.45)' : 'rgba(255,255,255,0.08)'}`, background: callType === t ? 'rgba(124,110,250,0.12)' : '#080B14', color: callType === t ? '#A89AF9' : '#64748B', fontFamily: 'var(--font-inter)', fontSize: 13, fontWeight: 500, cursor: 'pointer', textTransform: 'capitalize', transition: 'all 0.15s' }}>
                   {t}
                 </button>
@@ -457,6 +472,22 @@ function ConfigTab({ callType, setCallType, language, setLanguage, systemPrompt,
             <Label>Product / service</Label>
             <FInput value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="Voxara AI Platform" />
           </div>
+          {(callType === 'outbound' || callType === 'both') && (
+            <div>
+              <Label icon="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07">
+                Outbound number <span style={{ fontWeight: 400, opacity: 0.5, fontSize: 9 }}>(caller ID · E.164)</span>
+              </Label>
+              <FInput value={twilioPhone} onChange={(e) => setTwilioPhone(e.target.value)} placeholder="+12345678900" />
+            </div>
+          )}
+          {(callType === 'inbound' || callType === 'both') && (
+            <div>
+              <Label icon="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07">
+                Inbound number <span style={{ fontWeight: 400, opacity: 0.5, fontSize: 9 }}>(customers call this · E.164)</span>
+              </Label>
+              <FInput value={inboundPhone} onChange={(e) => setInboundPhone(e.target.value)} placeholder="+12345678900" />
+            </div>
+          )}
           <div style={{ gridColumn: '1/-1' }}>
             <Label>Description (internal)</Label>
             <FInput value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief internal description of this agent's purpose" />
@@ -890,7 +921,7 @@ function AdvancedTab({ maxDuration, setMaxDuration, silenceTimeout, setSilenceTi
       </SectionCard>
 
       <div style={{ padding: 14, background: 'rgba(124,110,250,0.05)', border: '1px solid rgba(124,110,250,0.12)', borderRadius: 10, fontSize: 12, color: '#64748B', lineHeight: 1.6, fontFamily: 'var(--font-inter)' }}>
-        <strong style={{ color: '#A89AF9' }}>Tip:</strong> After changing advanced settings, click <strong>Save</strong> then <strong>Go Live</strong> to push to ElevenLabs. Active calls are not affected.
+        <strong style={{ color: '#A89AF9' }}>Tip:</strong> Settings are automatically synced to ElevenLabs on every Save. Use <strong style={{ color: '#CBD5E1' }}>Sync to ElevenLabs</strong> only if a previous sync failed or the agent was modified externally. Active calls are never affected by config changes.
       </div>
     </div>
   );

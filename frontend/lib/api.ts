@@ -137,6 +137,8 @@ export interface Agent {
   voice_id: string;
   language: string;
   call_type: 'outbound' | 'inbound' | 'both';
+  twilio_phone_number?: string | null;
+  inbound_phone_number?: string | null;
   system_prompt: string;
   first_message?: string;
   agent_role?: string;
@@ -177,6 +179,8 @@ export interface AgentCreate {
   agent_role?: string;
   company_name?: string;
   product_name?: string;
+  twilio_phone_number?: string | null;
+  inbound_phone_number?: string | null;
   max_call_duration_seconds?: number;
   silence_timeout_seconds?: number;
   llm_model?: string;
@@ -259,14 +263,14 @@ export const calls = {
 
   get: (id: string) => apiFetch<CallRecord>(`/api/v1/calls/${id}`),
 
-  outbound: (agent_id: string, to_number: string, phone_number_id?: string) =>
+  outbound: (agent_id: string, to_number: string, phone_number_id?: string, from_number?: string) =>
     apiFetch<CallRecord>('/api/v1/calls/outbound', {
       method: 'POST',
-      body: JSON.stringify({ agent_id, to_number, phone_number_id }),
+      body: JSON.stringify({ agent_id, to_number, phone_number_id, from_number }),
     }),
 
   end: (id: string) =>
-    apiFetch<{ message: string }>(`/api/v1/calls/${id}/end`, { method: 'POST' }),
+    apiFetch<{ message: string }>(`/api/v1/calls/${id}/end`, { method: 'POST', body: JSON.stringify({}) }),
 
   active: () =>
     apiFetch<{ active_calls: CallRecord[]; bridge_count: number }>('/api/v1/calls/active')
@@ -372,6 +376,30 @@ export const analytics = {
 
 // ── Settings / Usage ──────────────────────────────────────────────────────────
 
+export interface CredentialsData {
+  twilio_account_sid: string | null;
+  twilio_auth_token_masked: string | null;
+  elevenlabs_api_key_masked: string | null;
+  elevenlabs_webhook_secret_masked: string | null;
+  openai_api_key_masked: string | null;
+  google_api_key_masked: string | null;
+  anthropic_api_key_masked: string | null;
+  twilio_connected: boolean;
+  elevenlabs_connected: boolean;
+  elevenlabs_webhook_configured: boolean;
+  webhook_base_url: string;
+}
+
+export interface CredentialsSaveRequest {
+  twilio_account_sid?: string | null;
+  twilio_auth_token?: string | null;
+  elevenlabs_api_key?: string | null;
+  elevenlabs_webhook_secret?: string | null;
+  openai_api_key?: string | null;
+  google_api_key?: string | null;
+  anthropic_api_key?: string | null;
+}
+
 export const settings = {
   usage: () => apiFetch<{ total_calls: number; total_minutes: number }>('/api/v1/settings/usage'),
   billing: () =>
@@ -380,4 +408,27 @@ export const settings = {
     ),
   updateMe: (body: Partial<UserProfile>) =>
     apiFetch<UserProfile>('/api/v1/auth/me', { method: 'PATCH', body: JSON.stringify(body) }),
+  getCredentials: () => apiFetch<CredentialsData>('/api/v1/settings/credentials'),
+  saveCredentials: (body: CredentialsSaveRequest) =>
+    apiFetch<{ message: string }>('/api/v1/settings/credentials', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+};
+
+// ── Phone Numbers ─────────────────────────────────────────────────────────────
+
+export interface PhoneNumber {
+  id: string;
+  phone_number: string;
+  friendly_name?: string;
+  inbound_enabled: boolean;
+  inbound_agent_id?: string;
+  twilio_sid?: string;
+  created_at: string;
+}
+
+export const phoneNumbers = {
+  list: (page = 1) =>
+    apiFetch<PaginatedResponse<PhoneNumber>>(`/api/v1/phone-numbers?page=${page}&page_size=50`),
 };

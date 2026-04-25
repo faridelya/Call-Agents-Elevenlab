@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useOutboundCall, useCalls } from '@/lib/hooks/useCalls';
+import { useOutboundCall, useCalls, useEndCall } from '@/lib/hooks/useCalls';
 import { useEventStream, type LiveEvent } from '@/lib/hooks/useEventStream';
+import { apiFetch, settings as apiSettings } from '@/lib/api';
 
 type CallState = 'idle' | 'calling' | 'connected' | 'ended';
 
@@ -134,11 +135,13 @@ export function TestCallPanel({
   agentId,
   agentName,
   isSynced,
+  agentPhoneNumber,
   onCallEnded,
 }: {
   agentId: string | null;
   agentName: string;
   isSynced: boolean;
+  agentPhoneNumber?: string | null;
   onCallEnded?: () => void;
 }) {
   const [phone, setPhone] = useState('');
@@ -148,15 +151,44 @@ export function TestCallPanel({
   const [messages, setMessages] = useState<TranscriptMsg[]>([]);
   const [duration, setDuration] = useState(0);
   const [endReason, setEndReason] = useState('Call completed');
+  const [callError, setCallError] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const callRecordIdRef = useRef<string | null>(null);
 
   const outboundCall = useOutboundCall();
+  const endCallMutation = useEndCall();
   const { data: callHistory } = useCalls(1, agentId ?? undefined);
   const pastCalls = callHistory?.items?.slice(0, 4) ?? [];
 
+  // Credential status — null = loading, true/false = known
+  const [twilioCxn, setTwilioCxn] = useState<boolean | null>(null);
+  const [elCxn, setElCxn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    apiSettings.getCredentials()
+      .then(d => { setTwilioCxn(d.twilio_connected); setElCxn(d.elevenlabs_connected); })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => { callRecordIdRef.current = callRecordId; }, [callRecordId]);
+
+  // Fetch transcript from DB (with retry for finalization timing)
+  const loadTranscript = useCallback((rid: string, attempt = 0) => {
+    apiFetch<{ transcript: TranscriptMsg[]; duration_seconds: number }>(`/api/v1/calls/${rid}/transcript`)
+      .then(d => {
+        if (d.transcript?.length) {
+          setMessages(d.transcript.map(m => ({ role: m.role as 'user' | 'agent', text: m.text, timestamp: m.timestamp })));
+        }
+        if (d.duration_seconds) setDuration(d.duration_seconds);
+        if (!d.transcript?.length && attempt < 2) {
+          setTimeout(() => loadTranscript(rid, attempt + 1), 4000);
+        }
+      })
+      .catch(() => {
+        if (attempt < 2) setTimeout(() => loadTranscript(rid, attempt + 1), 4000);
+      });
+  }, []);
 
   useEventStream(
     useCallback((event: LiveEvent) => {
@@ -168,10 +200,12 @@ export function TestCallPanel({
         setCallState('ended');
         setEndReason('Call completed');
         onCallEnded?.();
+        // _finalize_call writes transcript before emitting call_ended; fetch it now
+        loadTranscript(rid);
       } else if (event.type === 'transcript' && event.call_record_id === rid) {
         setMessages((prev) => [...prev, { role: event.role, text: event.text, timestamp: event.timestamp }]);
       }
-    }, [onCallEnded])
+    }, [onCallEnded, loadTranscript])
   );
 
   useEffect(() => {
@@ -192,12 +226,19 @@ export function TestCallPanel({
   async function handleStart() {
     if (!agentId || !phone) return;
     setCallState('calling');
+    setCallError(null);
     try {
-      const record = await outboundCall.mutateAsync({ agent_id: agentId, to_number: phone });
+      const record = await outboundCall.mutateAsync({
+        agent_id: agentId,
+        to_number: phone,
+        from_number: agentPhoneNumber ?? undefined,
+      });
       setCallRecordId(record.id);
       callRecordIdRef.current = record.id;
-    } catch {
+    } catch (err: unknown) {
       setCallState('idle');
+      const msg = err instanceof Error ? err.message : 'Failed to start call';
+      setCallError(msg);
     }
   }
 
@@ -385,7 +426,16 @@ export function TestCallPanel({
           </div>
 
           <button
-            onClick={() => { setCallState('ended'); setEndReason('Ended manually'); }}
+            onClick={async () => {
+              const rid = callRecordIdRef.current;
+              if (rid) {
+                try { await endCallMutation.mutateAsync(rid); } catch {}
+              }
+              setCallState('ended');
+              setEndReason('Ended manually');
+              // Allow finalization time then fetch transcript
+              if (rid) setTimeout(() => loadTranscript(rid), 3500);
+            }}
             style={{ width: 56, height: 56, borderRadius: '50%', zIndex: 1, background: 'radial-gradient(circle at 38% 34%, rgba(239,68,68,0.2), rgba(239,68,68,0.06))', border: '1.5px solid rgba(239,68,68,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 28px rgba(239,68,68,0.2)', transition: 'all 0.2s' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'radial-gradient(circle,rgba(239,68,68,0.32),rgba(239,68,68,0.1))'; e.currentTarget.style.boxShadow = '0 0 44px rgba(239,68,68,0.5)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'radial-gradient(circle at 38% 34%,rgba(239,68,68,0.2),rgba(239,68,68,0.06))'; e.currentTarget.style.boxShadow = '0 0 28px rgba(239,68,68,0.2)'; }}
@@ -476,6 +526,9 @@ export function TestCallPanel({
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Prereq label="Agent saved" ok={!!agentId} hint="Save the agent first" />
           <Prereq label="Synced to ElevenLabs" ok={isSynced} hint={'Click "Sync to ElevenLabs" first'} />
+          {elCxn === false && <Prereq label="ElevenLabs API key missing" ok={false} hint="Settings → Credentials" />}
+          {twilioCxn === false && <Prereq label="Twilio credentials missing" ok={false} hint="Settings → Credentials" />}
+          {!agentPhoneNumber && <Prereq label="No outbound number on agent" ok={false} hint="Edit agent → Config tab" />}
         </div>
 
         {/* Recent calls */}
@@ -529,6 +582,24 @@ export function TestCallPanel({
             />
           </div>
 
+          {/* From number chip */}
+          <div style={{ marginBottom: 16 }}>
+            <FieldLabel>From Number</FieldLabel>
+            {agentPhoneNumber ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: 'rgba(34,211,238,0.05)', border: '1px solid rgba(34,211,238,0.18)', borderRadius: 10 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" strokeWidth="2" strokeLinecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.06 1.25h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.08a16 16 0 0 0 6.88 6.88l1.41-1.41a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                <span style={{ fontSize: 13, fontFamily: 'var(--font-jetbrains-mono), monospace', color: '#22D3EE', letterSpacing: '0.04em' }}>{agentPhoneNumber}</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 14px', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'var(--font-inter)', lineHeight: 1.55 }}>
+                  No number configured on this agent. <strong style={{ color: '#F59E0B' }}>The call will fail</strong> unless a default number is set in your environment. Go to <strong>Edit Agent → Config</strong> to add a number.
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Phone */}
           <div style={{ marginBottom: 22 }}>
             <FieldLabel>Phone Number to Call</FieldLabel>
@@ -577,7 +648,13 @@ export function TestCallPanel({
             )}
           </button>
 
-          {!canCall && !isCalling && (
+          {callError && (
+            <div style={{ marginTop: 12, padding: '11px 14px', borderRadius: 9, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+              <div style={{ fontSize: 11, color: '#FCA5A5', fontFamily: 'var(--font-inter)', lineHeight: 1.55 }}>{callError}</div>
+            </div>
+          )}
+          {!canCall && !isCalling && !callError && (
             <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 9, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.12)', fontSize: 11, color: '#64748B', fontFamily: 'var(--font-inter)', lineHeight: 1.55, textAlign: 'center' }}>
               {!agentId ? 'Save the agent first.' : !isSynced ? 'Sync to ElevenLabs before testing.' : 'Enter a valid phone number.'}
             </div>

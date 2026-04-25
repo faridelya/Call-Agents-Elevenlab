@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans, JetBrains_Mono, Syne } from 'next/font/google';
+import { Plus_Jakarta_Sans, JetBrains_Mono, Syne, Raleway } from 'next/font/google';
 import { Providers } from './providers';
 import './globals.css';
 
@@ -25,6 +25,14 @@ const syne = Syne({
   display: 'swap',
 });
 
+// Raleway — elegant geometric display font for the brand wordmark
+const raleway = Raleway({
+  subsets: ['latin'],
+  weight: ['700', '800', '900'],
+  variable: '--font-brand',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: 'Voxara — AI Voice Agents for Your Business',
   description:
@@ -35,7 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} ${syne.variable}`}
+      className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} ${syne.variable} ${raleway.variable}`}
     >
       <body>
         <Providers>{children}</Providers>

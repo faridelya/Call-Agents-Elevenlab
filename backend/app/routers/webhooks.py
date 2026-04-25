@@ -1,25 +1,28 @@
 """
-Twilio webhook handlers for native ElevenLabs integration.
+Webhook handlers — Twilio + ElevenLabs native integration.
 
-Flow (outbound):
+Twilio flow (outbound):
   1. Our server dials Twilio → Twilio calls /twiml/{call_record_id} when answered
   2. We call EL register_call() → get back TwiML + conversation_id
   3. We seed Redis conv mapping, store conv_id in DB, emit call_started
   4. Return TwiML to Twilio → EL owns the WebSocket to Twilio natively
 
-Flow (inbound):
-  1. Twilio receives inbound call → calls /inbound
-  2. Same register_call() path
+ElevenLabs post-call transcript flow (recommended by EL official docs):
+  1. EL fires POST /webhooks/elevenlabs/post-call when conversation is done + analysis complete
+  2. We verify the HMAC-SHA256 signature, map conv_id → call record, save transcript to DB
+  3. Emit call_processed to frontend — transcript appears without any polling
 
-Post-call (status callback):
-  1. Twilio POSTs completed status → we fetch transcript from EL API
-  2. Store transcript + stages in DB, emit call_ended, enqueue ARQ task
+Twilio status callback (fallback):
+  1. Twilio POSTs completed status → we emit call_ended + enqueue ARQ (30s deferred)
+  2. ARQ worker saves transcript if EL webhook hasn't fired yet
 """
+import hashlib
+import hmac
 import json
 import structlog
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,12 +33,27 @@ from app.models.base import new_uuid
 from app.models.call import Call
 from app.models.phone_number import PhoneNumber
 from app.services.elevenlabs_service import elevenlabs_service
-from app.utils.twiml import build_hangup_twiml
+from app.utils.twiml import build_hangup_twiml, build_say_twiml
 import redis.asyncio as aioredis
 
 log = structlog.get_logger(__name__)
 
-router = APIRouter(prefix="/webhooks/twilio", tags=["webhooks"])
+router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+
+async def _enqueue_post_call(call_id: str, defer_seconds: int = 30) -> None:
+    """Enqueue post_call_processing ARQ task with a delay. Swallows errors — non-critical."""
+    try:
+        from arq import create_pool  # type: ignore[import-untyped]
+        from arq.connections import RedisSettings  # type: ignore[import-untyped]
+        from datetime import timedelta
+        pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        await pool.enqueue_job("post_call_processing", call_id,
+                               _defer_by=timedelta(seconds=defer_seconds))
+        await pool.aclose()
+        log.info("arq_enqueued", call_id=call_id, defer_seconds=defer_seconds)
+    except Exception as exc:
+        log.warning("arq_enqueue_error", call_id=call_id, error=str(exc))
 
 # TTL for call Redis context — 4 hours
 _CTX_TTL = 14_400
@@ -163,7 +181,7 @@ async def _emit(call: Call, event_type: str, redis) -> None:
 
 # ─── Inbound call ─────────────────────────────────────────────────────────────
 
-@router.post("/inbound")
+@router.post("/twilio/inbound")
 async def inbound_call(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -188,6 +206,20 @@ async def inbound_call(
     phone_number = result.scalar_one_or_none()
     if not phone_number or not phone_number.inbound_enabled or not phone_number.inbound_agent_id:
         return xml_response(build_hangup_twiml())
+
+    # Verify the linked agent is configured to accept inbound calls
+    from app.models.agent import Agent as AgentModel
+    agent_result = await db.execute(select(AgentModel).where(AgentModel.id == phone_number.inbound_agent_id))
+    inbound_agent = agent_result.scalar_one_or_none()
+    if not inbound_agent or inbound_agent.call_type == "outbound":
+        return xml_response(build_say_twiml(
+            "Sorry, this number does not accept incoming calls. Please contact us through another channel. Goodbye."
+        ))
+
+    if not inbound_agent.is_active:
+        return xml_response(build_say_twiml(
+            "Sorry, this service is temporarily unavailable. Please try again later. Goodbye."
+        ))
 
     # Create call record
     call = Call(
@@ -219,7 +251,7 @@ async def inbound_call(
 
 # ─── Outbound TwiML (called by Twilio when outbound call is answered) ─────────
 
-@router.post("/twiml/{call_record_id}")
+@router.post("/twilio/twiml/{call_record_id}")
 async def outbound_twiml(
     call_record_id: str,
     request: Request,
@@ -258,7 +290,7 @@ async def outbound_twiml(
 
 # ─── Status callback ──────────────────────────────────────────────────────────
 
-@router.post("/status")
+@router.post("/twilio/status")
 async def call_status_callback(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -277,35 +309,68 @@ async def call_status_callback(
     if not call:
         return Response(status_code=204)
 
-    call.status = call_status
-    if duration:
-        call.duration_seconds = int(duration)
     if call_status in ("completed", "failed", "busy", "no-answer", "canceled"):
+        call.status = call_status
+        if duration:
+            call.duration_seconds = int(duration)
         call.ended_at = datetime.now(timezone.utc).isoformat()
-
-    # On completion: fetch transcript from EL, persist stages from Redis
-    if call_status in ("completed", "failed"):
-        await _finalize_call(call, redis, db)
+        if call.status not in ("finalized",):
+            await _finalize_call(call, redis, db)
+    else:
+        # For any other status (initiated, ringing, in-progress): update status,
+        # but also check EL — the call may have already ended on EL's side before
+        # Twilio fires the "completed" event (common with native integration).
+        call.status = call_status
+        if duration:
+            call.duration_seconds = int(duration)
+        if call.elevenlabs_conversation_id:
+            el_status = await elevenlabs_service.get_conversation_status(
+                call.elevenlabs_conversation_id
+            )
+            if el_status in ("done", "failed"):
+                call.status = "completed"
+                call.ended_at = datetime.now(timezone.utc).isoformat()
+                await _finalize_call(call, redis, db)
 
     await db.commit()
     return Response(status_code=204)
 
 
 async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
-    """Fetch EL transcript + Redis stages, write to DB, emit call_ended, enqueue ARQ."""
-    # Fetch transcript from ElevenLabs API
+    """Fetch EL transcript + Redis stages, write to DB, emit call_ended, enqueue ARQ.
+
+    EL takes 5-30s to finalize transcription after a call ends. We check the
+    conversation status first: if already done we fetch immediately; if still
+    processing we skip and let the ARQ worker (enqueued with a 30s delay) handle it.
+    This guarantees the transcript is saved regardless of which side ended the call.
+    """
+    # ── Transcript from ElevenLabs ───────────────────────────────────────────
     if call.elevenlabs_conversation_id:
-        transcript = await elevenlabs_service.get_conversation_transcript(
+        el_status = await elevenlabs_service.get_conversation_status(
             call.elevenlabs_conversation_id
         )
-        if transcript:
-            call.transcript = transcript
-            log.info("native_transcript_saved",
+        if el_status == "done":
+            transcript = await elevenlabs_service.get_conversation_transcript(
+                call.elevenlabs_conversation_id
+            )
+            if transcript:
+                call.transcript = transcript
+                log.info("native_transcript_saved",
+                         call_id=call.id,
+                         msgs=len(transcript),
+                         conv_id=call.elevenlabs_conversation_id)
+            else:
+                log.warning("native_transcript_empty_after_done",
+                            call_id=call.id,
+                            conv_id=call.elevenlabs_conversation_id)
+        else:
+            # EL still processing — ARQ task will retry after 30s
+            log.info("native_transcript_deferred",
                      call_id=call.id,
-                     msgs=len(transcript),
+                     el_status=el_status,
                      conv_id=call.elevenlabs_conversation_id)
 
-    # Recover stage timeline from Redis (written by update_call_stage tool)
+    # ── Stage timeline from Redis ────────────────────────────────────────────
     stages_key = f"call:{call.id}:stages"
     try:
         stages_raw = await redis.lrange(stages_key, 0, -1)
@@ -314,20 +379,17 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
     except Exception as exc:
         log.warning("native_stages_read_error", call_id=call.id, error=str(exc))
 
-    # Emit call_ended for frontend
+    # ── Emit call_ended to frontend ──────────────────────────────────────────
     await _emit(call, "call_ended", redis)
 
-    # Enqueue post-call processing (AI summary, CRM sync, etc.)
-    try:
-        from arq import create_pool
-        from arq.connections import RedisSettings
-        pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-        await pool.enqueue_job("post_call_processing", call.id)
-        await pool.aclose()
-    except Exception as exc:
-        log.warning("native_arq_enqueue_error", call_id=call.id, error=str(exc))
+    # ── Enqueue post-call processing as ARQ safety net ───────────────────────
+    # EL post-call webhook is the primary path (fires in ~1x call duration seconds).
+    # ARQ fires at 1.5x call duration (min 60s) as a fallback if the webhook missed.
+    duration = call.duration_seconds or 0
+    arq_delay = max(60, int(duration * 1.5))
+    await _enqueue_post_call(call.id, defer_seconds=arq_delay)
 
-    # Cleanup Redis call context
+    # ── Cleanup Redis call context ───────────────────────────────────────────
     try:
         await redis.delete(
             f"call:{call.id}",
@@ -341,7 +403,7 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
 
 # ─── Recording callback ───────────────────────────────────────────────────────
 
-@router.post("/recording")
+@router.post("/twilio/recording")
 async def recording_callback(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -391,3 +453,152 @@ async def _seed_redis_context(redis, call: Call, agent_id: str, db: AsyncSession
     }
     await redis.hset(f"call:{call.id}", mapping=context)
     await redis.expire(f"call:{call.id}", _CTX_TTL)
+
+
+# ─── ElevenLabs post-call webhook ─────────────────────────────────────────────
+#
+# ElevenLabs fires POST /webhooks/elevenlabs/post-call when a conversation is
+# fully done and transcription + analysis are complete.
+#
+# Official docs: https://elevenlabs.io/docs/eleven-agents/workflows/post-call-webhooks
+#
+# To configure in EL console:
+#   Conversational AI → Settings → Post-call webhooks →
+#   URL: {your_public_url}/api/v1/webhooks/elevenlabs/post-call
+#   Secret: copy value → set ELEVENLABS_WEBHOOK_SECRET in backend/.env
+#
+# EL retries up to 5 times with exponential backoff on non-2xx responses.
+# Returning 200 immediately then processing async keeps retry count low.
+
+@router.post("/elevenlabs/post-call")
+async def elevenlabs_post_call(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Receives ElevenLabs post_call_transcription event.
+    Saves transcript to DB and emits call_processed to the frontend.
+    This is the primary transcript delivery path — no polling required.
+    """
+    body = await request.body()
+
+    try:
+        payload = json.loads(body)
+    except Exception:
+        return Response(status_code=400)
+
+    event_type = payload.get("type")
+    if event_type != "post_call_transcription":
+        return Response(status_code=200)
+
+    data = payload.get("data", {})
+    conversation_id = data.get("conversation_id") or payload.get("conversation_id")
+    if not conversation_id:
+        return Response(status_code=400)
+
+    # ── HMAC-SHA256 signature verification ───────────────────────────────────
+    # Look up the call → user → their stored webhook secret (falls back to env)
+    sig_header = request.headers.get("ElevenLabs-Signature", "")
+    if sig_header:
+        call_result = await db.execute(
+            select(Call).where(Call.elevenlabs_conversation_id == conversation_id)
+        )
+        _call_for_sig = call_result.scalar_one_or_none()
+        secret = None
+        if _call_for_sig:
+            from app.models.user import User as UserModel
+            from app.utils.crypto import decrypt
+            user_result = await db.execute(select(UserModel).where(UserModel.id == _call_for_sig.user_id))
+            _user = user_result.scalar_one_or_none()
+            if _user and _user.elevenlabs_webhook_secret:
+                try:
+                    secret = decrypt(_user.elevenlabs_webhook_secret)
+                except Exception:
+                    secret = _user.elevenlabs_webhook_secret
+        # Fall back to env secret if user hasn't saved one yet
+        if not secret:
+            secret = settings.elevenlabs_webhook_secret
+        if secret:
+            parts = dict(p.split("=", 1) for p in sig_header.split(",") if "=" in p)
+            timestamp = parts.get("t", "")
+            signature = parts.get("v0", "")
+            signed_payload = f"{timestamp}.{body.decode()}"
+            expected = hmac.new(secret.encode(), signed_payload.encode(), hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(expected, signature):
+                log.warning("el_webhook_invalid_signature", conversation_id=conversation_id)
+                return Response(status_code=403)
+
+    log.info("el_post_call_webhook_received", conversation_id=conversation_id)
+
+    # ── Find the call record by EL conversation ID ────────────────────────────
+    result = await db.execute(
+        select(Call).where(Call.elevenlabs_conversation_id == conversation_id)
+    )
+    call = result.scalar_one_or_none()
+    if not call:
+        log.warning("el_webhook_call_not_found", conversation_id=conversation_id)
+        return Response(status_code=200)  # 200 so EL doesn't retry for a missing record
+
+    # ── Parse transcript from EL webhook payload ──────────────────────────────
+    # EL delivers the same format as GET /convai/conversations/{id}
+    raw_transcript = data.get("transcript", [])
+    if raw_transcript:
+        meta = data.get("metadata", {})
+        start_unix = meta.get("start_time_unix_secs")
+        base_dt = (
+            datetime.fromtimestamp(start_unix, tz=timezone.utc)
+            if start_unix
+            else datetime.now(timezone.utc)
+        )
+        transcript = []
+        for entry in raw_transcript:
+            text = (entry.get("message") or "").strip()
+            if not text:
+                continue
+            time_offset = entry.get("time_in_call_secs", 0) or 0
+            iso_ts = datetime.fromtimestamp(
+                base_dt.timestamp() + time_offset, tz=timezone.utc
+            ).isoformat()
+            transcript.append({
+                "role": entry.get("role", "user"),
+                "text": text,
+                "timestamp": iso_ts,
+            })
+
+        if transcript:
+            call.transcript = transcript
+            log.info("el_webhook_transcript_saved",
+                     call_id=call.id, msgs=len(transcript),
+                     conversation_id=conversation_id)
+
+    # ── Pull analysis fields EL provides ─────────────────────────────────────
+    analysis = data.get("analysis", {})
+    if analysis:
+        call.auto_summary   = analysis.get("transcript_summary") or call.auto_summary
+        call.sentiment_score = analysis.get("user_sentiment_score") or call.sentiment_score
+
+    # ── Duration from metadata ────────────────────────────────────────────────
+    meta = data.get("metadata", {})
+    if meta.get("call_duration_secs") and not call.duration_seconds:
+        call.duration_seconds = int(meta["call_duration_secs"])
+
+    call.status = "completed"
+    if not call.ended_at:
+        call.ended_at = datetime.now(timezone.utc).isoformat()
+
+    await db.commit()
+
+    # ── Notify frontend ───────────────────────────────────────────────────────
+    try:
+        from app.websockets.event_bus import event_manager
+        await event_manager.broadcast(call.user_id, {
+            "type":          "call_processed",
+            "call_id":       call.id,
+            "transcript_len": len(call.transcript or []),
+            "auto_summary":  call.auto_summary,
+            "sentiment_score": call.sentiment_score,
+        })
+    except Exception:
+        pass
+
+    return Response(status_code=200)

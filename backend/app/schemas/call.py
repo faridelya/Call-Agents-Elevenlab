@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class OutboundCallRequest(BaseModel):
     agent_id: str
     to_number: str
+    from_number: str | None = None
     lead_data: dict | None = None  # pre-seed contact info for dynamic variables
 
 
