@@ -33,7 +33,7 @@ const workspace = await voxara.workspace.configure({
 
 const tabs = {
   elevenlabs: {
-    color: '#7C6EFA',
+    color: '#00D082',
     label: 'ElevenLabs',
     badge: 'AI Voice Engine',
     headline: 'Studio-quality AI voices, on every call.',
@@ -70,7 +70,7 @@ function CodeLine({ line }: { line: string }) {
   const isComment = line.trim().startsWith('//');
   const isDeclaration = line.includes('await voxara') || line.includes('const ');
   const isKey = line.includes(':') && !isComment;
-  const color = isComment ? '#334155' : isDeclaration ? '#A89AF9' : isKey ? '#64748B' : '#94A3B8';
+  const color = isComment ? '#334155' : isDeclaration ? '#00D082' : isKey ? '#64748B' : '#94A3B8';
   return <div style={{ color }}>{line}</div>;
 }
 
@@ -82,9 +82,9 @@ export function IntegrationsSection() {
     <section
       style={{
         padding: '80px 80px',
-        background: '#060910',
-        borderTop: '1px solid rgba(255,255,255,0.04)',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        background: 'rgba(6,9,16,0.9)',
+        borderTop: '1px solid rgba(0,208,130,0.07)',
+        borderBottom: '1px solid rgba(0,208,130,0.07)',
       }}
     >
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -108,26 +108,29 @@ export function IntegrationsSection() {
                 padding: '10px 22px',
                 borderRadius: 12,
                 cursor: 'pointer',
-                transition: 'all 0.2s',
-                fontFamily: 'var(--font-inter), sans-serif',
-                fontWeight: 600,
+                transition: 'all 0.25s',
+                fontFamily: 'var(--font-syne), sans-serif',
+                fontWeight: 700,
                 fontSize: 14,
-                background: active === key ? `${tab.color}15` : 'transparent',
-                border: `1px solid ${active === key ? tab.color + '55' : 'rgba(255,255,255,0.08)'}`,
+                background: active === key ? `${tab.color}12` : 'rgba(9,20,38,0.5)',
+                border: `1px solid ${active === key ? tab.color + '50' : 'rgba(0,208,130,0.1)'}`,
                 color: active === key ? tab.color : '#475569',
-                boxShadow: active === key ? `0 0 20px ${tab.color}18` : 'none',
+                boxShadow: active === key ? `0 0 24px ${tab.color}20` : 'none',
+                backdropFilter: 'blur(12px)',
               }}
             >
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: tab.color, opacity: active === key ? 1 : 0.3 }} />
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: tab.color, opacity: active === key ? 1 : 0.35 }} />
               {tab.label}
               <span
                 style={{
                   fontSize: 10,
-                  fontWeight: 600,
-                  padding: '2px 7px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
                   borderRadius: 4,
                   background: `${tab.color}18`,
                   color: tab.color,
+                  fontFamily: 'var(--font-syne), sans-serif',
+                  letterSpacing: '0.04em',
                 }}
               >
                 {tab.badge}
@@ -141,9 +144,9 @@ export function IntegrationsSection() {
           <div>
             <h3
               style={{
-                fontFamily: 'var(--font-space-grotesk), sans-serif',
+                fontFamily: 'var(--font-syne), sans-serif',
                 fontSize: 28,
-                fontWeight: 700,
+                fontWeight: 800,
                 color: '#F1F5F9',
                 letterSpacing: '-0.025em',
                 marginBottom: 14,
@@ -152,12 +155,12 @@ export function IntegrationsSection() {
             >
               {t.headline}
             </h3>
-            <p style={{ fontSize: 14, color: '#3D4F68', lineHeight: 1.7, marginBottom: 24, fontFamily: 'var(--font-inter), sans-serif' }}>
+            <p style={{ fontSize: 14, color: '#4A6080', lineHeight: 1.7, marginBottom: 24, fontFamily: 'var(--font-inter), sans-serif' }}>
               {t.desc}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {t.features.map((f) => (
-                <div key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#4A5568', fontFamily: 'var(--font-inter), sans-serif' }}>
+                <div key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#4A6080', fontFamily: 'var(--font-inter), sans-serif' }}>
                   <div
                     style={{
                       width: 18,
@@ -184,24 +187,26 @@ export function IntegrationsSection() {
           {/* Code block */}
           <div
             style={{
-              background: '#0A0F1A',
-              border: '1px solid rgba(255,255,255,0.07)',
+              background: 'rgba(6,15,26,0.9)',
+              border: '1px solid rgba(0,208,130,0.12)',
               borderRadius: 16,
               overflow: 'hidden',
+              backdropFilter: 'blur(20px)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
             }}
           >
             <div
               style={{
                 padding: '12px 16px',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                borderBottom: '1px solid rgba(0,208,130,0.08)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
               }}
             >
               <div style={{ display: 'flex', gap: 5 }}>
-                {['#EF4444', '#F59E0B', '#10B981'].map((c) => (
-                  <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c, opacity: 0.6 }} />
+                {['#EF4444', '#F59E0B', '#00D082'].map((c) => (
+                  <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c, opacity: 0.7 }} />
                 ))}
               </div>
               <span style={{ fontSize: 11, color: '#334155', fontFamily: 'var(--font-jetbrains-mono), monospace' }}>

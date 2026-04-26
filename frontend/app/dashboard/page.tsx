@@ -8,39 +8,36 @@ import { DashboardView, AgentsView } from '@/components/app/Dashboard';
 import { AgentBuilder } from '@/components/app/AgentBuilder';
 import { CallLogView } from '@/components/app/CallLog';
 import { AnalyticsView } from '@/components/app/Analytics';
-import { ToolsView } from '@/components/app/Tools';
+import { OrdersView } from '@/components/app/Orders';
 import { CampaignsView } from '@/components/app/Campaigns';
 import { SettingsView } from '@/components/app/Settings';
 import type { Agent } from '@/lib/api';
 
-type View = 'dashboard' | 'agents' | 'campaigns' | 'calls' | 'analytics' | 'tools' | 'settings' | 'agent-builder';
+type View = 'dashboard' | 'agents' | 'campaigns' | 'calls' | 'analytics' | 'orders' | 'settings' | 'agent-builder';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
-  const [view, setView]                 = useState<View>('dashboard');
+  const [view, setView]               = useState<View>('dashboard');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace('/login');
-    }
+    if (!isLoading && !isAuthenticated) router.replace('/login');
   }, [isAuthenticated, isLoading, router]);
 
   if (isLoading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#080B14', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{
+        minHeight: '100vh', background: 'var(--bg-base)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           {[5, 9, 14, 9, 5].map((h, i) => (
             <div
               key={i}
               style={{
-                width: 3,
-                height: h,
-                background: '#7C6EFA',
-                borderRadius: 2,
-                opacity: [0.5, 0.75, 1, 0.75, 0.5][i],
+                width: 3, height: h, background: '#00D082', borderRadius: 2,
+                opacity: [0.4, 0.65, 1, 0.65, 0.4][i],
                 animation: `pulse 1.2s ease-in-out ${i * 0.1}s infinite`,
               }}
             />
@@ -90,8 +87,8 @@ export default function DashboardPage() {
     case 'analytics':
       content = <AnalyticsView />;
       break;
-    case 'tools':
-      content = <ToolsView />;
+    case 'orders':
+      content = <OrdersView />;
       break;
     case 'settings':
       content = <SettingsView />;

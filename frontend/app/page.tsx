@@ -23,7 +23,7 @@ export default function WebsitePage() {
   };
 
   return (
-    <div style={{ background: '#080B14', overflowX: 'hidden' }}>
+    <div style={{ background: '#060F1A', overflowX: 'hidden' }}>
       <NavHeader onNav={handleNav} />
       <div id="hero">
         <HeroSection onCTA={goToApp} />

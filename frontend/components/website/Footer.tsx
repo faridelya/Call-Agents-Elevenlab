@@ -12,8 +12,8 @@ export function SiteFooter() {
   return (
     <footer
       style={{
-        background: '#060910',
-        borderTop: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(6,9,16,0.95)',
+        borderTop: '1px solid rgba(0,208,130,0.1)',
         padding: '64px 80px 40px',
       }}
     >
@@ -35,6 +35,7 @@ export function SiteFooter() {
                 color: '#334155',
                 lineHeight: 1.7,
                 maxWidth: 240,
+                fontFamily: 'var(--font-inter), sans-serif',
               }}
             >
               The AI voice agent platform for businesses that move fast.
@@ -45,11 +46,13 @@ export function SiteFooter() {
               <div
                 style={{
                   fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: '0.09em',
+                  fontWeight: 700,
+                  letterSpacing: '0.1em',
                   textTransform: 'uppercase',
-                  color: '#2D3748',
+                  color: '#00D082',
                   marginBottom: 16,
+                  opacity: 0.6,
+                  fontFamily: 'var(--font-syne), sans-serif',
                 }}
               >
                 {title}
@@ -57,14 +60,15 @@ export function SiteFooter() {
               {links.map((l) => (
                 <div
                   key={l}
-                  onMouseEnter={(e) => ((e.target as HTMLElement).style.color = '#64748B')}
+                  onMouseEnter={(e) => ((e.target as HTMLElement).style.color = '#00D082')}
                   onMouseLeave={(e) => ((e.target as HTMLElement).style.color = '#334155')}
                   style={{
                     fontSize: 13,
                     color: '#334155',
                     marginBottom: 10,
                     cursor: 'pointer',
-                    transition: 'color 0.15s',
+                    transition: 'color 0.2s',
+                    fontFamily: 'var(--font-inter), sans-serif',
                   }}
                 >
                   {l}
@@ -75,15 +79,15 @@ export function SiteFooter() {
         </div>
         <div
           style={{
-            borderTop: '1px solid rgba(255,255,255,0.05)',
+            borderTop: '1px solid rgba(0,208,130,0.07)',
             paddingTop: 24,
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
           }}
         >
-          <span style={{ fontSize: 12, color: '#1E293B' }}>© 2025 Voxara, Inc.</span>
-          <span style={{ fontSize: 12, color: '#1E293B' }}>Built for builders.</span>
+          <span style={{ fontSize: 12, color: '#1E293B', fontFamily: 'var(--font-inter), sans-serif' }}>© 2025 Voxara, Inc.</span>
+          <span style={{ fontSize: 12, color: '#1E293B', fontFamily: 'var(--font-inter), sans-serif' }}>Built for builders.</span>
         </div>
       </div>
     </footer>

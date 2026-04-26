@@ -25,7 +25,7 @@ export function WaveLogo({ size = 'md' as LogoSize }: { size?: LogoSize }) {
             style={{
               width: s.bar,
               height: h,
-              background: '#7C6EFA',
+              background: '#00D082',
               borderRadius: 2,
               opacity: barOpacities[i],
               flexShrink: 0,
@@ -35,11 +35,11 @@ export function WaveLogo({ size = 'md' as LogoSize }: { size?: LogoSize }) {
       </div>
       <span
         style={{
-          fontFamily: 'var(--font-space-grotesk), sans-serif',
-          fontWeight: 700,
+          fontFamily: 'var(--font-syne), sans-serif',
+          fontWeight: 800,
           fontSize: s.fs,
           color: '#F1F5F9',
-          letterSpacing: '-0.03em',
+          letterSpacing: '-0.04em',
           lineHeight: 1,
         }}
       >
@@ -64,21 +64,21 @@ interface BtnProps {
 }
 
 const btnVariants: Record<BtnVariant, React.CSSProperties> = {
-  primary:   { background: '#7C6EFA', color: '#fff', boxShadow: '0 0 20px rgba(124,110,250,0.35)', border: 'none' },
-  secondary: { background: 'transparent', color: '#CBD5E1', border: '1px solid rgba(255,255,255,0.13)' },
+  primary:   { background: 'linear-gradient(135deg, #00D082 0%, #00C2B8 100%)', color: '#060F1A', boxShadow: '0 0 24px rgba(0,208,130,0.4)', border: 'none' },
+  secondary: { background: 'rgba(9,20,38,0.65)', color: '#CBD5E1', border: '1px solid rgba(0,208,130,0.25)', backdropFilter: 'blur(12px)' },
   ghost:     { background: 'transparent', color: '#64748B', border: '1px solid transparent' },
 };
 
 const btnHover: Record<BtnVariant, React.CSSProperties> = {
-  primary:   { background: '#6355E8', transform: 'translateY(-1px)', boxShadow: '0 4px 24px rgba(124,110,250,0.4)' },
-  secondary: { borderColor: 'rgba(255,255,255,0.28)', color: '#F1F5F9', background: 'rgba(255,255,255,0.04)' },
+  primary:   { background: 'linear-gradient(135deg, #00E890 0%, #00D4C8 100%)', transform: 'translateY(-2px)', boxShadow: '0 8px 32px rgba(0,208,130,0.55)' },
+  secondary: { borderColor: 'rgba(0,208,130,0.5)', color: '#F1F5F9', background: 'rgba(0,208,130,0.08)' },
   ghost:     { color: '#F1F5F9', background: 'rgba(255,255,255,0.04)' },
 };
 
 const btnSizes: Record<BtnSize, React.CSSProperties> = {
   sm: { padding: '7px 16px',  fontSize: 13, borderRadius: 10 },
   md: { padding: '11px 22px', fontSize: 14, borderRadius: 10 },
-  lg: { padding: '14px 32px', fontSize: 16, borderRadius: 12 },
+  lg: { padding: '14px 32px', fontSize: 15, borderRadius: 12 },
 };
 
 export function Btn({ children, variant = 'primary', size = 'md', onClick, style: extStyle, disabled }: BtnProps) {
@@ -93,12 +93,13 @@ export function Btn({ children, variant = 'primary', size = 'md', onClick, style
         border: 'none',
         cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'var(--font-inter), sans-serif',
-        fontWeight: 600,
-        transition: 'all 0.2s',
+        fontWeight: 700,
+        transition: 'all 0.25s',
         display: 'inline-flex',
         alignItems: 'center',
         gap: 8,
         opacity: disabled ? 0.5 : 1,
+        letterSpacing: '0.01em',
         ...btnVariants[variant],
         ...btnSizes[size],
         ...(hov && !disabled ? btnHover[variant] : {}),
@@ -118,9 +119,9 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
       style={{
         fontSize: 11,
         fontWeight: 600,
-        letterSpacing: '0.1em',
+        letterSpacing: '0.12em',
         textTransform: 'uppercase',
-        color: '#334155',
+        color: '#00D082',
         marginBottom: 14,
         fontFamily: 'var(--font-inter), sans-serif',
       }}
@@ -135,9 +136,9 @@ export function SectionHeading({ children, sub }: { children: React.ReactNode; s
     <div style={{ marginBottom: sub ? 16 : 0 }}>
       <h2
         style={{
-          fontFamily: 'var(--font-space-grotesk), sans-serif',
+          fontFamily: 'var(--font-syne), sans-serif',
           fontSize: 46,
-          fontWeight: 700,
+          fontWeight: 800,
           letterSpacing: '-0.03em',
           color: '#F1F5F9',
           lineHeight: 1.08,
@@ -150,7 +151,7 @@ export function SectionHeading({ children, sub }: { children: React.ReactNode; s
         <p
           style={{
             fontSize: 17,
-            color: '#3D4F68',
+            color: '#4A6080',
             maxWidth: 520,
             lineHeight: 1.65,
             fontFamily: 'var(--font-inter), sans-serif',
