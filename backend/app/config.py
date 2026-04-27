@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
 
+    # ── Campaign dialing safety limits ────────────────────────────────────────
+    # Hard ceiling on active campaign calls across the whole platform.
+    # Single test calls (POST /calls/outbound) are NOT throttled by this; it only
+    # gates the campaign worker from starting a new dial when the bridge is busy.
+    campaign_global_max_concurrent: int = 10
+    # Minimum seconds between consecutive dials in a campaign, regardless of what
+    # the campaign's call_interval_seconds says. Prevents runaway 0-second loops.
+    campaign_min_interval_seconds: int = 3
+    # How many seconds to back off when the concurrency ceiling is hit.
+    campaign_backoff_seconds: int = 30
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
