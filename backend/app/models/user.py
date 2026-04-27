@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean, Text
+from sqlalchemy import String, Boolean, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, new_uuid
 
@@ -26,6 +26,8 @@ class User(Base, TimestampMixin):
     openai_api_key: Mapped[str | None] = mapped_column(Text)
     google_api_key: Mapped[str | None] = mapped_column(Text)
     anthropic_api_key: Mapped[str | None] = mapped_column(Text)
+
+    contact_pool: Mapped[list] = mapped_column(JSON, default=list, nullable=True)
 
     timezone: Mapped[str] = mapped_column(String(100), default="UTC")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

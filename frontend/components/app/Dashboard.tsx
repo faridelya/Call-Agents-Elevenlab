@@ -10,6 +10,7 @@ import type { Agent, CallRecord } from '@/lib/api';
 import { apiFetch } from '@/lib/api';
 import { AgentBuilder } from './AgentBuilder';
 import { TestCallPanel } from './TestCallPanel';
+import { AgentPreviewDrawer } from './AgentPreviewDrawer';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -466,7 +467,8 @@ export function AgentsView({ onSelectAgent, onNewAgent }: {
   const [pauseTarget, setPauseTarget] = useState<{ agent: Agent; action: 'pause' | 'resume' } | null>(null);
   const [toggling, setToggling] = useState(false);
 
-  const [testTarget, setTestTarget] = useState<Agent | null>(null);
+  const [testTarget, setTestTarget]       = useState<Agent | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<Agent | null>(null);
 
   const agentList = data?.items ?? [];
   const activeAgentIds = ((activeCalls as unknown as any[]) ?? []).map((c: any) => c.agent_id);
@@ -578,6 +580,7 @@ export function AgentsView({ onSelectAgent, onNewAgent }: {
                 onTest={() => setTestTarget(agent)}
                 onToggle={() => setPauseTarget({ agent, action: agent.is_active ? 'pause' : 'resume' })}
                 onDelete={() => setDeleteTarget(agent)}
+                onPreview={() => setPreviewTarget(agent)}
               />
             );
           })}
@@ -665,8 +668,43 @@ export function AgentsView({ onSelectAgent, onNewAgent }: {
 
       {/* Test call panel */}
       {testTarget && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,10,20,0.85)', backdropFilter: 'blur(6px)', zIndex: 999 }}
-          onClick={(e) => e.target === e.currentTarget && setTestTarget(null)}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,10,20,0.85)', backdropFilter: 'blur(6px)', zIndex: 999 }}>
+          {/* Back to Agents button — always visible in top-left */}
+          <button
+            onClick={() => setTestTarget(null)}
+            style={{
+              position: 'fixed', top: 16, left: 20, zIndex: 1001,
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px 7px 10px',
+              background: 'rgba(6,10,20,0.82)',
+              backdropFilter: 'blur(14px)',
+              border: '1px solid rgba(255,255,255,0.14)',
+              borderRadius: 9,
+              color: '#94A3B8',
+              fontSize: 12, fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-inter), sans-serif',
+              letterSpacing: '0.01em',
+              transition: 'all 0.15s',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.26)';
+              e.currentTarget.style.color = '#F1F5F9';
+              e.currentTarget.style.background = 'rgba(10,16,32,0.92)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)';
+              e.currentTarget.style.color = '#94A3B8';
+              e.currentTarget.style.background = 'rgba(6,10,20,0.82)';
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Back to Agents
+          </button>
+
           <TestCallPanel
             agentId={testTarget.id}
             agentName={testTarget.name}
@@ -676,14 +714,23 @@ export function AgentsView({ onSelectAgent, onNewAgent }: {
           />
         </div>
       )}
+
+      {/* Agent preview drawer */}
+      {previewTarget && (
+        <AgentPreviewDrawer
+          agent={previewTarget}
+          onClose={() => setPreviewTarget(null)}
+          onEdit={() => { setPreviewTarget(null); onSelectAgent(previewTarget); }}
+        />
+      )}
     </div>
   );
 }
 
 // ─── Agent Card ───────────────────────────────────────────────────────────────
-function AgentCard({ agent, status, idx, onEdit, onTest, onToggle, onDelete }: {
+function AgentCard({ agent, status, idx, onEdit, onTest, onToggle, onDelete, onPreview }: {
   agent: Agent; status: 'live' | 'idle' | 'paused'; idx: number;
-  onEdit: () => void; onTest: () => void; onToggle: () => void; onDelete: () => void;
+  onEdit: () => void; onTest: () => void; onToggle: () => void; onDelete: () => void; onPreview: () => void;
 }) {
   const [hov, setHov] = useState(false);
   const stColor = status === 'live' ? '#00D082' : status === 'idle' ? '#38BDF8' : '#F0B429';
@@ -783,13 +830,14 @@ function AgentCard({ agent, status, idx, onEdit, onTest, onToggle, onDelete }: {
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: 7 }}>
-        <AgentActionBtn label="Test" onClick={onTest} color="#38BDF8" disabled={!agent.elevenlabs_agent_id} />
-        <AgentActionBtn label="Edit" onClick={onEdit} color="#00D082" />
+        <AgentActionBtn label="Preview" onClick={onPreview} color="#A89AF9" />
+        <AgentActionBtn label="Test"    onClick={onTest}   color="#38BDF8" disabled={!agent.elevenlabs_agent_id} />
+        <AgentActionBtn label="Edit"    onClick={onEdit}   color="#00D082" />
         <AgentActionBtn
           label={agent.is_active ? 'Pause' : 'Enable'}
           onClick={onToggle} color={agent.is_active ? '#F0B429' : '#00D082'}
         />
-        <AgentActionBtn label="Delete" onClick={onDelete} color="#FF4D6D" />
+        <AgentActionBtn label="Delete"  onClick={onDelete} color="#FF4D6D" />
       </div>
     </div>
   );

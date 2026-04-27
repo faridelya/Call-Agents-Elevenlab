@@ -14,7 +14,7 @@ from app.models.base import new_uuid
 from app.models.call import Call
 from app.models.campaign import Campaign
 from app.models.user import User
-from app.schemas.campaign import CampaignCreate, CampaignResponse, CampaignUpdate
+from app.schemas.campaign import CampaignCreate, CampaignResponse, CampaignUpdate, ContactPoolSave
 from app.schemas.common import MessageResponse, PaginatedResponse
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -70,6 +70,27 @@ async def create_campaign(
     await db.commit()
     await db.refresh(campaign)
     return campaign
+
+
+@router.get("/pool")
+async def get_contact_pool(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the user's saved contact pool (staging area before campaign creation)."""
+    return {"contacts": current_user.contact_pool or [], "total": len(current_user.contact_pool or [])}
+
+
+@router.put("/pool", response_model=MessageResponse)
+async def save_contact_pool(
+    body: ContactPoolSave,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Overwrite the user's contact pool with the supplied list."""
+    current_user.contact_pool = body.contacts
+    await db.commit()
+    return MessageResponse(message=f"Pool saved: {len(body.contacts)} contacts")
 
 
 @router.get("/{campaign_id}", response_model=CampaignResponse)
@@ -131,13 +152,17 @@ async def start_campaign(
     campaign.started_at = campaign.started_at or datetime.now(timezone.utc).isoformat()
     await db.commit()
 
-    # Enqueue the first contact dial via ARQ
+    # Enqueue N staggered dial jobs — one per configured parallel slot.
+    # Each job checks the slot ceiling before dialling, so the concurrency
+    # limits in campaign_tasks.py act as the real throttle.
     try:
         from arq import create_pool
         from arq.connections import RedisSettings
         from app.config import settings
         pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-        await pool.enqueue_job("dial_next_contact", campaign.id)
+        slots = max(1, campaign.max_concurrent_calls)
+        for i in range(slots):
+            await pool.enqueue_job("dial_next_contact", campaign.id, _defer_by=i)
         await pool.aclose()
     except Exception:
         pass

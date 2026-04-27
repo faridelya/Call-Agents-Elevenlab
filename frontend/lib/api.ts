@@ -305,8 +305,19 @@ export interface CampaignCreate {
   agent_id: string;
   phone_number_id?: string;
   call_interval_seconds?: number;
+  max_concurrent_calls?: number;
   contacts?: object[];
 }
+
+export const contactPool = {
+  get: () =>
+    apiFetch<{ contacts: object[]; total: number }>('/api/v1/campaigns/pool'),
+  save: (contacts: object[]) =>
+    apiFetch<{ message: string }>('/api/v1/campaigns/pool', {
+      method: 'PUT',
+      body: JSON.stringify({ contacts }),
+    }),
+};
 
 export const campaigns = {
   list: (page = 1) =>
@@ -334,6 +345,26 @@ export const campaigns = {
 
   stop: (id: string) =>
     apiFetch<Campaign>(`/api/v1/campaigns/${id}/stop`, { method: 'POST' }),
+};
+
+// ── Leads ─────────────────────────────────────────────────────────────────────
+
+export interface LeadCreate {
+  phone: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  notes?: string | null;
+  tags?: string[];
+  custom_fields?: Record<string, string>;
+}
+
+export const leads = {
+  create: (body: LeadCreate) =>
+    apiFetch<{ id: string; phone: string }>('/api/v1/leads', { method: 'POST', body: JSON.stringify(body) }),
+  list: (page = 1, search?: string) =>
+    apiFetch<PaginatedResponse<{ id: string; phone: string; first_name: string | null; last_name: string | null }>>(
+      `/api/v1/leads?page=${page}&page_size=50${search ? `&search=${encodeURIComponent(search)}` : ''}`
+    ),
 };
 
 // ── Analytics ─────────────────────────────────────────────────────────────────

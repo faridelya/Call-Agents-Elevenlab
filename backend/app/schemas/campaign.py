@@ -3,6 +3,10 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class ContactPoolSave(BaseModel):
+    contacts: list[dict] = []
+
+
 class CampaignCreate(BaseModel):
     name: str
     description: str | None = None

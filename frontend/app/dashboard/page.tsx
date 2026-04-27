@@ -15,11 +15,23 @@ import type { Agent } from '@/lib/api';
 
 type View = 'dashboard' | 'agents' | 'campaigns' | 'calls' | 'analytics' | 'orders' | 'settings' | 'agent-builder';
 
+const VALID_VIEWS: View[] = ['dashboard', 'agents', 'campaigns', 'calls', 'analytics', 'orders', 'settings', 'agent-builder'];
+const VIEW_KEY   = 'voxara_active_view';
+const AGENT_KEY  = 'voxara_selected_agent_id';
+
+function readSavedView(): View {
+  if (typeof window === 'undefined') return 'dashboard';
+  const v = localStorage.getItem(VIEW_KEY) as View | null;
+  return v && VALID_VIEWS.includes(v) ? v : 'dashboard';
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
-  const [view, setView]               = useState<View>('dashboard');
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [view, setView]               = useState<View>(readSavedView);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? localStorage.getItem(AGENT_KEY) : null
+  );
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) router.replace('/login');
@@ -52,17 +64,25 @@ export default function DashboardPage() {
 
   const nav = (v: string) => {
     setView(v as View);
-    if (v !== 'agent-builder') setSelectedAgentId(null);
+    localStorage.setItem(VIEW_KEY, v);
+    if (v !== 'agent-builder') {
+      setSelectedAgentId(null);
+      localStorage.removeItem(AGENT_KEY);
+    }
   };
 
   const handleSelectAgent = (agent: Agent) => {
     setSelectedAgentId(agent.id);
+    localStorage.setItem(AGENT_KEY, agent.id);
     setView('agent-builder');
+    localStorage.setItem(VIEW_KEY, 'agent-builder');
   };
 
   const handleNewAgent = () => {
     setSelectedAgentId(null);
+    localStorage.removeItem(AGENT_KEY);
     setView('agent-builder');
+    localStorage.setItem(VIEW_KEY, 'agent-builder');
   };
 
   const activeNav = view === 'agent-builder' ? 'agents' : view;

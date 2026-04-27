@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useCampaigns, useCampaignAction, useCreateCampaign } from '@/lib/hooks/useCampaigns';
 import { useAgents } from '@/lib/hooks/useAgents';
 import type { Campaign } from '@/lib/api';
+import { contactPool as poolApi } from '@/lib/api';
 
 const SC: Record<Campaign['status'], string> = {
   running: '#00D082', paused: '#F0B429', draft: '#3D607A',
@@ -18,11 +19,11 @@ function fmtDate(iso?: string) {
 interface ContactEntry {
   id: string;
   phone: string;
-  first_name: string;
-  last_name: string;
+  name: string;
   product_service: string;
   group: string;
   date: string;
+  agent_id?: string;
 }
 
 function genId() {
@@ -116,7 +117,332 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
   );
 }
 
-// ── New Campaign Modal (3-field popup) ─────────────────────────────────────────
+// ── Agent Option (dropdown item) ───────────────────────────────────────────────
+function AgentOption({ agent, selected, onClick }: {
+  agent: { id: string; name: string };
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      type="button"
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      onClick={onClick}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 9,
+        padding: '9px 14px',
+        background: selected ? 'rgba(0,208,130,0.08)' : hov ? 'rgba(255,255,255,0.04)' : 'transparent',
+        border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)',
+        cursor: 'pointer', fontSize: 12.5,
+        color: selected ? '#00D082' : 'var(--text-secondary)',
+        fontFamily: 'var(--font-ui)', textAlign: 'left',
+        transition: 'background 0.12s',
+      }}
+    >
+      <span style={{
+        width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+        background: selected ? '#00D082' : 'rgba(255,255,255,0.15)',
+        boxShadow: selected ? '0 0 6px rgba(0,208,130,0.6)' : 'none',
+        transition: 'all 0.12s',
+      }} />
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {agent.name}
+      </span>
+      {selected && (
+        <svg style={{ flexShrink: 0 }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00D082" strokeWidth="2.5" strokeLinecap="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+// ── Beautiful Searchable Agent Selector ────────────────────────────────────────
+function AgentSelect({ agents, value, onChange, placeholder = 'Select Agent' }: {
+  agents: Array<{ id: string; name: string }>;
+  value: string;
+  onChange: (id: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const filtered = agents.filter(a => a.name.toLowerCase().includes(query.toLowerCase()));
+  const selected = agents.find(a => a.id === value);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false); setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => { setOpen(!open); setQuery(''); }}
+        style={{
+          width: '100%', boxSizing: 'border-box',
+          background: open ? 'rgba(0,208,130,0.04)' : 'rgba(255,255,255,0.03)',
+          border: `1px solid ${open ? 'rgba(0,208,130,0.5)' : 'rgba(255,255,255,0.09)'}`,
+          borderRadius: 8, padding: '8px 12px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          cursor: 'pointer',
+          color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
+          fontSize: 12.5, fontFamily: 'var(--font-ui)',
+          boxShadow: open ? '0 0 0 3px rgba(0,208,130,0.07)' : 'none',
+          transition: 'border-color 0.18s, box-shadow 0.18s, background 0.18s',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', flex: 1, minWidth: 0 }}>
+          {selected ? (
+            <>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                background: '#00D082', boxShadow: '0 0 7px rgba(0,208,130,0.8)',
+              }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected.name}</span>
+            </>
+          ) : (
+            <>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                background: 'rgba(255,255,255,0.12)',
+              }} />
+              <span style={{ color: 'var(--text-muted)' }}>{placeholder}</span>
+            </>
+          )}
+        </span>
+        <svg
+          width="10" height="10" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', opacity: 0.45, flexShrink: 0, marginLeft: 8 }}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+          background: 'rgba(6,12,24,0.98)', backdropFilter: 'blur(24px)',
+          border: '1px solid rgba(0,208,130,0.22)', borderRadius: 10,
+          overflow: 'hidden', zIndex: 200,
+          boxShadow: '0 16px 48px rgba(0,0,0,0.65), 0 0 0 1px rgba(0,208,130,0.05)',
+          animation: 'modal-in 0.14s cubic-bezier(0.16,1,0.3,1)',
+        }}>
+          {/* Search */}
+          <div style={{ padding: '8px 8px 6px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ position: 'relative' }}>
+              <svg style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }}
+                width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+              </svg>
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Filter by name…"
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  borderRadius: 7, padding: '6px 8px 6px 28px',
+                  fontSize: 11.5, color: 'var(--text-primary)',
+                  outline: 'none', fontFamily: 'var(--font-ui)',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Clear */}
+          {value && (
+            <button
+              type="button"
+              onClick={() => { onChange(''); setOpen(false); }}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 7,
+                padding: '8px 14px', background: 'transparent', border: 'none',
+                borderBottom: '1px solid rgba(255,255,255,0.04)',
+                cursor: 'pointer', fontSize: 11.5,
+                color: 'rgba(255,77,109,0.65)', fontFamily: 'var(--font-ui)',
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+              Clear selection
+            </button>
+          )}
+
+          {/* List */}
+          <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+            {agents.length === 0 ? (
+              <div style={{ padding: '16px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+                No agents available
+              </div>
+            ) : filtered.length === 0 ? (
+              <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+                No agents match &ldquo;{query}&rdquo;
+              </div>
+            ) : (
+              filtered.map(a => (
+                <AgentOption key={a.id} agent={a} selected={value === a.id}
+                  onClick={() => { onChange(a.id); setOpen(false); setQuery(''); }} />
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Contact Edit Modal ─────────────────────────────────────────────────────────
+function ContactEditModal({ contact, agentOptions, onSave, onClose }: {
+  contact: ContactEntry;
+  agentOptions: Array<{ id: string; name: string }>;
+  onSave: (updated: ContactEntry) => void;
+  onClose: () => void;
+}) {
+  const [phone, setPhone]   = useState(contact.phone);
+  const [name, setName]     = useState(contact.name);
+  const [product, setProduct] = useState(contact.product_service);
+  const [group, setGroup]   = useState(contact.group);
+  const [agentId, setAgentId] = useState(contact.agent_id ?? '');
+
+  function handleSave() {
+    if (!phone.trim()) return;
+    onSave({
+      ...contact,
+      phone: phone.trim(), name: name.trim(),
+      product_service: product.trim(), group: group.trim(),
+      agent_id: agentId || undefined,
+    });
+    onClose();
+  }
+
+  const canSave = phone.trim().length > 0;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(2,10,20,0.90)',
+      backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 1001,
+    }}>
+      <div style={{
+        background: 'rgba(9,18,34,0.98)', backdropFilter: 'blur(24px)',
+        border: '1px solid rgba(56,189,248,0.2)', borderRadius: 20,
+        width: 460, maxWidth: '94vw',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.75), 0 0 0 1px rgba(56,189,248,0.04)',
+        position: 'relative', overflow: 'hidden',
+        animation: 'modal-in 0.25s cubic-bezier(0.16,1,0.3,1)',
+      }}>
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+          background: 'linear-gradient(90deg, transparent, #38BDF8, #00C2B8, transparent)',
+        }} />
+
+        {/* Header */}
+        <div style={{
+          padding: '22px 26px 16px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 3 }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: 8,
+                background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </div>
+              <h2 style={{ fontFamily: 'var(--font-syne)', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
+                Edit Contact
+              </h2>
+            </div>
+            <p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginLeft: 35 }}>
+              Update details and agent assignment
+            </p>
+          </div>
+          <button onClick={onClose} style={{
+            width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+            cursor: 'pointer', color: 'var(--text-muted)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '20px 26px', display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <Field label="Phone" value={phone} onChange={setPhone} placeholder="+1 555 234 7890" required />
+          <Field label="Name" value={name} onChange={setName} placeholder="John Smith" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label="Product / Service" value={product} onChange={setProduct} placeholder="Enterprise Plan" />
+            <Field label="Group" value={group} onChange={setGroup} placeholder="A" />
+          </div>
+          <div>
+            <label style={{
+              display: 'block', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.09em',
+              textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6,
+            }}>
+              Assigned Agent
+            </label>
+            <AgentSelect
+              agents={agentOptions}
+              value={agentId}
+              onChange={setAgentId}
+              placeholder="No agent assigned (optional)"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '12px 26px 24px', display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '10px', borderRadius: 10,
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+            color: 'var(--text-muted)', fontSize: 12.5, cursor: 'pointer',
+          }}>Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={!canSave}
+            style={{
+              flex: 2, padding: '10px', borderRadius: 10,
+              background: canSave ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${canSave ? 'rgba(56,189,248,0.38)' : 'rgba(255,255,255,0.08)'}`,
+              color: canSave ? '#38BDF8' : 'var(--text-muted)',
+              fontSize: 12.5, fontWeight: 600,
+              cursor: canSave ? 'pointer' : 'not-allowed',
+              boxShadow: canSave ? '0 0 16px rgba(56,189,248,0.1)' : 'none',
+              transition: 'all 0.15s',
+            }}
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── New Campaign Modal ─────────────────────────────────────────────────────────
 function NewCampaignModal({ onClose, agentOptions, contactGroups, allContacts }: {
   onClose: () => void;
   agentOptions: Array<{ id: string; name: string }>;
@@ -127,6 +453,7 @@ function NewCampaignModal({ onClose, agentOptions, contactGroups, allContacts }:
   const [selectedGroup, setSelectedGroup] = useState('');
   const [agentId, setAgentId] = useState(agentOptions[0]?.id ?? '');
   const [tags, setTags] = useState<string[]>([]);
+  const [parallelCalls, setParallelCalls] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -135,16 +462,20 @@ function NewCampaignModal({ onClose, agentOptions, contactGroups, allContacts }:
     setSaving(true); setError('');
     try {
       const name = `Campaign — ${selectedGroup ? `Group ${selectedGroup}` : 'All'} — ${new Date().toLocaleDateString()}`;
-      const campaign = await createCampaign.mutateAsync({ name, agent_id: agentId });
+      const campaign = await createCampaign.mutateAsync({
+        name, agent_id: agentId,
+        max_concurrent_calls: parallelCalls,
+      });
 
       const contactsToUpload = selectedGroup
         ? allContacts.filter((c) => c.group === selectedGroup)
         : allContacts;
 
       if (contactsToUpload.length > 0 && campaign?.id) {
-        const csv = ['phone,first_name,last_name,product,group,date',
+        const today = new Date().toISOString().split('T')[0];
+        const csv = ['phone,name,product,group,date',
           ...contactsToUpload.map((c) =>
-            `${c.phone},${c.first_name},${c.last_name},${c.product_service},${c.group},${c.date}`
+            `${c.phone},${c.name},${c.product_service},${c.group},${c.date || today}`
           )
         ].join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
@@ -173,7 +504,7 @@ function NewCampaignModal({ onClose, agentOptions, contactGroups, allContacts }:
       <div style={{
         background: 'rgba(9,18,34,0.98)', backdropFilter: 'blur(24px)',
         border: '1px solid rgba(0,208,130,0.18)', borderRadius: 20,
-        width: 440, maxWidth: '92vw',
+        width: 460, maxWidth: '92vw',
         boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
         position: 'relative', overflow: 'hidden',
         animation: 'modal-in 0.25s cubic-bezier(0.16,1,0.3,1)',
@@ -250,19 +581,12 @@ function NewCampaignModal({ onClose, agentOptions, contactGroups, allContacts }:
             }}>
               Agent <span style={{ color: '#FF4D6D' }}>*</span>
             </label>
-            <select
+            <AgentSelect
+              agents={agentOptions}
               value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-              style={{
-                width: '100%', background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10,
-                padding: '10px 14px', fontSize: 13, color: 'var(--text-primary)',
-                outline: 'none', cursor: 'pointer',
-              }}
-            >
-              {agentOptions.length === 0 && <option value="">No agents available</option>}
-              {agentOptions.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+              onChange={setAgentId}
+              placeholder="Select agent for this campaign"
+            />
           </div>
 
           {/* Tags */}
@@ -273,6 +597,35 @@ function NewCampaignModal({ onClose, agentOptions, contactGroups, allContacts }:
             }}>Tags</label>
             <TagInput tags={tags} onChange={setTags} />
             <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 5 }}>Press Enter or comma to add</p>
+          </div>
+
+          {/* Parallel Calls slider */}
+          <div>
+            <label style={{
+              display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10,
+            }}>
+              Parallel Calls
+              <span style={{
+                marginLeft: 8, fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)',
+                color: parallelCalls > 1 ? '#00D082' : 'var(--text-secondary)',
+                letterSpacing: 0, textTransform: 'none',
+              }}>{parallelCalls}</span>
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>1</span>
+              <input
+                type="range" min={1} max={10} value={parallelCalls}
+                onChange={(e) => setParallelCalls(Number(e.target.value))}
+                style={{ flex: 1, accentColor: '#00D082', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>10</span>
+            </div>
+            <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 5 }}>
+              {parallelCalls === 1
+                ? 'Serial — one call at a time'
+                : `${parallelCalls} simultaneous calls running in parallel`}
+            </p>
           </div>
 
           {error && (
@@ -314,23 +667,30 @@ function NewCampaignModal({ onClose, agentOptions, contactGroups, allContacts }:
   );
 }
 
-// ── Manual Add Panel (right side) ─────────────────────────────────────────────
-function ManualAddPanel({ onAdd, nextGroup }: { onAdd: (c: ContactEntry) => void; nextGroup: string }) {
-  const [phone, setPhone]       = useState('');
-  const [firstName, setFirst]   = useState('');
-  const [lastName, setLast]     = useState('');
-  const [product, setProduct]   = useState('');
-  const [group, setGroup]       = useState('');
+// ── Manual Add Panel ───────────────────────────────────────────────────────────
+function ManualAddPanel({ onAdd, nextGroup, agentOptions }: {
+  onAdd: (c: ContactEntry) => void;
+  nextGroup: string;
+  agentOptions: Array<{ id: string; name: string }>;
+}) {
+  const [phone, setPhone]     = useState('');
+  const [name, setName]       = useState('');
+  const [product, setProduct] = useState('');
+  const [group, setGroup]     = useState('');
+  const [agentId, setAgentId] = useState('');
 
   function handleAdd() {
     if (!phone.trim()) return;
+    const today = new Date().toISOString().split('T')[0];
     onAdd({
       id: genId(),
-      phone: phone.trim(), first_name: firstName.trim(),
-      last_name: lastName.trim(), product_service: product.trim(),
-      group: group.trim() || nextGroup, date: '',
+      phone: phone.trim(), name: name.trim(),
+      product_service: product.trim(),
+      group: group.trim() || nextGroup,
+      date: today,
+      agent_id: agentId || undefined,
     });
-    setPhone(''); setFirst(''); setLast(''); setProduct('');
+    setPhone(''); setName(''); setProduct(''); setGroup(''); setAgentId('');
   }
 
   const canAdd = phone.trim().length > 0;
@@ -360,14 +720,28 @@ function ManualAddPanel({ onAdd, nextGroup }: { onAdd: (c: ContactEntry) => void
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Field label="Phone" value={phone} onChange={setPhone} placeholder="+1 555 234 7890" required />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <Field label="First Name" value={firstName} onChange={setFirst} placeholder="John" />
-          <Field label="Last Name"  value={lastName}  onChange={setLast}  placeholder="Smith" />
-        </div>
+        <Field label="Name" value={name} onChange={setName} placeholder="John Smith" />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="Product / Service" value={product} onChange={setProduct} placeholder="Enterprise Plan" />
           <Field label="Group" value={group} onChange={setGroup} placeholder={nextGroup} />
         </div>
+
+        {/* Agent selector */}
+        <div>
+          <label style={{
+            display: 'block', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.09em',
+            textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6,
+          }}>
+            Assign Agent
+          </label>
+          <AgentSelect
+            agents={agentOptions}
+            value={agentId}
+            onChange={setAgentId}
+            placeholder="Select agent (optional)"
+          />
+        </div>
+
         <button
           onClick={handleAdd} disabled={!canAdd}
           style={{
@@ -386,51 +760,123 @@ function ManualAddPanel({ onAdd, nextGroup }: { onAdd: (c: ContactEntry) => void
   );
 }
 
-// ── CSV Upload Panel (right side) ─────────────────────────────────────────────
-function CSVUploadPanel({ onAdd }: { onAdd: (cs: ContactEntry[]) => void }) {
+// ── CSV Upload Panel ───────────────────────────────────────────────────────────
+function CSVUploadPanel({ onAdd, agentOptions }: {
+  onAdd: (cs: ContactEntry[]) => void;
+  agentOptions: Array<{ id: string; name: string }>;
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview]   = useState<ContactEntry[]>([]);
   const [fileName, setFileName] = useState('');
   const [err, setErr]           = useState('');
+  const [csvAgentId, setCsvAgentId] = useState('');
+  const [csvGroup, setCsvGroup]     = useState('');
+
+  function parseRows(rows: Record<string, unknown>[]) {
+    if (rows.length === 0) { setErr('File has no data rows.'); return; }
+
+    // Normalize header keys: lowercase, trim, strip BOM/quotes
+    const normalize = (k: string) =>
+      String(k).trim().toLowerCase().replace(/^﻿/, '').replace(/^["']|["']$/g, '').trim();
+
+    const rawKeys = Object.keys(rows[0]);
+    const keyMap: Record<string, string> = {};
+    for (const k of rawKeys) keyMap[normalize(k)] = k;
+
+    const keys = Object.keys(keyMap);
+    if (!keys.includes('phone')) {
+      const found = keys.filter(Boolean).join(', ') || '(none detected)';
+      setErr(`Required column "phone" not found. Columns detected: ${found}`);
+      return;
+    }
+
+    const col = (row: Record<string, unknown>, norm: string): string => {
+      const orig = keyMap[norm];
+      return orig ? String(row[orig] ?? '').trim() : '';
+    };
+
+    const prodKey = keys.includes('product_service') ? 'product_service' : 'product';
+    const today = new Date().toISOString().split('T')[0];
+
+    const parsed: ContactEntry[] = [];
+    for (let i = 0; i < Math.min(rows.length, 200); i++) {
+      const row = rows[i];
+      const phone = col(row, 'phone');
+      if (!phone) continue;
+
+      let name = col(row, 'name');
+      if (!name) {
+        const fn = col(row, 'first_name');
+        const ln = col(row, 'last_name');
+        name = [fn, ln].filter(Boolean).join(' ');
+      }
+
+      parsed.push({
+        id: genId(),
+        phone,
+        name,
+        product_service: col(row, prodKey),
+        group: col(row, 'group') || String(i + 1),
+        date: today,
+      });
+    }
+    setPreview(parsed);
+  }
 
   function parse(file: File) {
     setErr(''); setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const lines = text.split('\n').filter((l) => l.trim());
-      if (lines.length < 2) { setErr('File needs a header row and at least one data row.'); return; }
-      const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-      const phoneIdx = headers.indexOf('phone');
-      if (phoneIdx === -1) { setErr('Missing required "phone" column.'); return; }
-      const fnIdx   = headers.indexOf('first_name');
-      const lnIdx   = headers.indexOf('last_name');
-      const prodIdx = headers.indexOf('product');
-      const grpIdx  = headers.indexOf('group');
-      const dateIdx = headers.indexOf('date');
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
 
-      const parsed: ContactEntry[] = [];
-      for (let i = 1; i < Math.min(lines.length, 201); i++) {
-        const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
-        if (!cols[phoneIdx]) continue;
-        parsed.push({
-          id: genId(),
-          phone:           cols[phoneIdx],
-          first_name:      fnIdx   >= 0 ? (cols[fnIdx]   ?? '') : '',
-          last_name:       lnIdx   >= 0 ? (cols[lnIdx]   ?? '') : '',
-          product_service: prodIdx >= 0 ? (cols[prodIdx] ?? '') : '',
-          group:           grpIdx  >= 0 && cols[grpIdx] ? cols[grpIdx] : String(i),
-          date:            dateIdx >= 0 ? (cols[dateIdx] ?? '') : '',
-        });
-      }
-      setPreview(parsed);
-    };
-    reader.readAsText(file);
+    if (isExcel) {
+      // Excel: read as ArrayBuffer and use SheetJS
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const XLSX = await import('xlsx');
+          const data = e.target?.result as ArrayBuffer;
+          const wb = XLSX.read(data, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          // header: 1 → array of arrays; defval: '' fills empty cells
+          const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
+          parseRows(rows);
+        } catch {
+          setErr('Could not read Excel file. Try saving it as CSV and uploading that instead.');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // CSV / TSV: read as text
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const XLSX = await import('xlsx');
+          const text = e.target?.result as string;
+          const wb = XLSX.read(text, { type: 'string' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
+          parseRows(rows);
+        } catch {
+          setErr('Could not parse CSV file. Make sure it has a header row with a "phone" column.');
+        }
+      };
+      reader.readAsText(file);
+    }
   }
 
-  function confirm() { onAdd(preview); setPreview([]); setFileName(''); }
-  function reset()   { setPreview([]); setFileName(''); setErr(''); }
+  function confirm() {
+    // Apply agent + group overrides at confirm time
+    const today = new Date().toISOString().split('T')[0];
+    const final = preview.map(c => ({
+      ...c,
+      date: c.date || today,
+      agent_id: csvAgentId || undefined,
+      group: csvGroup.trim() ? csvGroup.trim() : c.group,
+    }));
+    onAdd(final);
+    setPreview([]); setFileName(''); setCsvAgentId(''); setCsvGroup('');
+  }
+  function reset() { setPreview([]); setFileName(''); setErr(''); }
 
   return (
     <div style={{
@@ -455,6 +901,46 @@ function CSVUploadPanel({ onAdd }: { onAdd: (cs: ContactEntry[]) => void }) {
         Import CSV / Excel
       </h3>
 
+      {/* Agent + Group — always visible */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+        <div>
+          <label style={{
+            display: 'block', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.09em',
+            textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6,
+          }}>
+            Assign Agent to All Imported Contacts
+          </label>
+          <AgentSelect
+            agents={agentOptions}
+            value={csvAgentId}
+            onChange={setCsvAgentId}
+            placeholder="Select agent (optional)"
+          />
+        </div>
+        <div>
+          <label style={{
+            display: 'block', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.09em',
+            textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5,
+          }}>
+            Override Group for All <span style={{ opacity: 0.55, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(leave blank to use CSV values)</span>
+          </label>
+          <input
+            value={csvGroup}
+            onChange={e => setCsvGroup(e.target.value)}
+            placeholder="e.g.  A  or  2026-Q2  (optional)"
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              background: 'rgba(255,255,255,0.03)',
+              border: `1px solid ${csvGroup ? 'rgba(56,189,248,0.4)' : 'rgba(255,255,255,0.08)'}`,
+              borderRadius: 8, padding: '7px 10px',
+              fontSize: 12, color: 'var(--text-primary)', outline: 'none',
+              fontFamily: 'var(--font-ui)', transition: 'border-color 0.18s',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Drop zone / preview */}
       {preview.length === 0 ? (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -463,7 +949,7 @@ function CSVUploadPanel({ onAdd }: { onAdd: (cs: ContactEntry[]) => void }) {
           onClick={() => fileRef.current?.click()}
           style={{
             border: `2px dashed ${dragging ? 'rgba(56,189,248,0.5)' : 'rgba(255,255,255,0.09)'}`,
-            borderRadius: 12, padding: '22px 16px', textAlign: 'center', cursor: 'pointer',
+            borderRadius: 12, padding: '20px 16px', textAlign: 'center', cursor: 'pointer',
             background: dragging ? 'rgba(56,189,248,0.04)' : 'rgba(255,255,255,0.01)',
             transition: 'all 0.2s',
           }}
@@ -474,7 +960,7 @@ function CSVUploadPanel({ onAdd }: { onAdd: (cs: ContactEntry[]) => void }) {
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
             Required: <code style={{ color: '#38BDF8', fontSize: 10 }}>phone</code>
-            {' '}· Optional: first_name, last_name, product, group, date
+            {' '}· Optional: name, product_service, group · date auto-assigned
           </div>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) parse(f); }} />
@@ -487,9 +973,19 @@ function CSVUploadPanel({ onAdd }: { onAdd: (cs: ContactEntry[]) => void }) {
             background: 'rgba(0,208,130,0.06)', border: '1px solid rgba(0,208,130,0.15)',
           }}>
             <span style={{ fontSize: 16 }}>✓</span>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#00D082' }}>{fileName}</div>
-              <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{preview.length} contacts ready to import</div>
+              <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+                {preview.length} contacts ready
+                {csvAgentId && agentOptions.find(a => a.id === csvAgentId) && (
+                  <span style={{ color: '#00D082' }}>
+                    {' '}· agent: {agentOptions.find(a => a.id === csvAgentId)!.name}
+                  </span>
+                )}
+                {csvGroup.trim() && (
+                  <span style={{ color: '#38BDF8' }}> · group: {csvGroup.trim()}</span>
+                )}
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -505,18 +1001,183 @@ function CSVUploadPanel({ onAdd }: { onAdd: (cs: ContactEntry[]) => void }) {
           </div>
         </div>
       )}
-      {err && <div style={{ fontSize: 11, color: '#FF4D6D', marginTop: 8 }}>{err}</div>}
+      {err && (
+        <div style={{
+          marginTop: 10, padding: '9px 12px', borderRadius: 8,
+          background: 'rgba(255,77,109,0.07)', border: '1px solid rgba(255,77,109,0.18)',
+          fontSize: 11, color: '#FF4D6D', lineHeight: 1.5,
+        }}>
+          {err}
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Contacts Pool Panel (left side) ───────────────────────────────────────────
-function ContactsPoolPanel({ contacts, onRemove }: { contacts: ContactEntry[]; onRemove: (id: string) => void }) {
+// shared grid template — used by both header row and data rows
+const ROW_COLS = '2fr 2fr 1fr 1fr 1fr 1fr 88px';
+
+// ── Contact Row ────────────────────────────────────────────────────────────────
+function ContactRow({ contact: c, onRemove, onEdit, agentOptions, striped }: {
+  contact: ContactEntry;
+  onRemove: (id: string) => void;
+  onEdit: (c: ContactEntry) => void;
+  agentOptions: Array<{ id: string; name: string }>;
+  striped: boolean;
+}) {
+  const [hov, setHov]             = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const assignedAgent = agentOptions.find(a => a.id === c.agent_id);
+
+  function handleDeleteClick() { setConfirming(true); }
+  function handleConfirm()     { onRemove(c.id); }
+  function handleCancel()      { setConfirming(false); }
+
+  return (
+    <div
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => { setHov(false); }}
+      style={{
+        borderBottom: '1px solid rgba(255,255,255,0.03)',
+        background: confirming
+          ? 'rgba(255,77,109,0.04)'
+          : hov ? 'rgba(0,208,130,0.025)'
+          : striped ? 'rgba(255,255,255,0.01)' : 'transparent',
+        transition: 'background 0.12s',
+      }}
+    >
+      {/* Normal row */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: ROW_COLS,
+        padding: '8px 20px', alignItems: 'center',
+      }}>
+        <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.phone}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name || '—'}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {c.product_service || '—'}
+        </span>
+        <span style={{
+          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 5,
+          background: 'rgba(56,189,248,0.08)', color: '#38BDF8', border: '1px solid rgba(56,189,248,0.15)',
+          display: 'inline-block', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          justifySelf: 'start',
+        }}>{c.group || '—'}</span>
+
+        {/* Agent badge */}
+        <div style={{ overflow: 'hidden' }}>
+          {assignedAgent ? (
+            <span style={{
+              display: 'inline-block', maxWidth: '100%',
+              padding: '2px 6px', borderRadius: 4,
+              background: 'rgba(0,208,130,0.07)', color: '#00D082',
+              border: '1px solid rgba(0,208,130,0.18)',
+              fontSize: 9.5, fontWeight: 600,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {assignedAgent.name}
+            </span>
+          ) : (
+            <span style={{ color: 'var(--text-disabled)', fontSize: 9.5 }}>—</span>
+          )}
+        </div>
+
+        {/* Date */}
+        <span style={{
+          fontSize: 9.5, fontFamily: 'var(--font-mono)',
+          color: 'var(--text-muted)', whiteSpace: 'nowrap',
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+        }}>
+          {c.date ? (
+            <>
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ opacity: 0.4, flexShrink: 0 }}>
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              {c.date}
+            </>
+          ) : '—'}
+        </span>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+          {!confirming && (
+            <button
+              onClick={() => onEdit(c)}
+              title="Edit contact"
+              style={{
+                background: 'none', border: 'none', padding: '3px',
+                color: hov ? '#38BDF8' : 'var(--text-disabled)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                transition: 'color 0.15s', borderRadius: 4,
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={confirming ? handleCancel : handleDeleteClick}
+            title={confirming ? 'Cancel' : 'Remove contact'}
+            style={{
+              background: 'none', border: 'none', padding: '3px',
+              color: confirming ? '#F0B429' : hov ? '#FF4D6D' : 'var(--text-disabled)',
+              cursor: 'pointer', fontSize: confirming ? 11 : 16, lineHeight: 1,
+              fontWeight: confirming ? 700 : 400,
+              transition: 'color 0.15s',
+            }}
+          >{confirming ? 'Cancel' : '×'}</button>
+        </div>
+      </div>
+
+      {/* Confirmation bar — slides in below the row */}
+      {confirming && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '7px 20px 9px',
+          background: 'rgba(255,77,109,0.05)',
+          borderTop: '1px solid rgba(255,77,109,0.1)',
+          animation: 'fade-in 0.15s both',
+        }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FF4D6D" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+            <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          </svg>
+          <span style={{ fontSize: 11, color: 'rgba(255,77,109,0.85)', flex: 1 }}>
+            Remove <strong style={{ fontFamily: 'var(--font-mono)' }}>{c.phone}</strong>
+            {c.name ? ` (${c.name})` : ''}? This will be deleted from the pool.
+          </span>
+          <button
+            onClick={handleConfirm}
+            style={{
+              padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+              background: 'rgba(255,77,109,0.14)', border: '1px solid rgba(255,77,109,0.38)',
+              color: '#FF4D6D', cursor: 'pointer', transition: 'all 0.15s',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,77,109,0.24)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,77,109,0.14)'; }}
+          >
+            Yes, Remove
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Contacts Pool Panel ────────────────────────────────────────────────────────
+function ContactsPoolPanel({ contacts, onRemove, onEdit, agentOptions }: {
+  contacts: ContactEntry[];
+  onRemove: (id: string) => void;
+  onEdit: (c: ContactEntry) => void;
+  agentOptions: Array<{ id: string; name: string }>;
+}) {
   const [search, setSearch]   = useState('');
   const [focused, setFocused] = useState(false);
 
   const filtered = contacts.filter((c) =>
-    [c.phone, c.first_name, c.last_name, c.group, c.product_service].some((v) =>
+    [c.phone, c.name, c.group, c.product_service].some((v) =>
       v.toLowerCase().includes(search.toLowerCase())
     )
   );
@@ -593,20 +1254,27 @@ function ContactsPoolPanel({ contacts, onRemove }: { contacts: ContactEntry[]; o
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
-            No contacts match "{search}"
+            No contacts match &ldquo;{search}&rdquo;
           </div>
         ) : (
           <>
             <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 1fr 100px 64px 28px',
+              display: 'grid', gridTemplateColumns: ROW_COLS,
               padding: '7px 20px', background: 'rgba(255,255,255,0.02)',
               borderBottom: '1px solid rgba(255,255,255,0.05)',
               fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
               letterSpacing: '0.08em', color: 'var(--text-muted)',
             }}>
-              <span>Phone</span><span>Name</span><span>Product</span><span>Group</span><span />
+              <span>Phone</span><span>Name</span><span>Product</span><span>Group</span><span>Agent</span><span>Date</span><span />
             </div>
-            {filtered.map((c, i) => <ContactRow key={c.id} contact={c} onRemove={onRemove} striped={i % 2 === 1} />)}
+            {filtered.map((c, i) => (
+              <ContactRow
+                key={c.id} contact={c}
+                onRemove={onRemove} onEdit={onEdit}
+                agentOptions={agentOptions}
+                striped={i % 2 === 1}
+              />
+            ))}
           </>
         )}
       </div>
@@ -628,37 +1296,6 @@ function ContactsPoolPanel({ contacts, onRemove }: { contacts: ContactEntry[]; o
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-function ContactRow({ contact: c, onRemove, striped }: { contact: ContactEntry; onRemove: (id: string) => void; striped: boolean }) {
-  const [hov, setHov] = useState(false);
-  return (
-    <div
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr 100px 64px 28px',
-        padding: '8px 20px', alignItems: 'center',
-        background: hov ? 'rgba(0,208,130,0.025)' : striped ? 'rgba(255,255,255,0.01)' : 'transparent',
-        borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.12s',
-      }}
-    >
-      <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{c.phone}</span>
-      <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{c.first_name} {c.last_name}</span>
-      <span style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {c.product_service || '—'}
-      </span>
-      <span style={{
-        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 5,
-        background: 'rgba(56,189,248,0.08)', color: '#38BDF8', border: '1px solid rgba(56,189,248,0.15)',
-        display: 'inline-block', textAlign: 'center',
-      }}>{c.group || '—'}</span>
-      <button onClick={() => onRemove(c.id)} style={{
-        background: 'none', border: 'none',
-        color: hov ? '#FF4D6D' : 'var(--text-disabled)',
-        cursor: 'pointer', fontSize: 15, lineHeight: 1, transition: 'color 0.15s',
-      }}>×</button>
     </div>
   );
 }
@@ -755,13 +1392,66 @@ function ABtn({ onClick, disabled, color, label }: { onClick: () => void; disabl
   );
 }
 
+const POOL_KEY = 'voxara_contact_pool';
+
 // ── Campaigns View ─────────────────────────────────────────────────────────────
 export function CampaignsView() {
   const { data, isLoading } = useCampaigns();
   const { data: agentsData } = useAgents();
   const campaignAction = useCampaignAction();
   const [showNew, setShowNew]       = useState(false);
-  const [contactPool, setPool]      = useState<ContactEntry[]>([]);
+  const [editTarget, setEditTarget] = useState<ContactEntry | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle');
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLoadFromDb = useRef(false);
+
+  // Restore contact pool: prefer localStorage for instant load, then sync with DB
+  const [contactPool, setPool] = useState<ContactEntry[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = localStorage.getItem(POOL_KEY);
+      return saved ? (JSON.parse(saved) as ContactEntry[]) : [];
+    } catch { return []; }
+  });
+
+  // On mount: load from DB once and merge (DB is the source of truth)
+  useEffect(() => {
+    if (didLoadFromDb.current) return;
+    didLoadFromDb.current = true;
+    poolApi.get()
+      .then(res => {
+        const dbContacts = (res.contacts ?? []) as ContactEntry[];
+        if (dbContacts.length > 0) {
+          setPool(dbContacts);
+          try { localStorage.setItem(POOL_KEY, JSON.stringify(dbContacts)); } catch {}
+        }
+      })
+      .catch(() => { /* offline or not authed — keep localStorage data */ });
+  }, []);
+
+  // Debounced save: 1.5 s after last change, persist to DB + localStorage
+  const saveToDb = useCallback((pool: ContactEntry[]) => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    setSyncStatus('syncing');
+    syncTimer.current = setTimeout(async () => {
+      try {
+        await poolApi.save(pool);
+        setSyncStatus('saved');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+      } catch {
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 3000);
+      }
+    }, 1500);
+  }, []);
+
+  // Keep localStorage + DB in sync whenever the pool changes (skip the initial load)
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    try { localStorage.setItem(POOL_KEY, JSON.stringify(contactPool)); } catch {}
+    saveToDb(contactPool);
+  }, [contactPool, saveToDb]);
 
   const campaignList  = data?.items ?? [];
   const liveCount     = campaignList.filter((c) => c.status === 'running').length;
@@ -773,6 +1463,9 @@ export function CampaignsView() {
 
   function addContacts(cs: ContactEntry[]) { setPool((prev) => [...prev, ...cs]); }
   function removeContact(id: string)       { setPool((prev) => prev.filter((c) => c.id !== id)); }
+  function updateContact(updated: ContactEntry) {
+    setPool((prev) => prev.map((c) => c.id === updated.id ? updated : c));
+  }
 
   return (
     <div style={{ padding: '32px 36px', minHeight: '100vh', animation: 'fade-in 0.4s both' }}>
@@ -782,6 +1475,14 @@ export function CampaignsView() {
           agentOptions={agentOptions}
           contactGroups={contactGroups}
           allContacts={contactPool}
+        />
+      )}
+      {editTarget && (
+        <ContactEditModal
+          contact={editTarget}
+          agentOptions={agentOptions}
+          onSave={updateContact}
+          onClose={() => setEditTarget(null)}
         />
       )}
 
@@ -802,6 +1503,33 @@ export function CampaignsView() {
                   animation: 'glow-pulse 2s infinite',
                 }} />
                 <span style={{ color: '#00D082', fontWeight: 600 }}>{liveCount} running</span>
+              </span>
+            )}
+            {/* Sync status pill */}
+            {syncStatus !== 'idle' && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '2px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600,
+                background: syncStatus === 'saved' ? 'rgba(0,208,130,0.08)'
+                  : syncStatus === 'error' ? 'rgba(255,77,109,0.08)'
+                  : 'rgba(56,189,248,0.08)',
+                border: `1px solid ${syncStatus === 'saved' ? 'rgba(0,208,130,0.25)'
+                  : syncStatus === 'error' ? 'rgba(255,77,109,0.25)'
+                  : 'rgba(56,189,248,0.25)'}`,
+                color: syncStatus === 'saved' ? '#00D082'
+                  : syncStatus === 'error' ? '#FF4D6D'
+                  : '#38BDF8',
+                transition: 'all 0.3s',
+              }}>
+                {syncStatus === 'syncing' && (
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+                    style={{ animation: 'spin-cw 1s linear infinite' }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                )}
+                {syncStatus === 'saved' && '✓'}
+                {syncStatus === 'error' && '✕'}
+                {syncStatus === 'syncing' ? 'Saving…' : syncStatus === 'saved' ? 'Saved to cloud' : 'Save failed'}
               </span>
             )}
           </div>
@@ -826,16 +1554,21 @@ export function CampaignsView() {
         </button>
       </div>
 
-      {/* ── Workspace: contacts pool (left) + input panels (right) ── */}
+      {/* Workspace: contacts pool (left) + input panels (right) */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 370px', gap: 18, marginBottom: 28 }}>
-        <ContactsPoolPanel contacts={contactPool} onRemove={removeContact} />
+        <ContactsPoolPanel
+          contacts={contactPool}
+          onRemove={removeContact}
+          onEdit={setEditTarget}
+          agentOptions={agentOptions}
+        />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <ManualAddPanel onAdd={(c) => addContacts([c])} nextGroup={nextGroup} />
-          <CSVUploadPanel onAdd={addContacts} />
+          <ManualAddPanel onAdd={(c) => addContacts([c])} nextGroup={nextGroup} agentOptions={agentOptions} />
+          <CSVUploadPanel onAdd={addContacts} agentOptions={agentOptions} />
         </div>
       </div>
 
-      {/* ── Campaign cards ── */}
+      {/* Campaign cards */}
       {!isLoading && campaignList.length === 0 ? (
         <div style={{
           background: 'rgba(9,20,38,0.60)', backdropFilter: 'blur(20px)',
@@ -845,7 +1578,7 @@ export function CampaignsView() {
           <div style={{ fontSize: 34, marginBottom: 14 }}>📡</div>
           <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>No campaigns yet</div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-            Add contacts using the panels above, then click "New Campaign" to start outreach.
+            Add contacts using the panels above, then click &ldquo;New Campaign&rdquo; to start outreach.
           </div>
           <button onClick={() => setShowNew(true)} style={{
             background: 'linear-gradient(135deg, rgba(0,208,130,0.18) 0%, rgba(0,194,184,0.10) 100%)',
