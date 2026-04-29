@@ -30,10 +30,12 @@ class Agent(Base, TimestampMixin):
     silence_timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
 
     # ElevenLabs model / voice tuning (surfaced to user)
-    llm_model: Mapped[str] = mapped_column(String(100), default="gemini-1.5-flash")
+    llm_model: Mapped[str] = mapped_column(String(100), default="gemini-2.0-flash")
     llm_temperature: Mapped[float] = mapped_column(default=0.7)
-    voice_stability: Mapped[float] = mapped_column(default=0.5)
-    voice_similarity: Mapped[float] = mapped_column(default=0.75)
+    tts_model: Mapped[str] = mapped_column(String(100), default="eleven_v3_conversational")
+    stt_provider: Mapped[str] = mapped_column(String(100), default="elevenlabs")
+    voice_stability: Mapped[float | None] = mapped_column(default=0.5)
+    voice_similarity: Mapped[float | None] = mapped_column(default=0.75)
 
     # Script sections: {opener, discovery, pitch, objection_handling, closing, faq}
     call_script: Mapped[dict] = mapped_column(JSON, default=dict)

@@ -9,7 +9,7 @@ class Campaign(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     agent_id: Mapped[str] = mapped_column(String(36), ForeignKey("agents.id"), nullable=False, index=True)
-    phone_number_id: Mapped[str] = mapped_column(String(36), ForeignKey("phone_numbers.id"), nullable=False)
+    phone_number_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("phone_numbers.id"), nullable=True)
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)

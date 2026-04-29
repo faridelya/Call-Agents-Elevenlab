@@ -64,7 +64,7 @@ async def create_campaign(
         id=new_uuid(),
         user_id=current_user.id,
         total_contacts=len(contacts),
-        **body.model_dump(),
+        **body.model_dump(exclude_none=True),
     )
     db.add(campaign)
     await db.commit()
@@ -142,11 +142,56 @@ async def start_campaign(
     db: AsyncSession = Depends(get_db),
 ):
     """Start a draft or paused campaign. Sets status to 'running' and enqueues the first contact dial via ARQ."""
+    from sqlalchemy import select as _select
+    from app.models.agent import Agent as AgentModel
+    from app.config import settings as _settings
+
     campaign = await get_campaign_or_404(campaign_id, current_user.id, db)
     if campaign.status not in _MUTABLE_STATUSES:
         raise ValidationError(f"Cannot start campaign in status: {campaign.status}")
     if not campaign.contacts:
         raise ValidationError("Campaign has no contacts")
+
+    # ── Pre-flight: validate agent + credentials before queuing ───────────────
+    agent_result = await db.execute(_select(AgentModel).where(AgentModel.id == campaign.agent_id))
+    agent = agent_result.scalar_one_or_none()
+
+    if not agent:
+        raise ValidationError("The agent attached to this campaign no longer exists.")
+
+    if not agent.is_active:
+        raise ValidationError(
+            f"Agent '{agent.name}' is disabled. Enable it in the Agents page before starting."
+        )
+
+    if not agent.elevenlabs_agent_id:
+        raise ValidationError(
+            f"Agent '{agent.name}' has not been synced to ElevenLabs. "
+            "Open the agent, save it, then try again."
+        )
+
+    if agent.call_type == "inbound":
+        raise ValidationError(
+            f"Agent '{agent.name}' is configured for inbound calls only. "
+            "Switch it to outbound in the agent settings."
+        )
+
+    from_number = agent.twilio_phone_number or _settings.twilio_phone_number
+    if not from_number:
+        raise ValidationError(
+            f"No outbound phone number configured. "
+            "Set a Twilio phone number on the agent or add one in Settings → Credentials."
+        )
+
+    has_twilio_creds = (
+        (current_user.twilio_account_sid and current_user.twilio_auth_token)
+        or (_settings.twilio_account_sid and _settings.twilio_auth_token)
+    )
+    if not has_twilio_creds:
+        raise ValidationError(
+            "Twilio credentials are not configured. "
+            "Add your Account SID and Auth Token in Settings → Credentials."
+        )
 
     campaign.status = "running"
     campaign.started_at = campaign.started_at or datetime.now(timezone.utc).isoformat()

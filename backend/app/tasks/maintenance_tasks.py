@@ -42,12 +42,16 @@ async def cleanup_stale_calls(ctx: dict) -> None:
 
             # For calls with an EL conversation ID, check if EL says it's done
             if call.elevenlabs_conversation_id:
-                el_status = await elevenlabs_service.get_conversation_status(
+                conv = await elevenlabs_service.get_conversation_full(
                     call.elevenlabs_conversation_id
                 )
+                el_status = conv["status"]
                 if el_status in ("done", "failed"):
                     call.status = "completed"
                     call.ended_at = call.ended_at or datetime.now(timezone.utc).isoformat()
+                    # Save duration from EL metadata if Twilio didn't report it
+                    if conv["duration_seconds"] and not call.duration_seconds:
+                        call.duration_seconds = conv["duration_seconds"]
                     from app.routers.webhooks import _finalize_call
                     await _finalize_call(call, redis, db)
                     log.info("sweep_finalized_call",

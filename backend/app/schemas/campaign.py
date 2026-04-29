@@ -11,7 +11,7 @@ class CampaignCreate(BaseModel):
     name: str
     description: str | None = None
     agent_id: str
-    phone_number_id: str
+    phone_number_id: str | None = None
     contacts: list[dict] = Field(default_factory=list)
     scheduled_start_at: str | None = None
     call_window_start: str | None = "09:00"
@@ -45,7 +45,7 @@ class CampaignResponse(BaseModel):
     name: str
     description: str | None
     agent_id: str
-    phone_number_id: str
+    phone_number_id: str | None
     status: str
     total_contacts: int
     contacts_called: int

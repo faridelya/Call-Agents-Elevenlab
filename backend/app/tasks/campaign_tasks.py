@@ -25,8 +25,14 @@ Minimum interval
 The effective inter-dial delay is max(campaign.call_interval_seconds,
 settings.campaign_min_interval_seconds) so a misconfigured interval=0 cannot
 create a tight loop.
+
+Call configuration
+------------------
+All call configuration (from-number, Twilio credentials, ElevenLabs agent ID,
+prompts, tools) is derived from the agent attached to the campaign — the same
+way single test calls (POST /calls/outbound) work.  No separate phone_number_id
+is required on the campaign.
 """
-import asyncio
 import json
 import structlog
 from datetime import datetime, timezone
@@ -58,6 +64,16 @@ async def dial_next_contact(ctx: dict, campaign_id: str) -> None:
 
     try:
         await _dial(ctx, campaign_id)
+    except Exception as exc:
+        # Any unhandled error in _dial must not silently kill the campaign.
+        # Re-enqueue with backoff so the next contact gets a chance.
+        log.error(
+            "campaign_dial_unhandled_error",
+            campaign_id=campaign_id,
+            error=str(exc),
+            exc_info=True,
+        )
+        await _enqueue_next(campaign_id, settings.campaign_backoff_seconds)
     finally:
         # Always release the lock, even on exceptions.
         if redis:
@@ -71,8 +87,9 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
     from app.models.call import Call
     from app.models.lead import Lead
     from app.models.agent import Agent
+    from app.models.user import User
     from app.models.base import new_uuid
-    from app.services.twilio_service import TwilioService
+    from app.services.twilio_service import get_twilio_service
 
     db_factory = ctx["db_factory"]
     redis = ctx.get("redis")
@@ -96,7 +113,6 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
             return
 
         # ── 2a. Per-campaign active call count ────────────────────────────────
-        # Uses campaign.max_concurrent_calls (default 1 from the model).
         per_campaign_active = (
             await db.execute(
                 select(func.count())
@@ -120,9 +136,6 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
             return
 
         # ── 2b. Global active campaign call count ─────────────────────────────
-        # Counts all calls that originated from *any* campaign (campaign_id IS
-        # NOT NULL) and are currently live.  Single test calls have campaign_id
-        # NULL so they don't count against this limit.
         global_active = (
             await db.execute(
                 select(func.count())
@@ -170,7 +183,7 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
             await _enqueue_next(campaign_id, _effective_interval(campaign))
             return
 
-        # ── Fetch agent ───────────────────────────────────────────────────────
+        # ── Fetch agent (source of truth for all call config) ─────────────────
         agent_result = await db.execute(select(Agent).where(Agent.id == campaign.agent_id))
         agent = agent_result.scalar_one_or_none()
 
@@ -180,14 +193,48 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
             log.error("campaign_agent_missing", campaign_id=campaign_id)
             return
 
+        if not agent.is_active:
+            campaign.status = "failed"
+            await db.commit()
+            log.error("campaign_agent_inactive", campaign_id=campaign_id, agent_id=agent.id)
+            return
+
+        if not agent.elevenlabs_agent_id:
+            campaign.status = "failed"
+            await db.commit()
+            log.error(
+                "campaign_agent_not_synced",
+                campaign_id=campaign_id,
+                agent_id=agent.id,
+                hint="Save/sync the agent to ElevenLabs before starting a campaign",
+            )
+            return
+
+        # ── Fetch user for per-user Twilio credentials ────────────────────────
+        user_result = await db.execute(select(User).where(User.id == campaign.user_id))
+        user = user_result.scalar_one_or_none()
+
+        # ── Resolve from-number from agent (same priority as single calls) ────
+        from_number = agent.twilio_phone_number or settings.twilio_phone_number
+
+        if not from_number:
+            campaign.status = "failed"
+            await db.commit()
+            log.error(
+                "campaign_no_from_number",
+                campaign_id=campaign_id,
+                agent_id=agent.id,
+                hint="Set a Twilio phone number on the agent or in the platform settings",
+            )
+            return
+
         # ── Create call record ────────────────────────────────────────────────
         call = Call(
             id=new_uuid(),
             user_id=campaign.user_id,
             agent_id=campaign.agent_id,
             campaign_id=campaign.id,
-            phone_number_id=campaign.phone_number_id,
-            from_number=settings.twilio_phone_number,
+            from_number=from_number,
             to_number=phone,
             direction="outbound",
             status="initiated",
@@ -196,7 +243,7 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
         db.add(call)
         await db.flush()  # resolve call.id before Redis write
 
-        # ── Seed Redis call context ───────────────────────────────────────────
+        # ── Seed Redis call context (mirrors POST /calls/outbound pipeline) ────
         if redis:
             context = {
                 "call_record_id": call.id,
@@ -217,15 +264,15 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
             await redis.hset(f"call:{call.id}", mapping=context)
             await redis.expire(f"call:{call.id}", 14400)
 
-        # ── Place Twilio call ─────────────────────────────────────────────────
+        # ── Place Twilio call (using per-user credentials) ────────────────────
         twiml_url = f"{settings.public_url}/api/v1/webhooks/twilio/twiml/{call.id}"
         status_url = f"{settings.public_url}/api/v1/webhooks/twilio/status"
 
         try:
-            twilio = TwilioService()
+            twilio = get_twilio_service(user)
             result = await twilio.create_call(
                 to=phone,
-                from_=settings.twilio_phone_number,
+                from_=from_number,
                 twiml_url=twiml_url,
                 status_callback=status_url,
             )
@@ -236,6 +283,7 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
                 phone=phone,
                 call_id=call.id,
                 sid=result["sid"],
+                from_number=from_number,
                 global_active=global_active + 1,
             )
         except Exception as e:

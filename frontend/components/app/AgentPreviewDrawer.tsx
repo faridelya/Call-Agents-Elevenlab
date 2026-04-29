@@ -488,8 +488,8 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
               background: 'rgba(168,154,249,0.04)', borderRadius: 12,
               border: '1px solid rgba(168,154,249,0.12)', marginBottom: 12,
             }}>
-              <Ring value={agent.voice_stability}  label="Voice Stability"   color="#A89AF9" />
-              <Ring value={agent.voice_similarity}  label="Voice Similarity"  color="#22D3EE" />
+              <Ring value={agent.voice_stability ?? 0.5}  label="Voice Stability"   color="#A89AF9" />
+              <Ring value={agent.voice_similarity ?? 0.75} label="Voice Similarity"  color="#22D3EE" />
               <Ring value={agent.llm_temperature}   label="LLM Temperature"   color="#F0B429" />
             </div>
 

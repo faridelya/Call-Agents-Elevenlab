@@ -148,8 +148,10 @@ export interface Agent {
   silence_timeout_seconds: number;
   llm_model: string;
   llm_temperature: number;
-  voice_stability: number;
-  voice_similarity: number;
+  tts_model: string;
+  stt_provider: string;
+  voice_stability: number | null;
+  voice_similarity: number | null;
   call_script: {
     opener?: string;
     discovery?: string;
@@ -185,6 +187,8 @@ export interface AgentCreate {
   silence_timeout_seconds?: number;
   llm_model?: string;
   llm_temperature?: number;
+  tts_model?: string;
+  stt_provider?: string;
   voice_stability?: number;
   voice_similarity?: number;
   call_script?: {

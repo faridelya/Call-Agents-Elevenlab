@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAgent, useCreateAgent, useUpdateAgent, useSyncAgent, useVoices } from '@/lib/hooks/useAgents';
+import { settings as apiSettings } from '@/lib/api';
 import type { AgentCreate } from '@/lib/api';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -15,11 +16,13 @@ const tabs = [
 ];
 
 const LLM_MODELS = [
-  { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', desc: 'Fastest · Recommended', provider: 'Google',    color: '#4285F4' },
-  { id: 'gemini-1.5-pro',   label: 'Gemini 1.5 Pro',   desc: 'More capable · Slower',  provider: 'Google',    color: '#4285F4' },
-  { id: 'gpt-4o-mini',      label: 'GPT-4o Mini',       desc: 'OpenAI · Fast',          provider: 'OpenAI',    color: '#10A37F' },
-  { id: 'gpt-4o',           label: 'GPT-4o',            desc: 'OpenAI · Best quality',  provider: 'OpenAI',    color: '#10A37F' },
-  { id: 'claude-3-5-haiku', label: 'Claude 3.5 Haiku',  desc: 'Anthropic · Fast',       provider: 'Anthropic', color: '#E6742A' },
+  { id: 'gemini-2.0-flash',      label: 'Gemini 2.0 Flash',      desc: 'Fastest · Recommended',   provider: 'Google', color: '#4285F4' },
+  { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', desc: 'Lightest · Lowest cost',  provider: 'Google', color: '#4285F4' },
+  { id: 'gemini-1.5-flash',      label: 'Gemini 1.5 Flash',      desc: 'Previous gen · Stable',   provider: 'Google', color: '#4285F4' },
+  { id: 'gemini-1.5-pro',        label: 'Gemini 1.5 Pro',        desc: 'Previous gen · Capable',  provider: 'Google', color: '#4285F4' },
+  { id: 'gpt-4o-mini',           label: 'GPT-4o Mini',           desc: 'OpenAI · Fast',           provider: 'OpenAI', color: '#10A37F' },
+  { id: 'gpt-4o',                label: 'GPT-4o',                desc: 'OpenAI · Best quality',   provider: 'OpenAI', color: '#10A37F' },
+  { id: 'gpt-4.1-mini',          label: 'GPT-4.1 Mini',          desc: 'OpenAI · Latest · Fast',  provider: 'OpenAI', color: '#10A37F' },
 ];
 
 export const BUILTIN_TOOLS: Array<{
@@ -285,10 +288,12 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
   const [scriptFaq,        setScriptFaq]       = useState('');
   const [maxDuration,    setMaxDuration]    = useState(300);
   const [silenceTimeout, setSilenceTimeout] = useState(10);
-  const [llmModel,       setLlmModel]       = useState('gemini-1.5-flash');
+  const [llmModel,       setLlmModel]       = useState('gemini-2.0-flash');
   const [temperature,    setTemperature]    = useState(0.7);
-  const [stability,      setStability]      = useState(0.5);
-  const [similarity,     setSimilarity]     = useState(0.75);
+  const [ttsModel,       setTtsModel]       = useState('eleven_v3_conversational');
+  const [sttProvider,    setSttProvider]    = useState('elevenlabs');
+  const [stability,      setStability]      = useState<number | null>(null);
+  const [similarity,     setSimilarity]     = useState<number | null>(null);
   const [twilioPhone,    setTwilioPhone]    = useState('');
   const [inboundPhone,   setInboundPhone]   = useState('');
   const [isSaving,  setIsSaving]  = useState(false);
@@ -296,9 +301,18 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   // ── Validation state ──────────────────────────────────────────────────────
-  const [nameError,   setNameError]   = useState(false);
-  const [promptError, setPromptError] = useState(false);
-  const [shakeId,     setShakeId]     = useState(0);
+  const [nameError,        setNameError]        = useState(false);
+  const [promptError,      setPromptError]      = useState(false);
+  const [shakeId,          setShakeId]          = useState(0);
+  const [twilioPhoneError,  setTwilioPhoneError]  = useState(false);
+  const [inboundPhoneError, setInboundPhoneError] = useState(false);
+  const [twilioCxn,         setTwilioCxn]         = useState<boolean | null>(null);
+
+  useEffect(() => {
+    apiSettings.getCredentials()
+      .then(d => setTwilioCxn(d.twilio_connected))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!existing) return;
@@ -318,10 +332,12 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
     setToolConfigs({ ...DEFAULT_TOOL_CONFIGS, ...savedCfg });
     setMaxDuration(existing.max_call_duration_seconds ?? 300);
     setSilenceTimeout(existing.silence_timeout_seconds ?? 10);
-    setLlmModel(existing.llm_model ?? 'gemini-1.5-flash');
+    setLlmModel(existing.llm_model ?? 'gemini-2.0-flash');
     setTemperature(existing.llm_temperature ?? 0.7);
-    setStability(existing.voice_stability ?? 0.5);
-    setSimilarity(existing.voice_similarity ?? 0.75);
+    setTtsModel(existing.tts_model ?? 'eleven_v3_conversational');
+    setSttProvider(existing.stt_provider ?? 'elevenlabs');
+    setStability(existing.voice_stability ?? null);
+    setSimilarity(existing.voice_similarity ?? null);
     const cs = existing.call_script ?? {};
     setScriptOpener(cs.opener ?? '');
     setScriptDiscovery(cs.discovery ?? '');
@@ -360,7 +376,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
       inbound_phone_number: inboundPhone || null,
       max_call_duration_seconds: maxDuration, silence_timeout_seconds: silenceTimeout,
       llm_model: llmModel, llm_temperature: temperature,
-      voice_stability: stability, voice_similarity: similarity,
+      tts_model: ttsModel, stt_provider: sttProvider,
+      voice_stability: stability ?? undefined, voice_similarity: similarity ?? undefined,
       enabled_tools: enabledTools, tool_configs: relevantConfigs as Record<string, unknown>,
       call_script: {
         opener: scriptOpener || undefined, discovery: scriptDiscovery || undefined,
@@ -383,6 +400,14 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
     }
     if (!systemPrompt.trim()) {
       setPromptError(true);
+      hasError = true;
+    }
+    if ((callType === 'outbound' || callType === 'both') && !twilioPhone.trim()) {
+      setTwilioPhoneError(true);
+      hasError = true;
+    }
+    if ((callType === 'inbound' || callType === 'both') && !inboundPhone.trim()) {
+      setInboundPhoneError(true);
       hasError = true;
     }
 
@@ -539,23 +564,6 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
 
           {!isNew && (
             <button
-              onClick={handleSave} disabled={isSaving}
-              style={{
-                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 9, padding: '7px 16px',
-                fontSize: 12.5, fontWeight: 500, color: 'var(--text-secondary)',
-                cursor: isSaving ? 'not-allowed' : 'pointer',
-                opacity: isSaving ? 0.6 : 1, transition: 'all 0.15s',
-              }}
-              onMouseEnter={(e) => { if (!isSaving) { e.currentTarget.style.borderColor = 'rgba(0,208,130,0.3)'; e.currentTarget.style.color = '#00D082'; } }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
-            >
-              {isSaving ? 'Saving…' : 'Save'}
-            </button>
-          )}
-
-          {!isNew && (
-            <button
               onClick={handleSync} disabled={isSyncing}
               style={{
                 background: isSyncing ? 'rgba(0,208,130,0.08)' : 'rgba(0,208,130,0.1)',
@@ -580,41 +588,39 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
             </button>
           )}
 
-          {/* Create / Save primary button */}
-          {isNew && (
-            <button
-              onClick={handleSave} disabled={isSaving}
-              style={{
-                background: isSaving
-                  ? 'rgba(0,208,130,0.08)'
-                  : 'linear-gradient(135deg, rgba(0,208,130,0.22) 0%, rgba(0,194,184,0.14) 100%)',
-                border: `1px solid ${isSaving ? 'rgba(0,208,130,0.15)' : 'rgba(0,208,130,0.50)'}`,
-                borderRadius: 10, padding: '9px 22px',
-                fontSize: 13, fontWeight: 600,
-                color: isSaving ? 'rgba(0,208,130,0.5)' : '#00D082',
-                cursor: isSaving ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: 7, transition: 'all 0.2s',
-                boxShadow: isSaving ? 'none' : '0 0 20px rgba(0,208,130,0.18)',
-                letterSpacing: '0.02em',
-              }}
-              onMouseEnter={(e) => { if (!isSaving) { e.currentTarget.style.boxShadow = '0 0 30px rgba(0,208,130,0.32)'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
-              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 0 20px rgba(0,208,130,0.18)'; e.currentTarget.style.transform = 'none'; }}
-            >
-              {isSaving ? (
-                <>
-                  <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(0,208,130,0.3)', borderTopColor: '#00D082', animation: 'ab-spin 0.7s linear infinite' }} />
-                  Creating…
-                </>
-              ) : (
-                <>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M12 5v14M5 12h14"/>
-                  </svg>
-                  Create Agent
-                </>
-              )}
-            </button>
-          )}
+          {/* Primary save / create button — always visible */}
+          <button
+            onClick={handleSave} disabled={isSaving}
+            style={{
+              background: isSaving
+                ? 'rgba(0,208,130,0.08)'
+                : 'linear-gradient(135deg, rgba(0,208,130,0.22) 0%, rgba(0,194,184,0.14) 100%)',
+              border: `1px solid ${isSaving ? 'rgba(0,208,130,0.15)' : 'rgba(0,208,130,0.50)'}`,
+              borderRadius: 10, padding: '9px 22px',
+              fontSize: 13, fontWeight: 600,
+              color: isSaving ? 'rgba(0,208,130,0.5)' : '#00D082',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 7, transition: 'all 0.2s',
+              boxShadow: isSaving ? 'none' : '0 0 20px rgba(0,208,130,0.18)',
+              letterSpacing: '0.02em',
+            }}
+            onMouseEnter={(e) => { if (!isSaving) { e.currentTarget.style.boxShadow = '0 0 30px rgba(0,208,130,0.32)'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 0 20px rgba(0,208,130,0.18)'; e.currentTarget.style.transform = 'none'; }}
+          >
+            {isSaving ? (
+              <>
+                <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(0,208,130,0.3)', borderTopColor: '#00D082', animation: 'ab-spin 0.7s linear infinite' }} />
+                Saving…
+              </>
+            ) : (
+              <>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"/>
+                </svg>
+                Save
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -692,16 +698,19 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
             companyName={companyName} setCompanyName={setCompanyName}
             productName={productName} setProductName={setProductName}
             description={description} setDescription={setDescription}
-            twilioPhone={twilioPhone} setTwilioPhone={setTwilioPhone}
-            inboundPhone={inboundPhone} setInboundPhone={setInboundPhone}
+            twilioPhone={twilioPhone} setTwilioPhone={(v) => { setTwilioPhone(v); if (v.trim()) setTwilioPhoneError(false); }}
+            inboundPhone={inboundPhone} setInboundPhone={(v) => { setInboundPhone(v); if (v.trim()) setInboundPhoneError(false); }}
             nameError={nameError} promptError={promptError}
+            twilioPhoneError={twilioPhoneError} inboundPhoneError={inboundPhoneError}
+            twilioCxn={twilioCxn}
           />
         )}
         {tab === 'tools'    && <ToolsTab enabledTools={enabledTools} setEnabledTools={setEnabledTools} toolConfigs={toolConfigs} setToolConfigs={setToolConfigs} />}
-        {tab === 'voice'    && <VoiceTab voices={voices} selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice} stability={stability} setStability={setStability} similarity={similarity} setSimilarity={setSimilarity} />}
+        {tab === 'voice'    && <VoiceTab voices={voices} selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice} stability={stability} setStability={setStability} similarity={similarity} setSimilarity={setSimilarity} ttsModel={ttsModel} setTtsModel={setTtsModel} sttProvider={sttProvider} setSttProvider={setSttProvider} />}
         {tab === 'script'   && <ScriptTab opener={scriptOpener} setOpener={setScriptOpener} discovery={scriptDiscovery} setDiscovery={setScriptDiscovery} pitch={scriptPitch} setPitch={setScriptPitch} objection={scriptObjection} setObjection={setScriptObjection} closing={scriptClosing} setClosing={setScriptClosing} faq={scriptFaq} setFaq={setScriptFaq} />}
         {tab === 'advanced' && <AdvancedTab maxDuration={maxDuration} setMaxDuration={setMaxDuration} silenceTimeout={silenceTimeout} setSilenceTimeout={setSilenceTimeout} llmModel={llmModel} setLlmModel={setLlmModel} temperature={temperature} setTemperature={setTemperature} />}
       </div>
+
     </div>
   );
 }
@@ -713,6 +722,7 @@ function ConfigTab({
   companyName, setCompanyName, productName, setProductName,
   description, setDescription, twilioPhone, setTwilioPhone,
   inboundPhone, setInboundPhone, nameError, promptError,
+  twilioPhoneError, inboundPhoneError, twilioCxn,
 }: {
   agentName: string; setAgentName: (v: string) => void;
   callType: string; setCallType: (t: 'outbound' | 'inbound' | 'both') => void;
@@ -725,9 +735,37 @@ function ConfigTab({
   twilioPhone: string; setTwilioPhone: (v: string) => void;
   inboundPhone: string; setInboundPhone: (v: string) => void;
   nameError: boolean; promptError: boolean;
+  twilioPhoneError: boolean; inboundPhoneError: boolean; twilioCxn: boolean | null;
 }) {
   return (
     <div style={{ maxWidth: 900 }}>
+      {twilioCxn === false && (
+        <div style={{
+          marginBottom: 20,
+          background: 'rgba(240,180,41,0.04)',
+          border: '1px solid rgba(240,180,41,0.22)',
+          borderRadius: 14,
+          padding: '16px 18px',
+          display: 'flex', alignItems: 'flex-start', gap: 14,
+          position: 'relative', overflow: 'hidden',
+          animation: 'ab-fade-in 0.3s both',
+        }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, rgba(240,180,41,0.55), transparent)' }} />
+          <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, background: 'rgba(240,180,41,0.1)', border: '1px solid rgba(240,180,41,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F0B429" strokeWidth="2" strokeLinecap="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#F0B429', marginBottom: 5, fontFamily: 'var(--font-ui)' }}>Twilio credentials not configured</div>
+            <div style={{ fontSize: 12, color: '#94A3B8', fontFamily: 'var(--font-ui)', lineHeight: 1.65 }}>
+              This agent needs your Twilio account to place or receive calls. Go to{' '}
+              <span style={{ color: '#F0B429', fontFamily: 'var(--font-mono)', fontSize: 11, padding: '1px 5px', background: 'rgba(240,180,41,0.08)', borderRadius: 4, border: '1px solid rgba(240,180,41,0.2)' }}>Settings → Credentials</span>
+              {' '}and add your Account SID and Auth Token before this agent can handle calls.
+            </div>
+          </div>
+        </div>
+      )}
       <SCard title="Agent Identity">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
           <div style={{ gridColumn: '1/-1' }}>
@@ -785,14 +823,16 @@ function ConfigTab({
 
           {(callType === 'outbound' || callType === 'both') && (
             <div>
-              <GLabel hint="Caller ID · E.164 format">Outbound Number</GLabel>
-              <GInput value={twilioPhone} onChange={(e) => setTwilioPhone(e.target.value)} placeholder="+12345678900" />
+              <GLabel hint="Caller ID · E.164 format" required>Outbound Number</GLabel>
+              <GInput value={twilioPhone} onChange={(e) => setTwilioPhone(e.target.value)} placeholder="+12345678900" error={twilioPhoneError} />
+              <FieldError msg={twilioPhoneError ? 'Required for outbound calls — add your Twilio number (E.164, e.g. +12345678900)' : undefined} />
             </div>
           )}
           {(callType === 'inbound' || callType === 'both') && (
             <div>
-              <GLabel hint="Customers call this · E.164">Inbound Number</GLabel>
-              <GInput value={inboundPhone} onChange={(e) => setInboundPhone(e.target.value)} placeholder="+12345678900" />
+              <GLabel hint="Customers call this · E.164" required>Inbound Number</GLabel>
+              <GInput value={inboundPhone} onChange={(e) => setInboundPhone(e.target.value)} placeholder="+12345678900" error={inboundPhoneError} />
+              <FieldError msg={inboundPhoneError ? 'Required for inbound calls — add the Twilio number customers dial into' : undefined} />
             </div>
           )}
 
@@ -1071,9 +1111,25 @@ function ToolConfigPanel({ tool, config, onChange }: { tool: typeof BUILTIN_TOOL
 }
 
 // ─── Voice tab ────────────────────────────────────────────────────────────────
-function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStability, similarity, setSimilarity }: {
+const TTS_MODELS = [
+  { id: 'eleven_v3_conversational', label: 'Eleven v3 Conversational', badge: 'LATEST', desc: 'Most natural · Highest quality · Recommended for all calls',      color: '#00D082' },
+  { id: 'eleven_flash_v2',          label: 'Flash v2',                 badge: 'FAST',   desc: 'Ultra-low latency (~75ms) · English only · Best for speed',       color: '#38BDF8' },
+  { id: 'eleven_multilingual_v2',   label: 'Multilingual v2',          badge: 'MULTI',  desc: 'Best for non-English calls · Supports 29 languages',               color: '#A89AF9' },
+];
+
+const STT_PROVIDERS = [
+  { id: 'elevenlabs',     label: 'ElevenLabs Native', badge: 'DEFAULT',  desc: 'Reliable · Battle-tested · Low latency',                    color: '#00D082' },
+  { id: 'scribe_v2',     label: 'Scribe v2',          badge: 'ACCURATE', desc: 'Highest accuracy · Best for complex accents',               color: '#38BDF8' },
+  { id: 'scribe_v2_turbo', label: 'Scribe v2 Turbo',  badge: 'FASTEST',  desc: 'Lowest latency · Slightly less accurate than Scribe v2',   color: '#F0B429' },
+  { id: 'scribe_realtime', label: 'Scribe Realtime',   badge: 'STREAM',   desc: 'Real-time streaming · Good for long pauses & noisy lines', color: '#A89AF9' },
+];
+
+function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStability, similarity, setSimilarity, ttsModel, setTtsModel, sttProvider, setSttProvider }: {
   voices: Array<{ voice_id: string; name: string }>; selectedVoice: number; setSelectedVoice: (i: number) => void;
-  stability: number; setStability: (v: number) => void; similarity: number; setSimilarity: (v: number) => void;
+  stability: number | null; setStability: (v: number | null) => void;
+  similarity: number | null; setSimilarity: (v: number | null) => void;
+  ttsModel: string; setTtsModel: (v: string) => void;
+  sttProvider: string; setSttProvider: (v: string) => void;
 }) {
   const [customId, setCustomId] = useState('');
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
@@ -1213,9 +1269,114 @@ function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStabi
         </div>
       </SCard>
 
+      {/* TTS Model */}
+      <SCard title="TTS Model (Text-to-Speech Engine)" accent="#00D082">
+        <p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.6 }}>
+          Controls how the agent's voice is synthesized. Affects quality, naturalness, and latency.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {TTS_MODELS.map((m) => {
+            const active = ttsModel === m.id;
+            return (
+              <div key={m.id} onClick={() => setTtsModel(m.id)} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                background: active ? 'rgba(0,208,130,0.06)' : 'rgba(6,15,26,0.8)',
+                border: `1px solid ${active ? 'rgba(0,208,130,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'all 0.18s',
+              }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                  background: active ? m.color : 'rgba(255,255,255,0.15)',
+                  boxShadow: active ? `0 0 8px ${m.color}` : 'none',
+                  transition: 'all 0.18s',
+                }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: active ? '#F1F5F9' : 'var(--text-muted)' }}>{m.label}</span>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 9999,
+                      color: m.color, background: `${m.color}18`,
+                      border: `1px solid ${m.color}40`,
+                    }}>{m.badge}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.desc}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SCard>
+
+      {/* STT Provider */}
+      <SCard title="STT Provider (Speech-to-Text / Transcription)" accent="#38BDF8">
+        <p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.6 }}>
+          Controls how the caller's speech is transcribed to text. Affects accuracy and response latency.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {STT_PROVIDERS.map((s) => {
+            const active = sttProvider === s.id;
+            return (
+              <div key={s.id} onClick={() => setSttProvider(s.id)} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                background: active ? 'rgba(56,189,248,0.06)' : 'rgba(6,15,26,0.8)',
+                border: `1px solid ${active ? 'rgba(56,189,248,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'all 0.18s',
+              }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                  background: active ? s.color : 'rgba(255,255,255,0.15)',
+                  boxShadow: active ? `0 0 8px ${s.color}` : 'none',
+                  transition: 'all 0.18s',
+                }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: active ? '#F1F5F9' : 'var(--text-muted)' }}>{s.label}</span>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 9999,
+                      color: s.color, background: `${s.color}18`,
+                      border: `1px solid ${s.color}40`,
+                    }}>{s.badge}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{s.desc}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SCard>
+
+      {/* Voice Tuning */}
       <SCard title="Voice Tuning" accent="#A89AF9">
-        <GSlider label="Stability" hint="Higher = more consistent, less expressive" value={stability} onChange={setStability} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} color="#00D082" />
-        <GSlider label="Similarity Boost" hint="Higher = closer to the original voice" value={similarity} onChange={setSimilarity} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} color="#38BDF8" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
+            Fine-tune the selected voice. Disable to use the voice&apos;s built-in ElevenLabs defaults.
+          </p>
+          <button
+            onClick={() => { setStability(stability === null ? 0.5 : null); setSimilarity(similarity === null ? 0.75 : null); }}
+            style={{
+              flexShrink: 0, marginLeft: 16, padding: '5px 14px', borderRadius: 9999, fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', transition: 'all 0.18s',
+              background: stability !== null ? 'rgba(168,154,249,0.12)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${stability !== null ? 'rgba(168,154,249,0.4)' : 'rgba(255,255,255,0.1)'}`,
+              color: stability !== null ? '#A89AF9' : 'var(--text-muted)',
+            }}
+          >
+            {stability !== null ? 'Custom ✓' : 'Use Defaults'}
+          </button>
+        </div>
+        {stability !== null ? (
+          <>
+            <GSlider label="Stability" hint="Higher = more consistent, less expressive" value={stability} onChange={(v) => setStability(v)} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} color="#00D082" />
+            <GSlider label="Similarity Boost" hint="Higher = closer to the original voice" value={similarity ?? 0.75} onChange={(v) => setSimilarity(v)} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} color="#38BDF8" />
+          </>
+        ) : (
+          <div style={{
+            padding: '14px 16px', borderRadius: 10, fontSize: 12, color: 'var(--text-muted)',
+            background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', lineHeight: 1.6,
+          }}>
+            Using the voice&apos;s native ElevenLabs defaults — no overrides applied. Each voice is tuned by its creator for optimal sound.
+          </div>
+        )}
       </SCard>
     </div>
   );

@@ -426,13 +426,26 @@ async def recording_callback(
 # ─── Redis context seeder ─────────────────────────────────────────────────────
 
 async def _seed_redis_context(redis, call: Call, agent_id: str, db: AsyncSession) -> None:
-    """Pre-load call context into Redis so tier 1 tools have fast access."""
+    """Pre-load call context into Redis so tier 1 tools have fast access.
+
+    For outbound calls (single test calls and campaign calls) the context is
+    already seeded at call-creation time with the correct lead_data.  This
+    function acts as a safety-net re-seed — it must NOT overwrite lead_data
+    that was already set, otherwise campaign contact details are lost.
+    """
     from app.models.agent import Agent as AgentModel
 
     result = await db.execute(select(AgentModel).where(AgentModel.id == agent_id))
     agent = result.scalar_one_or_none()
     if not agent:
         return
+
+    # Preserve existing lead_data (set by campaign task or POST /calls/outbound).
+    # hget returns bytes in most aioredis builds; decode defensively.
+    existing_lead_data_raw = await redis.hget(f"call:{call.id}", "lead_data")
+    if isinstance(existing_lead_data_raw, bytes):
+        existing_lead_data_raw = existing_lead_data_raw.decode()
+    lead_data = existing_lead_data_raw or json.dumps({})
 
     context = {
         "call_record_id": call.id,
@@ -449,7 +462,7 @@ async def _seed_redis_context(redis, call: Call, agent_id: str, db: AsyncSession
             "product_name":        agent.product_name,
             "elevenlabs_agent_id": agent.elevenlabs_agent_id,
         }),
-        "lead_data": json.dumps({}),
+        "lead_data": lead_data,
     }
     await redis.hset(f"call:{call.id}", mapping=context)
     await redis.expire(f"call:{call.id}", _CTX_TTL)
@@ -592,10 +605,10 @@ async def elevenlabs_post_call(
     try:
         from app.websockets.event_bus import event_manager
         await event_manager.broadcast(call.user_id, {
-            "type":          "call_processed",
-            "call_id":       call.id,
+            "type":           "call_processed",
+            "call_record_id": call.id,   # matches LiveEvent type in frontend
             "transcript_len": len(call.transcript or []),
-            "auto_summary":  call.auto_summary,
+            "auto_summary":   call.auto_summary,
             "sentiment_score": call.sentiment_score,
         })
     except Exception:

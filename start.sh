@@ -74,12 +74,36 @@ check_ngrok() {
   url=$(detect_ngrok_url)
 
   if [[ -z "$url" ]]; then
-    warn "ngrok not detected on localhost:4040."
-    warn "Start ngrok with:  ngrok http 8001"
-    warn "Twilio webhooks will fall back to BASE_URL in .env"
-    # Clear any stale NGROK_URL so the backend uses BASE_URL
-    env_set "NGROK_URL" ""
-    return
+    # Try to auto-start ngrok if it is installed
+    if command -v ngrok &>/dev/null; then
+      warn "ngrok not running — starting it automatically on port 8001…"
+      nohup ngrok http 8001 --log=stdout > /tmp/ngrok.log 2>&1 &
+      step "Waiting for ngrok to initialize (up to 20s)…"
+      local waited=0
+      while [[ $waited -lt 20 ]]; do
+        sleep 1
+        url=$(detect_ngrok_url)
+        [[ -n "$url" ]] && break
+        ((waited++)) || true
+      done
+      if [[ -z "$url" ]]; then
+        warn "ngrok failed to start after 20s — check /tmp/ngrok.log"
+        warn "Twilio webhooks will NOT work without a public URL."
+        # Reset BASE_URL to local so the stale old ngrok URL is not used
+        env_set "NGROK_URL" ""
+        env_set "BASE_URL" "http://localhost:8001"
+        return
+      fi
+      success "ngrok started automatically."
+    else
+      warn "ngrok not found (not installed or not in PATH)."
+      warn "Install from https://ngrok.com/download then re-run ./start.sh"
+      warn "Resetting BASE_URL to localhost — Twilio webhooks will NOT work."
+      # Clear stale ngrok URL so the backend doesn't use an expired tunnel
+      env_set "NGROK_URL" ""
+      env_set "BASE_URL" "http://localhost:8001"
+      return
+    fi
   fi
 
   local current
@@ -206,7 +230,7 @@ do_start() {
   "${COMPOSE[@]}" ps
   echo ""
   echo -e "${G}╔═══════════════════════════════════════════════════╗${NC}"
-  echo -e "${G}║              All services are running              ║${NC}"
+  echo -e "${G}║              All services are running             ║${NC}"
   echo -e "${G}╚═══════════════════════════════════════════════════╝${NC}"
   echo ""
   echo -e "  ${C}Frontend${NC}   → http://localhost:3742"

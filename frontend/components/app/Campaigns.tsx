@@ -1300,6 +1300,155 @@ function ContactsPoolPanel({ contacts, onRemove, onEdit, agentOptions }: {
   );
 }
 
+// ── Campaign Action Error Modal ────────────────────────────────────────────────
+function CampaignActionErrorModal({ message, action, onClose }: {
+  message: string;
+  action: string;
+  onClose: () => void;
+}) {
+  const actionLabel = action === 'start' ? 'start' : action === 'pause' ? 'pause' : action === 'resume' ? 'resume' : 'stop';
+  const title = `Could not ${actionLabel} campaign`;
+
+  const hasSettingsHint = message.toLowerCase().includes('settings');
+  const parts = hasSettingsHint ? message.split(/(Settings\s*→\s*\S+(?:\s+\S+)*)/g) : [message];
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(2,6,16,0.82)',
+      backdropFilter: 'blur(14px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1100,
+      animation: 'fade-in 0.18s both',
+    }}>
+      <div style={{
+        background: 'rgba(9,18,34,0.98)',
+        backdropFilter: 'blur(32px)',
+        border: '1px solid rgba(255,77,109,0.22)',
+        borderRadius: 20,
+        width: 480, maxWidth: '92vw',
+        boxShadow: '0 32px 80px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,77,109,0.06)',
+        position: 'relative', overflow: 'hidden',
+        animation: 'modal-in 0.28s cubic-bezier(0.16,1,0.3,1)',
+      }}>
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+          background: 'linear-gradient(90deg, transparent, #FF4D6D, #F0B429 70%, transparent)',
+        }} />
+
+        <div style={{
+          position: 'absolute', top: 0, right: 0,
+          width: 180, height: 180,
+          background: 'radial-gradient(circle at 100% 0%, rgba(255,77,109,0.07) 0%, transparent 65%)',
+          pointerEvents: 'none',
+        }} />
+
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: 16, right: 16,
+            width: 28, height: 28, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)',
+            color: 'rgba(255,255,255,0.4)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, lineHeight: 1,
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(255,77,109,0.1)';
+            e.currentTarget.style.borderColor = 'rgba(255,77,109,0.3)';
+            e.currentTarget.style.color = '#FF4D6D';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)';
+            e.currentTarget.style.color = 'rgba(255,255,255,0.4)';
+          }}
+        >×</button>
+
+        <div style={{ padding: '28px 28px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: 14, flexShrink: 0,
+              background: 'rgba(255,77,109,0.1)',
+              border: '1px solid rgba(255,77,109,0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 0 20px rgba(255,77,109,0.12)',
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF4D6D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+              <div style={{
+                fontFamily: 'var(--font-syne)', fontSize: 17, fontWeight: 700,
+                color: 'var(--text-primary)', letterSpacing: '-0.01em', marginBottom: 4,
+              }}>{title}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,77,109,0.7)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Action blocked
+              </div>
+            </div>
+          </div>
+
+          <div style={{
+            background: 'rgba(255,77,109,0.05)',
+            border: '1px solid rgba(255,77,109,0.14)',
+            borderRadius: 12, padding: '14px 16px',
+            fontSize: 13, lineHeight: 1.65,
+            color: 'rgba(255,255,255,0.75)',
+            marginBottom: 22,
+          }}>
+            {parts.map((part, i) => {
+              if (/Settings\s*→/.test(part)) {
+                return (
+                  <span key={i} style={{
+                    color: '#F0B429',
+                    fontWeight: 600,
+                    background: 'rgba(240,180,41,0.1)',
+                    border: '1px solid rgba(240,180,41,0.22)',
+                    borderRadius: 5,
+                    padding: '0px 6px',
+                    fontSize: 12,
+                    fontFamily: 'var(--font-mono)',
+                    display: 'inline-block',
+                    margin: '0 2px',
+                  }}>{part}</span>
+                );
+              }
+              return <span key={i}>{part}</span>;
+            })}
+          </div>
+
+          <button
+            onClick={onClose}
+            style={{
+              width: '100%', padding: '11px',
+              borderRadius: 11,
+              background: 'linear-gradient(135deg, rgba(0,208,130,0.16) 0%, rgba(0,194,184,0.10) 100%)',
+              border: '1px solid rgba(0,208,130,0.38)',
+              color: '#00D082', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 0 20px rgba(0,208,130,0.10)',
+              transition: 'all 0.18s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.boxShadow = '0 0 28px rgba(0,208,130,0.22)';
+              e.currentTarget.style.borderColor = 'rgba(0,208,130,0.55)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.boxShadow = '0 0 20px rgba(0,208,130,0.10)';
+              e.currentTarget.style.borderColor = 'rgba(0,208,130,0.38)';
+            }}
+          >Got it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Campaign Card ──────────────────────────────────────────────────────────────
 function CampaignCard({ campaign: c, onAction, actionPending }: {
   campaign: Campaign; onAction: (a: 'start' | 'pause' | 'resume' | 'stop') => void; actionPending: boolean;
@@ -1402,6 +1551,7 @@ export function CampaignsView() {
   const [showNew, setShowNew]       = useState(false);
   const [editTarget, setEditTarget] = useState<ContactEntry | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle');
+  const [actionError, setActionError] = useState<{ message: string; action: string } | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLoadFromDb = useRef(false);
 
@@ -1483,6 +1633,13 @@ export function CampaignsView() {
           agentOptions={agentOptions}
           onSave={updateContact}
           onClose={() => setEditTarget(null)}
+        />
+      )}
+      {actionError && (
+        <CampaignActionErrorModal
+          message={actionError.message}
+          action={actionError.action}
+          onClose={() => setActionError(null)}
         />
       )}
 
@@ -1608,7 +1765,15 @@ export function CampaignsView() {
                 <div key={c.id} style={{ animation: `fade-in 0.5s ${idx * 60}ms both` }}>
                   <CampaignCard
                     campaign={c}
-                    onAction={(action) => campaignAction.mutate({ id: c.id, action })}
+                    onAction={(action) => campaignAction.mutate(
+                      { id: c.id, action },
+                      {
+                        onError: (err: unknown) => {
+                          const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+                          setActionError({ message: msg, action });
+                        },
+                      }
+                    )}
                     actionPending={campaignAction.isPending}
                   />
                 </div>

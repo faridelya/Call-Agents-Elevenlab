@@ -21,19 +21,24 @@ async def post_call_processing(ctx: dict, call_id: str) -> None:
 
         call_key = f"call:{call.twilio_call_sid or call_id}"
 
-        # Primary: if transcript still empty, fetch from ElevenLabs.
-        # _finalize_call runs immediately on call end; by the time this ARQ task
-        # fires (30s deferred) EL has almost always finished transcription.
-        if not call.transcript and call.elevenlabs_conversation_id:
+        # Always refresh from ElevenLabs — _finalize_call may have saved a
+        # partial transcript immediately after the call ended while EL was still
+        # transcribing. By the time this ARQ task fires (60s deferred) EL will
+        # have the full transcript. Only overwrite if we get an equal-or-better result.
+        if call.elevenlabs_conversation_id:
             from app.services.elevenlabs_service import elevenlabs_service
-            transcript = await elevenlabs_service.get_conversation_transcript(
-                call.elevenlabs_conversation_id
-            )
-            if transcript:
-                call.transcript = transcript
+            conv = await elevenlabs_service.get_conversation_full(call.elevenlabs_conversation_id)
+
+            # Save duration if Twilio didn't report it (common when EL ends the call)
+            if conv["duration_seconds"] and not call.duration_seconds:
+                call.duration_seconds = conv["duration_seconds"]
+
+            fresh = conv["transcript"]
+            if fresh and len(fresh) >= len(call.transcript or []):
+                call.transcript = fresh
                 log.info("post_call_el_transcript_saved",
                          call_id=call_id,
-                         msgs=len(transcript),
+                         msgs=len(fresh),
                          conv_id=call.elevenlabs_conversation_id)
 
         # Fallback: assemble from Redis bridge messages (legacy bridge mode only)
@@ -82,7 +87,7 @@ async def post_call_processing(ctx: dict, call_id: str) -> None:
             from app.websockets.event_bus import event_manager
             await event_manager.broadcast(call.user_id, {
                 "type": "call_processed",
-                "call_id": call_id,
+                "call_record_id": call_id,   # matches LiveEvent type in frontend
                 "outcome": call.outcome,
                 "sentiment_score": call.sentiment_score,
                 "auto_summary": call.auto_summary,
