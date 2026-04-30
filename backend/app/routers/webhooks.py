@@ -269,6 +269,13 @@ async def outbound_twiml(
         log.warning("native_twiml_call_not_found", call_record_id=call_record_id)
         return xml_response(build_hangup_twiml())
 
+    if settings.campaign_debug and call.campaign_id:
+        log.debug("campaign_twiml_answered",
+                  call_record_id=call_record_id,
+                  call_sid=call_sid,
+                  campaign_id=call.campaign_id,
+                  to_number=call.to_number)
+
     # Confirm call_sid (may differ from the initiated SID in edge cases)
     if call_sid and not call.twilio_call_sid:
         call.twilio_call_sid = call_sid
@@ -309,6 +316,14 @@ async def call_status_callback(
     if not call:
         return Response(status_code=204)
 
+    if settings.campaign_debug and call.campaign_id:
+        log.debug("campaign_twilio_status",
+                  call_id=call.id,
+                  call_sid=call_sid,
+                  campaign_id=call.campaign_id,
+                  twilio_status=call_status,
+                  duration_s=duration)
+
     if call_status in ("completed", "failed", "busy", "no-answer", "canceled"):
         call.status = call_status
         if duration:
@@ -344,6 +359,14 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
     processing we skip and let the ARQ worker (enqueued with a 30s delay) handle it.
     This guarantees the transcript is saved regardless of which side ended the call.
     """
+    if settings.campaign_debug and call.campaign_id:
+        log.debug("campaign_finalize_call",
+                  call_id=call.id,
+                  campaign_id=call.campaign_id,
+                  final_status=call.status,
+                  duration_s=call.duration_seconds,
+                  conv_id=call.elevenlabs_conversation_id)
+
     # ── Transcript from ElevenLabs ───────────────────────────────────────────
     if call.elevenlabs_conversation_id:
         el_status = await elevenlabs_service.get_conversation_status(

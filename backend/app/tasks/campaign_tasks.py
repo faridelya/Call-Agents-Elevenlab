@@ -35,7 +35,7 @@ is required on the campaign.
 """
 import json
 import structlog
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, func
 
 log = structlog.get_logger(__name__)
@@ -51,6 +51,9 @@ async def dial_next_contact(ctx: dict, campaign_id: str) -> None:
     redis = ctx.get("redis")
     lock_key = f"campaign:{campaign_id}:dialing_lock"
 
+    if settings.campaign_debug:
+        log.debug("campaign_task_entry", campaign_id=campaign_id)
+
     # ── 1. Redis mutex ────────────────────────────────────────────────────────
     # NX = only set if not exists; EX = 60 s TTL so a crashed job never
     # permanently blocks the campaign.
@@ -61,6 +64,9 @@ async def dial_next_contact(ctx: dict, campaign_id: str) -> None:
             log.debug("campaign_lock_busy", campaign_id=campaign_id)
             await _enqueue_next(campaign_id, settings.campaign_backoff_seconds)
             return
+
+    if settings.campaign_debug:
+        log.debug("campaign_lock_acquired", campaign_id=campaign_id)
 
     try:
         await _dial(ctx, campaign_id)
@@ -78,6 +84,8 @@ async def dial_next_contact(ctx: dict, campaign_id: str) -> None:
         # Always release the lock, even on exceptions.
         if redis:
             await redis.delete(lock_key)
+        if settings.campaign_debug:
+            log.debug("campaign_lock_released", campaign_id=campaign_id)
 
 
 async def _dial(ctx: dict, campaign_id: str) -> None:
@@ -101,16 +109,51 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
         campaign = result.scalar_one_or_none()
 
         if not campaign or campaign.status != "running":
+            if settings.campaign_debug:
+                log.debug("campaign_not_running",
+                          campaign_id=campaign_id,
+                          status=campaign.status if campaign else "not_found")
             return
 
         # ── All contacts dialled? ─────────────────────────────────────────────
         called_count = campaign.contacts_called
+        if settings.campaign_debug:
+            log.debug("campaign_dial_state",
+                      campaign_id=campaign_id,
+                      contacts_called=called_count,
+                      total_contacts=len(campaign.contacts),
+                      max_concurrent=campaign.max_concurrent_calls)
+
         if called_count >= len(campaign.contacts):
             campaign.status = "completed"
             campaign.completed_at = datetime.now(timezone.utc).isoformat()
             await db.commit()
             log.info("campaign_completed", campaign_id=campaign_id)
             return
+
+        # ── Stale "initiated" call cleanup ────────────────────────────────────
+        # Twilio's max ring time is ~90 s. Any call still "initiated" after
+        # 5 minutes never received a TwiML response and is permanently orphaned.
+        # Mark it failed so it stops blocking the concurrent-call ceiling.
+        stale_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        stale_result = await db.execute(
+            select(Call).where(
+                Call.campaign_id == campaign_id,
+                Call.status == "initiated",
+                Call.started_at < stale_cutoff,
+            )
+        )
+        stale_calls = stale_result.scalars().all()
+        if stale_calls:
+            for sc in stale_calls:
+                sc.status = "failed"
+            campaign.contacts_failed = (campaign.contacts_failed or 0) + len(stale_calls)
+            await db.commit()
+            log.warning(
+                "campaign_stale_initiated_cleaned",
+                campaign_id=campaign_id,
+                count=len(stale_calls),
+            )
 
         # ── 2a. Per-campaign active call count ────────────────────────────────
         per_campaign_active = (
@@ -125,6 +168,12 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
         ).scalar_one()
 
         max_per_campaign = max(1, campaign.max_concurrent_calls)
+        if settings.campaign_debug:
+            log.debug("campaign_slot_check",
+                      campaign_id=campaign_id,
+                      per_campaign_active=per_campaign_active,
+                      max_per_campaign=max_per_campaign)
+
         if per_campaign_active >= max_per_campaign:
             log.info(
                 "campaign_slot_full",
@@ -146,6 +195,12 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
                 )
             )
         ).scalar_one()
+
+        if settings.campaign_debug:
+            log.debug("campaign_global_slot_check",
+                      campaign_id=campaign_id,
+                      global_active=global_active,
+                      global_limit=settings.campaign_global_max_concurrent)
 
         if global_active >= settings.campaign_global_max_concurrent:
             log.info(
@@ -243,6 +298,14 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
         db.add(call)
         await db.flush()  # resolve call.id before Redis write
 
+        if settings.campaign_debug:
+            log.debug("campaign_call_record_created",
+                      campaign_id=campaign_id,
+                      call_id=call.id,
+                      to_number=phone,
+                      from_number=from_number,
+                      contact_index=called_count)
+
         # ── Seed Redis call context (mirrors POST /calls/outbound pipeline) ────
         if redis:
             context = {
@@ -287,12 +350,20 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
                 global_active=global_active + 1,
             )
         except Exception as e:
-            log.error("campaign_dial_error", campaign_id=campaign_id, phone=phone, error=str(e))
+            log.error("campaign_dial_error", campaign_id=campaign_id, phone=phone,
+                      call_id=call.id, error=str(e))
             call.status = "failed"
             campaign.contacts_failed += 1
 
         campaign.contacts_called += 1
         await db.commit()
+
+        if settings.campaign_debug:
+            log.debug("campaign_contact_advanced",
+                      campaign_id=campaign_id,
+                      contacts_called=campaign.contacts_called,
+                      contacts_failed=campaign.contacts_failed,
+                      next_interval_s=_effective_interval(campaign))
 
         # ── Schedule next contact ─────────────────────────────────────────────
         # Always re-enqueue so each filled slot immediately refills itself.

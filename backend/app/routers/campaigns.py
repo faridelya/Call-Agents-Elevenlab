@@ -193,9 +193,21 @@ async def start_campaign(
             "Add your Account SID and Auth Token in Settings → Credentials."
         )
 
+    from app.config import settings as _cfg
+    import structlog as _sl
+    _log = _sl.get_logger(__name__)
+
+    original_status = campaign.status
     campaign.status = "running"
     campaign.started_at = campaign.started_at or datetime.now(timezone.utc).isoformat()
     await db.commit()
+
+    if _cfg.campaign_debug:
+        _log.debug("campaign_start_committed",
+                   campaign_id=campaign_id,
+                   name=campaign.name,
+                   max_concurrent=campaign.max_concurrent_calls,
+                   total_contacts=campaign.total_contacts)
 
     # Enqueue N staggered dial jobs — one per configured parallel slot.
     # Each job checks the slot ceiling before dialling, so the concurrency
@@ -210,7 +222,13 @@ async def start_campaign(
             await pool.enqueue_job("dial_next_contact", campaign.id, _defer_by=i)
         await pool.aclose()
     except Exception:
-        pass
+        # Roll back — don't leave campaign stuck in "running" with no worker jobs.
+        campaign.status = original_status
+        await db.commit()
+        raise ValidationError(
+            "Failed to queue campaign jobs — the background worker is unreachable. "
+            "Ensure Redis and the ARQ worker are running, then try again."
+        )
 
     return MessageResponse(message=f"Campaign started: {campaign.name}")
 

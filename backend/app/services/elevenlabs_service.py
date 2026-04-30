@@ -80,12 +80,20 @@ class ElevenLabsService:
                 "dynamic_variables": dynamic_vars,
             }
 
+        if settings.campaign_debug:
+            log.debug("el_register_call_attempt",
+                      agent_id=agent_id,
+                      to_number=to_number,
+                      direction=direction,
+                      dynamic_vars_keys=list((dynamic_vars or {}).keys()))
+
         async with self._client() as c:
             # Correct endpoint uses a hyphen, not underscore
             r = await c.post(f"{self._base}/convai/twilio/register-call", json=payload)
             if r.status_code not in (200, 201):
                 log.error("el_register_call_failed",
-                          status=r.status_code, body=r.text[:300])
+                          status=r.status_code, body=r.text[:300],
+                          agent_id=agent_id, to_number=to_number)
                 raise ExternalServiceError("ElevenLabs", r.text)
 
             # EL returns raw TwiML (XML), not JSON
@@ -105,7 +113,8 @@ class ElevenLabsService:
             log.info("el_register_call_ok",
                      agent_id=agent_id,
                      conversation_id=conversation_id,
-                     direction=direction)
+                     direction=direction,
+                     to_number=to_number)
 
             return {
                 "conversation_id": conversation_id,
@@ -242,6 +251,7 @@ class ElevenLabsService:
         temperature  = getattr(agent, "llm_temperature", 0.7)                    or 0.7
         tts_model    = getattr(agent, "tts_model",    "eleven_v3_conversational") or "eleven_v3_conversational"
         stt_provider = getattr(agent, "stt_provider", "elevenlabs")              or "elevenlabs"
+        max_call_dur = getattr(agent, "max_call_duration_seconds", 1800)         or 1800
 
         # TTS — stability/similarity are flat fields at the tts level (not nested in voice_settings).
         # When None the agent uses the voice's own ElevenLabs defaults.
@@ -279,6 +289,7 @@ class ElevenLabsService:
                     "silence_end_call_timeout": 30,
                     "mode": "turn",
                 },
+                "max_duration_seconds": max_call_dur,
             },
             "platform_settings": {
                 "auth": {"enable_auth": False},

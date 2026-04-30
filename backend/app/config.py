@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     # How many seconds to back off when the concurrency ceiling is hit.
     campaign_backoff_seconds: int = 30
 
+    # ── Campaign debug logging ────────────────────────────────────────────────
+    # Set CAMPAIGN_DEBUG=true in .env to enable verbose per-event log lines
+    # across the entire campaign pipeline (start → dial → answer → finalize).
+    # Set to false (default) in production to keep logs clean.
+    campaign_debug: bool = False
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"

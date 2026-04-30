@@ -1769,7 +1769,16 @@ export function CampaignsView() {
                       { id: c.id, action },
                       {
                         onError: (err: unknown) => {
-                          const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+                          let msg = 'Something went wrong. Please try again.';
+                          if (err instanceof Error) {
+                            if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+                              msg = 'Request timed out — the server is not responding. Check your connection and try again.';
+                            } else if (err instanceof TypeError && /fetch|network|failed/i.test(err.message)) {
+                              msg = 'Network error — cannot reach the server. Check your connection and try again.';
+                            } else {
+                              msg = err.message;
+                            }
+                          }
                           setActionError({ message: msg, action });
                         },
                       }

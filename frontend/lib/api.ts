@@ -53,11 +53,11 @@ export class ApiError extends Error {
   }
 }
 
-type FetchOpts = RequestInit & { auth?: boolean; retry?: boolean };
+type FetchOpts = RequestInit & { auth?: boolean; retry?: boolean; timeoutMs?: number };
 
 export async function apiFetch<T = unknown>(
   path: string,
-  { auth = true, retry = true, ...init }: FetchOpts = {},
+  { auth = true, retry = true, timeoutMs, ...init }: FetchOpts = {},
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -68,7 +68,12 @@ export async function apiFetch<T = unknown>(
     headers['Authorization'] = `Bearer ${tokenStore.get()}`;
   }
 
-  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+  const fetchInit: RequestInit = { ...init, headers };
+  if (timeoutMs && !fetchInit.signal) {
+    fetchInit.signal = AbortSignal.timeout(timeoutMs);
+  }
+
+  const res = await fetch(`${BASE}${path}`, fetchInit);
 
   // Auto-refresh on 401 and retry once
   if (res.status === 401 && retry) {
@@ -339,16 +344,16 @@ export const campaigns = {
     apiFetch(`/api/v1/campaigns/${id}`, { method: 'DELETE' }),
 
   start: (id: string) =>
-    apiFetch<Campaign>(`/api/v1/campaigns/${id}/start`, { method: 'POST' }),
+    apiFetch<Campaign>(`/api/v1/campaigns/${id}/start`, { method: 'POST', timeoutMs: 12_000 }),
 
   pause: (id: string) =>
-    apiFetch<Campaign>(`/api/v1/campaigns/${id}/pause`, { method: 'POST' }),
+    apiFetch<Campaign>(`/api/v1/campaigns/${id}/pause`, { method: 'POST', timeoutMs: 12_000 }),
 
   resume: (id: string) =>
-    apiFetch<Campaign>(`/api/v1/campaigns/${id}/resume`, { method: 'POST' }),
+    apiFetch<Campaign>(`/api/v1/campaigns/${id}/resume`, { method: 'POST', timeoutMs: 12_000 }),
 
   stop: (id: string) =>
-    apiFetch<Campaign>(`/api/v1/campaigns/${id}/stop`, { method: 'POST' }),
+    apiFetch<Campaign>(`/api/v1/campaigns/${id}/stop`, { method: 'POST', timeoutMs: 12_000 }),
 };
 
 // ── Leads ─────────────────────────────────────────────────────────────────────
