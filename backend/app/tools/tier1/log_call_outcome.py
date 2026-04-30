@@ -9,8 +9,17 @@ PARAMS = {
     "properties": {
         "outcome": {
             "type": "string",
-            "enum": ["interested", "not_interested", "callback_scheduled", "voicemail_left", "wrong_number", "do_not_call"],
-            "description": "Result of the call",
+            "enum": [
+                "interested",
+                "order_confirmed",
+                "want_to_connect_later",
+                "not_interested",
+                "callback_scheduled",
+                "voicemail_left",
+                "wrong_number",
+                "do_not_call",
+            ],
+            "description": "Result of the call. Use 'order_confirmed' when a sale or order is placed, 'want_to_connect_later' when the prospect asks to be contacted again at a later date, 'interested' for general interest without a sale, 'callback_scheduled' for a specific booked callback time.",
         },
         "notes": {"type": "string", "description": "Disposition notes or conversation summary"},
         "next_action": {"type": "string", "description": "What should happen next, e.g. 'send proposal', 'schedule demo'"},

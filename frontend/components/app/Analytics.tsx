@@ -6,7 +6,29 @@ import {
   useCallsOverTime,
   useOutcomeDistribution,
   useAgentMetrics,
+  useCampaignOutcomes,
 } from '@/lib/hooks/useAnalytics';
+
+// ─── Outcome registry ─────────────────────────────────────────────────────────
+const OUTCOME_META: Record<string, { label: string; color: string; icon: string }> = {
+  interested:            { label: 'Interested',          color: '#00D082', icon: '◆' },
+  order_confirmed:       { label: 'Order Confirmed',     color: '#00C2B8', icon: '✦' },
+  want_to_connect_later: { label: 'Connect Later',       color: '#38BDF8', icon: '◈' },
+  callback_scheduled:    { label: 'Callback Scheduled',  color: '#7C6EFA', icon: '◉' },
+  not_interested:        { label: 'Not Interested',      color: '#FF4D6D', icon: '✕' },
+  voicemail_left:        { label: 'Voicemail Left',      color: '#A89AF9', icon: '◎' },
+  voicemail:             { label: 'Voicemail',           color: '#A89AF9', icon: '◎' },
+  wrong_number:          { label: 'Wrong Number',        color: '#F0B429', icon: '◇' },
+  do_not_call:           { label: 'Do Not Call',         color: '#FF4D6D', icon: '⊘' },
+  goal_achieved:         { label: 'Goal Achieved',       color: '#00D082', icon: '★' },
+  completed:             { label: 'Completed',           color: '#00C2B8', icon: '●' },
+  no_answer:             { label: 'No Answer',           color: '#3D607A', icon: '○' },
+  no_outcome:            { label: 'No Outcome',          color: '#2A3F55', icon: '·' },
+};
+
+function outcomeColor(o: string)  { return OUTCOME_META[o]?.color  ?? '#3D607A'; }
+function outcomeLabel(o: string)  { return OUTCOME_META[o]?.label  ?? o.replace(/_/g, ' '); }
+function outcomeIcon(o: string)   { return OUTCOME_META[o]?.icon   ?? '●'; }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDuration(secs: number) {
@@ -15,7 +37,6 @@ function fmtDuration(secs: number) {
   const s = secs % 60;
   return `${m}m ${String(s).padStart(2, '0')}s`;
 }
-
 function sentimentColor(score?: number) {
   if (score == null) return '#3D607A';
   if (score >= 0.65) return '#00D082';
@@ -41,7 +62,7 @@ function Sk({ w = '100%', h = 14, r = 5 }: { w?: string | number; h?: number; r?
 }
 
 // ─── Glass Card ───────────────────────────────────────────────────────────────
-function GCard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function GCard({ children, style, glow }: { children: React.ReactNode; style?: React.CSSProperties; glow?: string }) {
   const [hov, setHov] = useState(false);
   return (
     <div
@@ -51,13 +72,13 @@ function GCard({ children, style }: { children: React.ReactNode; style?: React.C
         background: 'rgba(9,20,38,0.60)',
         backdropFilter: 'blur(20px) saturate(160%)',
         WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-        border: `1px solid ${hov ? 'rgba(0,208,130,0.18)' : 'rgba(255,255,255,0.07)'}`,
+        border: `1px solid ${hov ? (glow ? `${glow}28` : 'rgba(0,208,130,0.18)') : 'rgba(255,255,255,0.07)'}`,
         borderRadius: 16, overflow: 'hidden',
         transform: hov ? 'translateY(-2px)' : 'translateY(0)',
         boxShadow: hov
-          ? '0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)'
+          ? `0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)${glow ? `, 0 0 24px ${glow}10` : ''}`
           : '0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
-        transition: 'all 0.25s var(--ease-out)',
+        transition: 'all 0.25s ease-out',
         ...style,
       }}
     >
@@ -72,14 +93,14 @@ function StatCard({ label, value, sub, trend, accent = '#00D082', delay = 0 }: {
   trend?: 'up' | 'down'; accent?: string; delay?: number;
 }) {
   return (
-    <GCard style={{ padding: '22px 24px', animation: `fade-in 0.5s ${delay}ms both` } as any}>
+    <GCard glow={accent} style={{ padding: '22px 24px', animation: `fade-in 0.5s ${delay}ms both`, position: 'relative' } as any}>
       <div style={{
-        position: 'absolute', top: 0, right: 0, width: 100, height: 100,
-        background: `radial-gradient(circle at 100% 0%, ${accent}12 0%, transparent 70%)`,
+        position: 'absolute', top: 0, right: 0, width: 110, height: 110,
+        background: `radial-gradient(circle at 100% 0%, ${accent}14 0%, transparent 70%)`,
         pointerEvents: 'none',
       }} />
       <div style={{
-        fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
+        fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
         textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16,
       }}>
         {label}
@@ -87,7 +108,7 @@ function StatCard({ label, value, sub, trend, accent = '#00D082', delay = 0 }: {
       <div style={{
         fontSize: 30, fontWeight: 700, fontFamily: 'var(--font-mono)',
         color: 'var(--text-primary)', lineHeight: 1, marginBottom: 8,
-        textShadow: `0 0 20px ${accent}30`,
+        textShadow: `0 0 24px ${accent}35`,
       }}>
         {value}
       </div>
@@ -106,33 +127,26 @@ function StatCard({ label, value, sub, trend, accent = '#00D082', delay = 0 }: {
 }
 
 // ─── Bar Chart ────────────────────────────────────────────────────────────────
-interface BarData { l: string; v: number; c?: string; }
-
-function BarChart({ data, height = 100, color = '#00D082' }: {
-  data: BarData[]; height?: number; color?: string;
-}) {
+function BarChart({ data, height = 100 }: { data: { l: string; v: number; c?: string }[]; height?: number }) {
   const max = Math.max(...data.map((d) => d.v), 1);
   const [hovIdx, setHovIdx] = useState<number | null>(null);
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height }}>
       {data.map((d, i) => {
         const pct = (d.v / max) * 0.88;
-        const c = d.c ?? color;
+        const c = d.c ?? '#00D082';
         const active = hovIdx === i;
         return (
           <div
             key={i}
             onMouseEnter={() => setHovIdx(i)}
             onMouseLeave={() => setHovIdx(null)}
-            style={{
-              flex: 1, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', gap: 5, cursor: 'default',
-            }}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'default' }}
           >
             {active && (
               <div style={{
                 fontSize: 10, fontWeight: 700, color: c,
-                background: `${c}15`, border: `1px solid ${c}30`,
+                background: `${c}18`, border: `1px solid ${c}35`,
                 borderRadius: 5, padding: '2px 6px', whiteSpace: 'nowrap',
               }}>
                 {d.v}
@@ -141,17 +155,11 @@ function BarChart({ data, height = 100, color = '#00D082' }: {
             <div style={{
               width: '100%', borderRadius: '4px 4px 0 0',
               height: `${pct * height}px`,
-              background: active
-                ? `linear-gradient(to top, ${c}, ${c}bb)`
-                : `linear-gradient(to top, ${c}60, ${c}30)`,
-              boxShadow: active ? `0 0 12px ${c}40` : 'none',
-              transition: 'all 0.2s var(--ease-out)',
-              minHeight: 2,
+              background: active ? `linear-gradient(to top, ${c}, ${c}bb)` : `linear-gradient(to top, ${c}65, ${c}32)`,
+              boxShadow: active ? `0 0 12px ${c}45` : 'none',
+              transition: 'all 0.2s ease-out', minHeight: 2,
             }} />
-            <span style={{
-              fontSize: 9, color: active ? c : 'var(--text-muted)',
-              whiteSpace: 'nowrap', transition: 'color 0.15s',
-            }}>
+            <span style={{ fontSize: 9, color: active ? c : 'var(--text-muted)', whiteSpace: 'nowrap', transition: 'color 0.15s' }}>
               {d.l}
             </span>
           </div>
@@ -161,20 +169,14 @@ function BarChart({ data, height = 100, color = '#00D082' }: {
   );
 }
 
-// ─── Donut / funnel ───────────────────────────────────────────────────────────
+// ─── Funnel Bar ───────────────────────────────────────────────────────────────
 function FunnelBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
   const [hov, setHov] = useState(false);
   return (
-    <div
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{ marginBottom: 10 }}
-    >
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{ marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-        <span style={{ fontSize: 12, color: hov ? color : 'var(--text-secondary)', transition: 'color 0.15s' }}>
-          {label}
-        </span>
+        <span style={{ fontSize: 12, color: hov ? color : 'var(--text-secondary)', transition: 'color 0.15s' }}>{label}</span>
         <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: hov ? color : 'var(--text-muted)', fontWeight: 600, transition: 'color 0.15s' }}>
           {value.toLocaleString()}
         </span>
@@ -184,8 +186,231 @@ function FunnelBar({ label, value, max, color }: { label: string; value: number;
           height: '100%', width: `${pct}%`,
           background: `linear-gradient(90deg, ${color}, ${color}99)`,
           borderRadius: 9999,
-          boxShadow: hov ? `0 0 8px ${color}50` : 'none',
+          boxShadow: hov ? `0 0 8px ${color}55` : 'none',
           transition: 'box-shadow 0.2s',
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Styled Select ────────────────────────────────────────────────────────────
+function StyledSelect({ value, onChange, children, placeholder }: {
+  value: string; onChange: (v: string) => void;
+  children: React.ReactNode; placeholder?: string;
+}) {
+  return (
+    <div style={{ position: 'relative', flex: 1 }}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100%', appearance: 'none', WebkitAppearance: 'none',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.10)',
+          borderRadius: 9, padding: '7px 32px 7px 12px',
+          fontSize: 12, color: value ? 'var(--text-primary)' : 'var(--text-muted)',
+          cursor: 'pointer', outline: 'none',
+          fontFamily: 'var(--font-ui)',
+          transition: 'border-color 0.15s',
+        }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(0,208,130,0.4)'; }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; }}
+      >
+        {placeholder && <option value="">{placeholder}</option>}
+        {children}
+      </select>
+      <span style={{
+        position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+        color: 'var(--text-muted)', fontSize: 10, pointerEvents: 'none',
+      }}>▾</span>
+    </div>
+  );
+}
+
+// ─── Campaign Outcomes Card ───────────────────────────────────────────────────
+function CampaignOutcomesCard() {
+  const [selectedCampaign, setSelectedCampaign] = useState('');
+  const [selectedAgent, setSelectedAgent]       = useState('');
+
+  const { data, isLoading } = useCampaignOutcomes(
+    selectedCampaign || undefined,
+    selectedAgent    || undefined,
+  );
+
+  const outcomes   = data?.outcomes   ?? [];
+  const campaigns  = data?.campaigns  ?? [];
+  const agents     = data?.agents     ?? [];
+  const totalCalls = data?.total_calls ?? 0;
+  const maxCount   = Math.max(...outcomes.map((o) => o.count), 1);
+
+  // Positive outcomes for mini summary
+  const positive = outcomes
+    .filter((o) => ['interested', 'order_confirmed', 'goal_achieved'].includes(o.outcome))
+    .reduce((s, o) => s + o.count, 0);
+  const convRate = totalCalls > 0 ? ((positive / totalCalls) * 100).toFixed(1) : '0.0';
+
+  return (
+    <GCard glow="#7C6EFA" style={{ padding: 0 }}>
+      {/* Header */}
+      <div style={{
+        padding: '22px 26px 18px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: 'linear-gradient(135deg, rgba(124,110,250,0.06) 0%, transparent 60%)',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', top: -30, right: -20, width: 180, height: 180,
+          background: 'radial-gradient(circle, rgba(124,110,250,0.08) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>
+              Campaign Outcomes
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Per-campaign breakdown by outcome</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {totalCalls > 0 && (
+              <>
+                <div style={{
+                  padding: '3px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 700,
+                  background: 'rgba(0,208,130,0.10)', border: '1px solid rgba(0,208,130,0.22)',
+                  color: '#00D082', fontFamily: 'var(--font-mono)',
+                }}>
+                  {convRate}% conv
+                </div>
+                <div style={{
+                  padding: '3px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600,
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                  color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                }}>
+                  {totalCalls.toLocaleString()} calls
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Selectors */}
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <StyledSelect value={selectedAgent} onChange={setSelectedAgent} placeholder="All Agents">
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </StyledSelect>
+          <StyledSelect value={selectedCampaign} onChange={setSelectedCampaign} placeholder="All Campaigns">
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </StyledSelect>
+        </div>
+      </div>
+
+      {/* Outcome rows */}
+      <div style={{ padding: '16px 26px 20px' }}>
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
+                <Sk h={11} w={100} />
+                <Sk h={11} w={40} />
+              </div>
+              <Sk h={4} r={9999} />
+            </div>
+          ))
+        ) : outcomes.length === 0 ? (
+          <div style={{
+            padding: '32px 0', textAlign: 'center',
+            color: 'var(--text-muted)', fontSize: 13,
+          }}>
+            No campaign calls recorded yet
+          </div>
+        ) : (
+          outcomes.map((o, idx) => {
+            const color = outcomeColor(o.outcome);
+            const label = outcomeLabel(o.outcome);
+            const icon  = outcomeIcon(o.outcome);
+            const pct   = (o.count / maxCount) * 100;
+            const pctOfTotal = totalCalls > 0 ? ((o.count / totalCalls) * 100).toFixed(1) : '0';
+
+            return (
+              <OutcomeRow
+                key={o.outcome}
+                icon={icon}
+                label={label}
+                color={color}
+                count={o.count}
+                pct={pct}
+                pctOfTotal={pctOfTotal}
+                delay={idx * 50}
+              />
+            );
+          })
+        )}
+      </div>
+    </GCard>
+  );
+}
+
+function OutcomeRow({ icon, label, color, count, pct, pctOfTotal, delay }: {
+  icon: string; label: string; color: string;
+  count: number; pct: number; pctOfTotal: string; delay: number;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        marginBottom: 11,
+        opacity: 1,
+        animation: `fade-in 0.4s ${delay}ms both`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontSize: 11, color: hov ? color : `${color}99`,
+            transition: 'color 0.15s', lineHeight: 1,
+          }}>
+            {icon}
+          </span>
+          <span style={{
+            fontSize: 12, fontWeight: 600,
+            color: hov ? 'var(--text-primary)' : 'var(--text-secondary)',
+            transition: 'color 0.15s',
+            letterSpacing: '0.01em',
+          }}>
+            {label}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            fontSize: 12.5, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            color: hov ? color : 'var(--text-primary)',
+            transition: 'color 0.15s',
+          }}>
+            {count.toLocaleString()}
+          </span>
+          <span style={{
+            fontSize: 10.5, fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)', minWidth: 38, textAlign: 'right',
+          }}>
+            {pctOfTotal}%
+          </span>
+        </div>
+      </div>
+      <div style={{ height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 9999, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', width: `${pct}%`,
+          background: hov
+            ? `linear-gradient(90deg, ${color}, ${color}cc)`
+            : `linear-gradient(90deg, ${color}80, ${color}44)`,
+          borderRadius: 9999,
+          boxShadow: hov ? `0 0 10px ${color}50` : 'none',
+          transition: 'all 0.25s ease-out',
         }} />
       </div>
     </div>
@@ -209,25 +434,16 @@ export function AnalyticsView() {
   }));
 
   const outcomePairs = (outcomes?.outcomes ?? []).slice(0, 8).map((o: any) => ({
-    l: o.outcome.replace(/_/g, ' ').slice(0, 6),
+    l: outcomeLabel(o.outcome).slice(0, 7),
     v: o.count,
-    c: ({
-      interested: '#00D082',
-      callback_scheduled: '#38BDF8',
-      not_interested: '#FF4D6D',
-      voicemail_left: '#3D607A',
-      completed: '#00C2B8',
-      no_answer: '#3D607A',
-      do_not_call: '#FF4D6D',
-      busy: '#F0B429',
-    } as Record<string, string>)[o.outcome] ?? '#3D607A',
+    c: outcomeColor(o.outcome),
   }));
 
   const funnelItems = [
-    { label: 'Total Calls', value: overview?.total_calls ?? 0, color: '#38BDF8' },
-    { label: 'Connected', value: overview?.completed_calls ?? 0, color: '#00C2B8' },
-    { label: 'Interested', value: overview?.interested_outcomes ?? 0, color: '#00D082' },
-    { label: 'Qualified Leads', value: overview?.qualified_leads ?? 0, color: '#F0B429' },
+    { label: 'Total Calls',    value: overview?.total_calls       ?? 0, color: '#38BDF8' },
+    { label: 'Connected',      value: overview?.completed_calls   ?? 0, color: '#00C2B8' },
+    { label: 'Interested',     value: overview?.interested_outcomes ?? 0, color: '#00D082' },
+    { label: 'Qualified Leads',value: overview?.qualified_leads   ?? 0, color: '#F0B429' },
   ];
 
   const agentList = agentMet?.agents ?? [];
@@ -241,9 +457,7 @@ export function AnalyticsView() {
           <h1 style={{
             fontFamily: 'var(--font-syne)', fontSize: 26, fontWeight: 700,
             color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 6,
-          }}>
-            Analytics
-          </h1>
+          }}>Analytics</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>All time · All agents</p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -311,7 +525,7 @@ export function AnalyticsView() {
           {ctLoad ? (
             <div style={{ height: 120, display: 'flex', alignItems: 'flex-end', gap: 6 }}>
               {Array.from({ length: 14 }).map((_, i) => (
-                <div key={i} style={{ flex: 1, height: `${30 + Math.random() * 70}%`, borderRadius: '3px 3px 0 0', background: 'rgba(255,255,255,0.05)', animation: `shimmer 1.8s ${i*0.06}s infinite linear` }} />
+                <div key={i} style={{ flex: 1, height: `${30 + Math.random() * 70}%`, borderRadius: '3px 3px 0 0', background: 'rgba(255,255,255,0.05)' }} />
               ))}
             </div>
           ) : callsBarData.length === 0 ? (
@@ -319,15 +533,13 @@ export function AnalyticsView() {
               No data yet
             </div>
           ) : (
-            <BarChart data={callsBarData} height={120} color="#00D082" />
+            <BarChart data={callsBarData} height={120} />
           )}
         </GCard>
 
         {/* Outcome distribution */}
         <GCard style={{ padding: 24 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-            Call Outcomes
-          </div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Call Outcomes</div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 18 }}>Distribution</div>
           {ouLoad ? (
             <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 120 }}>
@@ -346,7 +558,7 @@ export function AnalyticsView() {
       </div>
 
       {/* Funnel + Agent table */}
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, marginBottom: 20 }}>
         {/* Lead funnel */}
         <GCard style={{ padding: 24 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Lead Funnel</div>
@@ -365,36 +577,37 @@ export function AnalyticsView() {
           )}
         </GCard>
 
-        {/* Per-agent table */}
+        {/* Per-agent performance table */}
         <GCard style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '20px 24px 14px' }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
-              Agent Performance
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Per-agent breakdown</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Agent Performance</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Per-agent outcome breakdown</div>
           </div>
+
+          {/* Table header */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 80px 80px 80px 80px 90px 90px 80px',
+            gridTemplateColumns: '1.4fr 60px 80px 80px 80px 70px 90px 75px',
             padding: '8px 24px',
-            background: 'rgba(255,255,255,0.02)',
+            background: 'rgba(255,255,255,0.025)',
             borderTop: '1px solid rgba(255,255,255,0.05)',
             borderBottom: '1px solid rgba(255,255,255,0.05)',
+            gap: 4,
           }}>
-            {['Agent','Calls','Achieved','Rejected','Voicemails','Avg Dur','Sentiment','Conv %'].map((h) => (
+            {['Agent','Calls','Interested','Confirmed','No Interest','Voicemail','Sentiment','Conv %'].map((h) => (
               <div key={h} style={{
                 fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
                 letterSpacing: '0.08em', color: 'var(--text-muted)',
-              }}>
-                {h}
-              </div>
+              }}>{h}</div>
             ))}
           </div>
+
+          {/* Table rows */}
           {amLoad ? (
             Array.from({ length: 3 }).map((_, i) => (
               <div key={i} style={{
-                display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px 90px 90px 80px',
-                padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)', gap: 0,
+                display: 'grid', gridTemplateColumns: '1.4fr 60px 80px 80px 80px 70px 90px 75px',
+                padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)', gap: 4,
               }}>
                 <Sk h={11} w="70%" />
                 {Array.from({ length: 7 }).map((_, j) => <Sk key={j} h={11} w="50%" />)}
@@ -406,35 +619,62 @@ export function AnalyticsView() {
             </div>
           ) : (
             agentList.map((a: any, idx: number) => {
-              const sc = sentimentColor(a.avg_sentiment ?? a.avg_sentiment_score);
+              const sc = sentimentColor(a.avg_sentiment);
               return (
                 <div
                   key={a.agent_id}
                   style={{
-                    display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px 90px 90px 80px',
+                    display: 'grid', gridTemplateColumns: '1.4fr 60px 80px 80px 80px 70px 90px 75px',
                     padding: '11px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)',
-                    animation: `fade-in 0.4s ${idx*60}ms both`,
+                    animation: `fade-in 0.4s ${idx * 60}ms both`, gap: 4,
                     transition: 'background 0.15s',
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {a.agent_name ?? 'Unknown'}
+                  <div style={{
+                    fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                      background: sentimentColor(a.avg_sentiment),
+                      boxShadow: `0 0 6px ${sentimentColor(a.avg_sentiment)}80`,
+                    }} />
+                    {a.agent_name ?? `Agent ${a.agent_id.slice(0, 6)}`}
                   </div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{a.total_calls ?? 0}</div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00D082' }}>{a.achieved ?? a.interested_outcomes ?? 0}</div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#FF4D6D' }}>{a.rejected ?? 0}</div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#3D607A' }}>{a.voicemails ?? 0}</div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{fmtDuration(a.avg_duration_seconds ?? 0)}</div>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: sc }}>{sentimentLabel(a.avg_sentiment ?? a.avg_sentiment_score)}</div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00C2B8' }}>{a.conversion_rate ?? 0}%</div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                    {a.total_calls ?? 0}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00D082' }}>
+                    {a.interested_count ?? 0}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00C2B8' }}>
+                    {a.order_confirmed_count ?? 0}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#FF4D6D' }}>
+                    {a.not_interested_count ?? 0}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#A89AF9' }}>
+                    {a.voicemail_count ?? 0}
+                  </div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: sc }}>
+                    {sentimentLabel(a.avg_sentiment)}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00C2B8', fontWeight: 700 }}>
+                    {a.conversion_rate ?? 0}%
+                  </div>
                 </div>
               );
             })
           )}
         </GCard>
       </div>
+
+      {/* Campaign Outcomes Card — full width */}
+      <CampaignOutcomesCard />
+
     </div>
   );
 }

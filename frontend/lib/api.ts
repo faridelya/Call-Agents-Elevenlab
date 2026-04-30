@@ -399,10 +399,25 @@ export interface OutcomeDistribution {
 export interface AgentMetrics {
   agents: Array<{
     agent_id: string;
+    agent_name: string | null;
     total_calls: number;
     avg_duration_seconds: number;
     avg_sentiment: number;
+    interested_count: number;
+    order_confirmed_count: number;
+    connect_later_count: number;
+    not_interested_count: number;
+    voicemail_count: number;
+    callback_count: number;
+    conversion_rate: number;
   }>;
+}
+
+export interface CampaignOutcomes {
+  campaigns: Array<{ id: string; name: string; status: string }>;
+  agents: Array<{ id: string; name: string }>;
+  outcomes: Array<{ outcome: string; count: number }>;
+  total_calls: number;
 }
 
 export const analytics = {
@@ -412,6 +427,13 @@ export const analytics = {
   outcomes: () => apiFetch<OutcomeDistribution>('/api/v1/analytics/outcomes'),
   agents: () => apiFetch<AgentMetrics>('/api/v1/analytics/agents'),
   campaigns: () => apiFetch<{ campaigns: object[] }>('/api/v1/analytics/campaigns'),
+  campaignOutcomes: (campaignId?: string, agentId?: string) => {
+    const params = new URLSearchParams();
+    if (campaignId) params.set('campaign_id', campaignId);
+    if (agentId) params.set('agent_id', agentId);
+    const qs = params.toString();
+    return apiFetch<CampaignOutcomes>(`/api/v1/analytics/campaign-outcomes${qs ? `?${qs}` : ''}`);
+  },
 };
 
 // ── Settings / Usage ──────────────────────────────────────────────────────────
