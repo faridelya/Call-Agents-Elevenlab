@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useCalls } from '@/lib/hooks/useCalls';
 import { apiFetch } from '@/lib/api';
 import type { CallRecord } from '@/lib/api';
+import { getOutcomeColor, getOutcomeLabel, getOutcomeIcon } from '@/lib/outcomeUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 type DirFilter = 'all' | 'inbound' | 'outbound';
@@ -30,18 +31,6 @@ function sentimentInfo(score?: number): { label: string; color: string } {
   if (score >= 0.65) return { label: 'positive', color: '#00D082' };
   if (score <= 0.35) return { label: 'negative', color: '#FF4D6D' };
   return { label: 'neutral', color: '#7BA5C8' };
-}
-
-const OC: Record<string, string> = {
-  interested: '#00D082', callback_scheduled: '#38BDF8',
-  not_interested: '#FF4D6D', voicemail_left: '#3D607A',
-  wrong_number: '#263A4A', do_not_call: '#FF4D6D',
-  completed: '#00C2B8', no_answer: '#3D607A', busy: '#F0B429',
-};
-
-function outcomeLabel(o?: string) {
-  if (!o) return '—';
-  return o.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -137,13 +126,13 @@ function CallDetail({ call, onClose }: { call: CallRecord; onClose: () => void }
   const src = detail ?? call;
   const transcript = (src as any).transcript_entries ?? (src as any).transcript ?? [];
   const si = sentimentInfo(call.sentiment_score);
-  const oc = OC[call.outcome ?? ''] ?? '#3D607A';
+  const oc = getOutcomeColor(call.outcome);
 
   const statChips = [
     { l: 'Duration', v: fmtDuration(call.duration_seconds), c: '#38BDF8' },
     { l: 'Direction', v: isOut ? 'Outbound' : 'Inbound', c: isOut ? '#38BDF8' : '#00D082' },
     { l: 'Sentiment', v: si.label, c: si.color },
-    { l: 'Outcome', v: outcomeLabel(call.outcome), c: oc },
+    { l: 'Outcome', v: getOutcomeLabel(call.outcome), c: oc },
     { l: 'Status', v: call.status ?? '—', c: '#00C2B8' },
   ];
 
@@ -255,7 +244,7 @@ function CallRow({ call, selected, compact, onSelect, idx }: {
 }) {
   const [hov, setHov] = useState(false);
   const si = sentimentInfo(call.sentiment_score);
-  const oc = OC[call.outcome ?? ''] ?? '#3D607A';
+  const oc = getOutcomeColor(call.outcome);
   const isOut = call.direction === 'outbound';
   const contact = isOut ? call.to_number : call.from_number;
 
@@ -310,7 +299,7 @@ function CallRow({ call, selected, compact, onSelect, idx }: {
             fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
             background: `${oc}12`, color: oc, border: `1px solid ${oc}22`, whiteSpace: 'nowrap',
           }}>
-            {outcomeLabel(call.outcome)}
+            {getOutcomeIcon(call.outcome)} {getOutcomeLabel(call.outcome)}
           </span>
         ) : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>—</span>}
       </div>

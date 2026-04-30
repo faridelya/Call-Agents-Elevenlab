@@ -5,6 +5,7 @@ import { useCalls } from '@/lib/hooks/useCalls';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { apiFetch } from '@/lib/api';
 import type { CallRecord } from '@/lib/api';
+import { getOutcomeColor, getOutcomeLabel, getOutcomeIcon } from '@/lib/outcomeUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDuration(secs?: number) {
@@ -19,37 +20,12 @@ function fmtDate(iso?: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function derivedStatus(outcome?: string): { label: string; color: string } {
-  if (!outcome) return { label: 'Pending', color: '#3D607A' };
-  if (['interested', 'callback_scheduled'].includes(outcome)) return { label: 'Achieved', color: '#00D082' };
-  if (['not_interested', 'do_not_call'].includes(outcome)) return { label: 'Rejected', color: '#FF4D6D' };
-  if (['voicemail_left', 'no_answer', 'busy'].includes(outcome)) return { label: 'Attempted', color: '#F0B429' };
-  return { label: 'Completed', color: '#38BDF8' };
-}
-
 function sentimentInfo(score?: number): { label: string; color: string } {
   if (score == null) return { label: '—', color: '#3D607A' };
   if (score >= 0.65) return { label: 'Positive', color: '#00D082' };
   if (score <= 0.35) return { label: 'Negative', color: '#FF4D6D' };
   return { label: 'Neutral', color: '#7BA5C8' };
 }
-
-function outcomeLabel(o?: string) {
-  if (!o) return '—';
-  return o.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-const outcomeColor: Record<string, string> = {
-  interested: '#00D082',
-  callback_scheduled: '#38BDF8',
-  not_interested: '#FF4D6D',
-  voicemail_left: '#3D607A',
-  wrong_number: '#263A4A',
-  do_not_call: '#FF4D6D',
-  completed: '#00C2B8',
-  no_answer: '#3D607A',
-  busy: '#F0B429',
-};
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 function Sk({ w = '100%', h = 14, r = 5 }: { w?: string | number; h?: number; r?: number }) {
@@ -99,12 +75,13 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
     })();
   });
 
-  const ds = derivedStatus(call.outcome);
   const si = sentimentInfo(call.sentiment_score);
   const isOut = call.direction === 'outbound';
   const contact = isOut ? call.to_number : call.from_number;
   const src = detail ?? call;
   const transcript = (src as any).transcript_entries ?? (src as any).transcript ?? [];
+  const oc = getOutcomeColor(call.outcome);
+  const ol = getOutcomeLabel(call.outcome);
 
   return (
     <div style={{
@@ -153,9 +130,8 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {[
             { l: 'Duration', v: fmtDuration(call.duration_seconds), c: '#38BDF8' },
-            { l: 'Outcome', v: outcomeLabel(call.outcome), c: outcomeColor[call.outcome ?? ''] ?? '#3D607A' },
+            { l: 'Outcome', v: ol, c: oc },
             { l: 'Sentiment', v: si.label, c: si.color },
-            { l: 'Status', v: ds.label, c: ds.color },
           ].map(({ l, v, c }) => (
             <div key={l} style={{
               background: `${c}10`, border: `1px solid ${c}20`,
@@ -244,7 +220,7 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
 }
 
 // ─── Orders View ──────────────────────────────────────────────────────────────
-type OutcomeFilter = 'all' | 'interested' | 'achieved' | 'rejected' | 'attempted';
+type OutcomeFilter = 'all' | 'achieved' | 'followup' | 'rejected' | 'attempted';
 type AgentFilter = string;
 
 export function OrdersView() {
@@ -262,12 +238,17 @@ export function OrdersView() {
   );
 
   const allCalls = data?.items ?? [];
+  const POSITIVE = new Set(['goal_achieved','order_confirmed','agreed_on_service','appointment_booked','payment_collected','issue_resolved','interested','demo_scheduled']);
+  const FOLLOWUP = new Set(['callback_requested','callback_scheduled','follow_up_needed','want_to_connect_later']);
+  const DECLINED = new Set(['not_interested','not_qualified','do_not_call']);
+  const NO_CONTACT = new Set(['voicemail_left','voicemail','no_answer','gatekeeper','call_disconnected','wrong_number']);
+
   const filteredCalls = allCalls.filter((c) => {
     if (outcomeFilter === 'all') return true;
-    if (outcomeFilter === 'interested') return c.outcome === 'interested';
-    if (outcomeFilter === 'achieved') return ['interested', 'callback_scheduled'].includes(c.outcome ?? '');
-    if (outcomeFilter === 'rejected') return ['not_interested', 'do_not_call'].includes(c.outcome ?? '');
-    if (outcomeFilter === 'attempted') return ['voicemail_left', 'no_answer', 'busy'].includes(c.outcome ?? '');
+    if (outcomeFilter === 'achieved') return POSITIVE.has(c.outcome ?? '');
+    if (outcomeFilter === 'followup') return FOLLOWUP.has(c.outcome ?? '');
+    if (outcomeFilter === 'rejected') return DECLINED.has(c.outcome ?? '');
+    if (outcomeFilter === 'attempted') return NO_CONTACT.has(c.outcome ?? '');
     return true;
   });
 
@@ -276,9 +257,9 @@ export function OrdersView() {
   const outcomeFilters: { id: OutcomeFilter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'achieved', label: 'Achieved' },
-    { id: 'rejected', label: 'Rejected' },
-    { id: 'attempted', label: 'Attempted' },
-    { id: 'interested', label: 'Interested' },
+    { id: 'followup', label: 'Follow-up' },
+    { id: 'rejected', label: 'Declined' },
+    { id: 'attempted', label: 'No Contact' },
   ];
 
   return (
@@ -339,13 +320,13 @@ export function OrdersView() {
             {/* Table header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '160px 1fr 1fr 110px 100px 80px 90px 1fr',
+              gridTemplateColumns: '160px 1fr 1fr 150px 80px 90px 1fr',
               gap: 0,
               padding: '11px 20px',
               background: 'rgba(255,255,255,0.03)',
               borderBottom: '1px solid rgba(255,255,255,0.06)',
             }}>
-              {['Date', 'Customer', 'Agent', 'Outcome', 'Status', 'Duration', 'Sentiment', 'Summary'].map((h) => (
+              {['Date', 'Customer', 'Agent', 'Status', 'Duration', 'Sentiment', 'Summary'].map((h) => (
                 <div key={h} style={{
                   fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase',
                   letterSpacing: '0.09em', color: 'var(--text-muted)', paddingRight: 8,
@@ -359,15 +340,14 @@ export function OrdersView() {
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} style={{
-                  display: 'grid', gridTemplateColumns: '160px 1fr 1fr 110px 100px 80px 90px 1fr',
+                  display: 'grid', gridTemplateColumns: '160px 1fr 1fr 150px 80px 90px 1fr',
                   padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.04)',
                   gap: 0, alignItems: 'center',
                 }}>
                   <Sk h={11} w="90%" />
                   <Sk h={11} w="80%" />
                   <Sk h={11} w="60%" />
-                  <Sk h={18} w="70%" r={9999} />
-                  <Sk h={18} w="65%" r={9999} />
+                  <Sk h={18} w="75%" r={9999} />
                   <Sk h={11} w="50%" />
                   <Sk h={11} w="55%" />
                   <Sk h={11} w="85%" />
@@ -418,9 +398,10 @@ function OrderRow({ call, idx, selected, onClick }: {
   const [hov, setHov] = useState(false);
   const isOut = call.direction === 'outbound';
   const contact = isOut ? call.to_number : call.from_number;
-  const ds = derivedStatus(call.outcome);
   const si = sentimentInfo(call.sentiment_score);
-  const oc = outcomeColor[call.outcome ?? ''] ?? '#3D607A';
+  const oc = getOutcomeColor(call.outcome);
+  const ol = getOutcomeLabel(call.outcome);
+  const oi = call.outcome ? getOutcomeIcon(call.outcome) : null;
 
   return (
     <div
@@ -428,7 +409,7 @@ function OrderRow({ call, idx, selected, onClick }: {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        display: 'grid', gridTemplateColumns: '160px 1fr 1fr 110px 100px 80px 90px 1fr',
+        display: 'grid', gridTemplateColumns: '160px 1fr 1fr 150px 80px 90px 1fr',
         padding: '13px 20px', alignItems: 'center', gap: 0,
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         background: selected
@@ -450,18 +431,12 @@ function OrderRow({ call, idx, selected, onClick }: {
       </div>
       <div style={{ paddingRight: 8 }}>
         <span style={{
-          fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
-          background: `${oc}14`, color: oc, border: `1px solid ${oc}25`, whiteSpace: 'nowrap',
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: 10, fontWeight: 600, padding: '3px 9px', borderRadius: 9999,
+          background: `${oc}15`, color: oc, border: `1px solid ${oc}30`, whiteSpace: 'nowrap',
         }}>
-          {outcomeLabel(call.outcome)}
-        </span>
-      </div>
-      <div style={{ paddingRight: 8 }}>
-        <span style={{
-          fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
-          background: `${ds.color}12`, color: ds.color, border: `1px solid ${ds.color}25`,
-        }}>
-          {ds.label}
+          {oi && <span style={{ fontSize: 9 }}>{oi}</span>}
+          {ol}
         </span>
       </div>
       <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', paddingRight: 8 }}>
