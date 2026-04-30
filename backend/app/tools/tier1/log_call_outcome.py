@@ -10,20 +10,57 @@ PARAMS = {
         "outcome": {
             "type": "string",
             "enum": [
-                "interested",
+                # Goal achieved
+                "goal_achieved",
                 "order_confirmed",
-                "want_to_connect_later",
-                "not_interested",
+                "agreed_on_service",
+                "appointment_booked",
+                "payment_collected",
+                "issue_resolved",
+                # Positive progress
+                "interested",
+                "demo_scheduled",
+                # Follow-up
+                "callback_requested",
+                "follow_up_needed",
                 "callback_scheduled",
+                # Incomplete contact
                 "voicemail_left",
-                "wrong_number",
+                "no_answer",
+                "gatekeeper",
+                # Declined
+                "not_interested",
+                "not_qualified",
+                # Administrative
                 "do_not_call",
+                "wrong_number",
+                "call_disconnected",
             ],
-            "description": "Result of the call. Use 'order_confirmed' when a sale or order is placed, 'want_to_connect_later' when the prospect asks to be contacted again at a later date, 'interested' for general interest without a sale, 'callback_scheduled' for a specific booked callback time.",
+            "description": (
+                "Your best assessment of the call result. "
+                "Use 'order_confirmed' when a sale/order is placed. "
+                "'agreed_on_service' when they verbally agreed but haven't paid yet. "
+                "'goal_achieved' for any other primary goal accomplished. "
+                "'appointment_booked' or 'demo_scheduled' when a meeting is set. "
+                "'interested' when they showed interest but no commitment. "
+                "'callback_requested' when they ask to be called back. "
+                "'not_interested' when explicitly declined. "
+                "'do_not_call' when they ask to be removed. "
+                "This is a hint — the post-call system will verify it from the full transcript."
+            ),
         },
-        "notes": {"type": "string", "description": "Disposition notes or conversation summary"},
-        "next_action": {"type": "string", "description": "What should happen next, e.g. 'send proposal', 'schedule demo'"},
-        "follow_up_date": {"type": "string", "description": "ISO 8601 datetime for follow-up"},
+        "notes": {
+            "type": "string",
+            "description": "Disposition notes or key points from the conversation",
+        },
+        "next_action": {
+            "type": "string",
+            "description": "What should happen next, e.g. 'Send proposal', 'Schedule demo for Tuesday 3pm'",
+        },
+        "follow_up_date": {
+            "type": "string",
+            "description": "ISO 8601 datetime for follow-up if applicable",
+        },
     },
     "required": ["outcome"],
 }
@@ -33,25 +70,30 @@ PARAMS = {
     name="log_call_outcome",
     tier=1,
     execution="client",
-    description="Record the outcome and disposition of this call. Always call this before ending the conversation.",
+    description=(
+        "Log the outcome of this call before ending the conversation. "
+        "Call this once you have a clear sense of the result — typically just before saying goodbye. "
+        "The post-call system will verify and may refine the outcome from the full transcript, "
+        "so an approximate value is fine if you are unsure."
+    ),
     parameters=PARAMS,
 )
 async def handler(params: dict, ctx: CallContext, db, redis) -> str:
-    outcome = params["outcome"]
-    notes = params.get("notes", "")
-    next_action = params.get("next_action", "")
+    outcome       = params["outcome"]
+    notes         = params.get("notes", "")
+    next_action   = params.get("next_action", "")
     follow_up_date = params.get("follow_up_date")
 
     result = await db.execute(select(Call).where(Call.id == ctx.call_record_id))
     call = result.scalar_one_or_none()
 
     if call:
-        call.outcome = outcome
+        call.outcome       = outcome
         call.disposition_notes = notes
-        call.next_action = next_action
+        call.next_action   = next_action
         call.follow_up_date = follow_up_date
 
-    # If DNC, flag the lead
+    # Flag lead as DNC immediately — this one cannot wait for post-call
     if outcome == "do_not_call":
         lead_id = await redis.hget(f"call:{ctx.call_sid}", "lead_id")
         if lead_id:
@@ -62,8 +104,6 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
                 lead.do_not_call_reason = notes or "Requested during call"
 
     await db.commit()
-
-    # Cache outcome in Redis for fast retrieval
     await redis.hset(f"call:{ctx.call_sid}", "outcome", outcome)
 
     return f"Outcome logged: {outcome}"
