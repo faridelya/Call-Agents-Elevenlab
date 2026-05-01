@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCalls } from '@/lib/hooks/useCalls';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { apiFetch } from '@/lib/api';
@@ -65,7 +65,9 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
   const [detail, setDetail] = useState<CallRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useState(() => {
+  useEffect(() => {
+    setDetail(null);
+    setLoading(true);
     (async () => {
       try {
         const d = await apiFetch<CallRecord>(`/api/v1/calls/${call.id}`);
@@ -73,7 +75,7 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
       } catch { /* fall through */ }
       finally { setLoading(false); }
     })();
-  });
+  }, [call.id]);
 
   const si = sentimentInfo(call.sentiment_score);
   const isOut = call.direction === 'outbound';

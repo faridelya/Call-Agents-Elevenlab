@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useCampaigns, useCampaignAction, useCreateCampaign } from '@/lib/hooks/useCampaigns';
+import { createPortal } from 'react-dom';
+import { useCampaigns, useCampaignAction, useCreateCampaign, useDeleteCampaign } from '@/lib/hooks/useCampaigns';
 import { useAgents } from '@/lib/hooks/useAgents';
 import type { Campaign } from '@/lib/api';
 import { contactPool as poolApi } from '@/lib/api';
@@ -1449,45 +1450,144 @@ function CampaignActionErrorModal({ message, action, onClose }: {
   );
 }
 
+// ── Delete Confirmation Modal ──────────────────────────────────────────────────
+function DeleteModal({ name, onConfirm, onCancel }: { name: string; onConfirm: () => void; onCancel: () => void }) {
+  return createPortal(
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9000,
+        background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#0C1120', border: '1px solid rgba(255,77,109,0.3)',
+          borderRadius: 16, padding: '28px 32px', width: 360,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
+          animation: 'fade-in 0.15s ease-out',
+        }}
+      >
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,77,109,0.12)', border: '1px solid rgba(255,77,109,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF4D6D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+          </svg>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Delete Campaign?</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 24 }}>
+          <strong style={{ color: 'var(--text-secondary)' }}>{name}</strong> will be permanently deleted. This cannot be undone.
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1, padding: '9px 0', borderRadius: 9,
+              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)',
+              color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.09)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+          >Cancel</button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1, padding: '9px 0', borderRadius: 9,
+              background: 'rgba(255,77,109,0.15)', border: '1px solid rgba(255,77,109,0.35)',
+              color: '#FF4D6D', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,77,109,0.28)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,77,109,0.15)'; }}
+          >Delete</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── Campaign Card ──────────────────────────────────────────────────────────────
-function CampaignCard({ campaign: c, onAction, actionPending }: {
-  campaign: Campaign; onAction: (a: 'start' | 'pause' | 'resume' | 'stop') => void; actionPending: boolean;
+function CampaignCard({ campaign: c, agentName, onAction, onDelete, actionPending }: {
+  campaign: Campaign;
+  agentName?: string;
+  onAction: (a: 'start' | 'pause' | 'resume' | 'stop') => void;
+  onDelete: () => void;
+  actionPending: boolean;
 }) {
   const [hov, setHov] = useState(false);
+  const [showDelModal, setShowDelModal] = useState(false);
   const color = SC[c.status];
   const pct = c.total_contacts > 0 ? Math.round((c.contacts_called / c.total_contacts) * 100) : 0;
 
   return (
-    <div
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{
-        background: 'rgba(9,20,38,0.65)', backdropFilter: 'blur(20px)',
-        border: `1px solid ${hov ? `${color}28` : 'rgba(255,255,255,0.07)'}`,
-        borderRadius: 16, padding: '20px 22px',
-        transform: hov ? 'translateY(-2px)' : 'none',
-        boxShadow: hov ? `0 8px 32px rgba(0,0,0,0.45), 0 0 0 1px ${color}10` : '0 4px 20px rgba(0,0,0,0.35)',
-        transition: 'all 0.25s var(--ease-out)', overflow: 'hidden', position: 'relative',
-      }}
-    >
-      <div style={{ position: 'absolute', top: 0, right: 0, width: 100, height: 100, background: `radial-gradient(circle at 100% 0%, ${color}10 0%, transparent 70%)`, pointerEvents: 'none' }} />
+    <>
+      {showDelModal && (
+        <DeleteModal
+          name={c.name}
+          onConfirm={() => { onDelete(); setShowDelModal(false); }}
+          onCancel={() => setShowDelModal(false)}
+        />
+      )}
+      <div
+        onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+        style={{
+          background: 'rgba(9,20,38,0.65)', backdropFilter: 'blur(20px)',
+          border: `1px solid ${hov ? `${color}28` : 'rgba(255,255,255,0.07)'}`,
+          borderRadius: 16, padding: '20px 22px',
+          transform: hov ? 'translateY(-2px)' : 'none',
+          boxShadow: hov ? `0 8px 32px rgba(0,0,0,0.45), 0 0 0 1px ${color}10` : '0 4px 20px rgba(0,0,0,0.35)',
+          transition: 'all 0.25s var(--ease-out)', overflow: 'hidden', position: 'relative',
+        }}
+      >
+        <div style={{ position: 'absolute', top: 0, right: 0, width: 100, height: 100, background: `radial-gradient(circle at 100% 0%, ${color}10 0%, transparent 70%)`, pointerEvents: 'none' }} />
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
-            boxShadow: c.status === 'running' ? `0 0 10px ${color}` : 'none',
-            animation: c.status === 'running' ? 'glow-pulse 2s infinite' : 'none',
-          }} />
-          <div>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>{c.name}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{c.started_at ? `Started ${fmtDate(c.started_at)}` : 'Not started'}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
+              boxShadow: c.status === 'running' ? `0 0 10px ${color}` : 'none',
+              animation: c.status === 'running' ? 'glow-pulse 2s infinite' : 'none',
+            }} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                {agentName && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 9999,
+                    background: 'rgba(124,110,250,0.12)', color: '#A89AF9',
+                    border: '1px solid rgba(124,110,250,0.22)',
+                  }}>🤖 {agentName}</span>
+                )}
+                <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{c.started_at ? `Started ${fmtDate(c.started_at)}` : 'Not started'}</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 10 }}>
+            <span style={{
+              fontSize: 10, fontWeight: 600, padding: '2px 9px', borderRadius: 9999,
+              background: `${color}12`, color, border: `1px solid ${color}28`, textTransform: 'capitalize',
+            }}>{c.status}</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowDelModal(true); }}
+              title="Delete campaign"
+              style={{
+                width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: 'var(--text-muted)', transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,77,109,0.12)'; e.currentTarget.style.color = '#FF4D6D'; e.currentTarget.style.borderColor = 'rgba(255,77,109,0.3)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)'; }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+              </svg>
+            </button>
           </div>
         </div>
-        <span style={{
-          fontSize: 10, fontWeight: 600, padding: '2px 9px', borderRadius: 9999,
-          background: `${color}12`, color, border: `1px solid ${color}28`, textTransform: 'capitalize',
-        }}>{c.status}</span>
-      </div>
 
       {c.total_contacts > 0 && (
         <div style={{ marginBottom: 14 }}>
@@ -1522,6 +1622,7 @@ function CampaignCard({ campaign: c, onAction, actionPending }: {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -1548,6 +1649,7 @@ export function CampaignsView() {
   const { data, isLoading } = useCampaigns();
   const { data: agentsData } = useAgents();
   const campaignAction = useCampaignAction();
+  const deleteC = useDeleteCampaign();
   const [showNew, setShowNew]       = useState(false);
   const [editTarget, setEditTarget] = useState<ContactEntry | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle');
@@ -1606,6 +1708,7 @@ export function CampaignsView() {
   const campaignList  = data?.items ?? [];
   const liveCount     = campaignList.filter((c) => c.status === 'running').length;
   const agentOptions  = (agentsData?.items ?? []).map((a) => ({ id: a.id, name: a.name }));
+  const agentNameMap  = Object.fromEntries(agentOptions.map((a) => [a.id, a.name]));
   const contactGroups = [...new Set(contactPool.map((c) => c.group))].filter(Boolean).sort();
   const nextGroup     = contactPool.length === 0
     ? '1'
@@ -1765,6 +1868,7 @@ export function CampaignsView() {
                 <div key={c.id} style={{ animation: `fade-in 0.5s ${idx * 60}ms both` }}>
                   <CampaignCard
                     campaign={c}
+                    agentName={agentNameMap[c.agent_id]}
                     onAction={(action) => campaignAction.mutate(
                       { id: c.id, action },
                       {
@@ -1783,6 +1887,7 @@ export function CampaignsView() {
                         },
                       }
                     )}
+                    onDelete={() => deleteC.mutate(c.id)}
                     actionPending={campaignAction.isPending}
                   />
                 </div>

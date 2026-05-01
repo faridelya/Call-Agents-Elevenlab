@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCalls } from '@/lib/hooks/useCalls';
 import { apiFetch } from '@/lib/api';
 import type { CallRecord } from '@/lib/api';
@@ -111,7 +111,9 @@ function CallDetail({ call, onClose }: { call: CallRecord; onClose: () => void }
   const [detail, setDetail] = useState<CallRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useState(() => {
+  useEffect(() => {
+    setDetail(null);
+    setLoading(true);
     (async () => {
       try {
         const d = await apiFetch<CallRecord>(`/api/v1/calls/${call.id}`);
@@ -119,7 +121,7 @@ function CallDetail({ call, onClose }: { call: CallRecord; onClose: () => void }
       } catch { /* fall through */ }
       finally { setLoading(false); }
     })();
-  });
+  }, [call.id]);
 
   const isOut = call.direction === 'outbound';
   const contact = isOut ? call.to_number : call.from_number;

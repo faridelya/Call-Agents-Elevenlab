@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   useAnalyticsOverview,
   useCallsOverTime,
@@ -179,35 +180,123 @@ function FunnelBar({ label, value, max, color }: { label: string; value: number;
 }
 
 // ─── Styled Select ────────────────────────────────────────────────────────────
-function StyledSelect({ value, onChange, children, placeholder }: {
-  value: string; onChange: (v: string) => void;
-  children: React.ReactNode; placeholder?: string;
+function SearchSelect({ value, onChange, options, placeholder }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { id: string; name: string }[];
+  placeholder?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        panelRef.current && !panelRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleToggle = () => {
+    if (!open && btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen((o) => !o);
+    setSearch('');
+  };
+
+  const select = (id: string) => { onChange(id); setOpen(false); setSearch(''); };
+  const selected = options.find((o) => o.id === value);
+  const filtered = options.filter((o) => o.name.toLowerCase().includes(search.toLowerCase()));
+
+  const panel = open && rect ? createPortal(
+    <div ref={panelRef} style={{
+      position: 'fixed',
+      top: rect.bottom + 4, left: rect.left, width: rect.width,
+      background: '#0C1120', border: '1px solid rgba(0,208,130,0.22)',
+      borderRadius: 10, zIndex: 9999, overflow: 'hidden',
+      boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
+    }}>
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <input
+          autoFocus
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search…"
+          style={{
+            width: '100%', background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            borderRadius: 6, padding: '5px 10px',
+            fontSize: 11.5, color: 'var(--text-primary)', outline: 'none',
+            fontFamily: 'var(--font-ui)', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+      <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+        <div
+          onClick={() => select('')}
+          style={{
+            padding: '8px 12px', fontSize: 12, cursor: 'pointer',
+            color: !value ? '#00D082' : 'var(--text-muted)',
+            background: !value ? 'rgba(0,208,130,0.07)' : 'transparent',
+          }}
+          onMouseEnter={(e) => { if (value) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+          onMouseLeave={(e) => { if (value) e.currentTarget.style.background = 'transparent'; }}
+        >{placeholder ?? 'All'}</div>
+        {filtered.map((o) => (
+          <div
+            key={o.id}
+            onClick={() => select(o.id)}
+            style={{
+              padding: '8px 12px', fontSize: 12, cursor: 'pointer',
+              color: value === o.id ? '#00D082' : 'var(--text-secondary)',
+              background: value === o.id ? 'rgba(0,208,130,0.07)' : 'transparent',
+            }}
+            onMouseEnter={(e) => { if (value !== o.id) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+            onMouseLeave={(e) => { if (value !== o.id) e.currentTarget.style.background = 'transparent'; }}
+          >{o.name}</div>
+        ))}
+        {filtered.length === 0 && (
+          <div style={{ padding: 12, fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'center' }}>
+            No results
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
   return (
     <div style={{ position: 'relative', flex: 1 }}>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+      <button
+        ref={btnRef}
+        onClick={handleToggle}
         style={{
-          width: '100%', appearance: 'none', WebkitAppearance: 'none',
-          background: 'rgba(255,255,255,0.04)',
-          border: '1px solid rgba(255,255,255,0.10)',
+          width: '100%', background: open ? 'rgba(0,208,130,0.06)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${open ? 'rgba(0,208,130,0.4)' : 'rgba(255,255,255,0.10)'}`,
           borderRadius: 9, padding: '7px 32px 7px 12px',
-          fontSize: 12, color: value ? 'var(--text-primary)' : 'var(--text-muted)',
-          cursor: 'pointer', outline: 'none',
-          fontFamily: 'var(--font-ui)',
-          transition: 'border-color 0.15s',
+          fontSize: 12, color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
+          cursor: 'pointer', outline: 'none', textAlign: 'left',
+          fontFamily: 'var(--font-ui)', transition: 'all 0.15s', display: 'block',
         }}
-        onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(0,208,130,0.4)'; }}
-        onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; }}
       >
-        {placeholder && <option value="">{placeholder}</option>}
-        {children}
-      </select>
+        {selected?.name ?? placeholder ?? 'Select…'}
+      </button>
       <span style={{
-        position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+        position: 'absolute', right: 10, top: '50%',
+        transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`,
         color: 'var(--text-muted)', fontSize: 10, pointerEvents: 'none',
+        transition: 'transform 0.2s',
       }}>▾</span>
+      {panel}
     </div>
   );
 }
@@ -279,16 +368,18 @@ function CampaignOutcomesCard() {
 
         {/* Selectors */}
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-          <StyledSelect value={selectedAgent} onChange={setSelectedAgent} placeholder="All Agents">
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </StyledSelect>
-          <StyledSelect value={selectedCampaign} onChange={setSelectedCampaign} placeholder="All Campaigns">
-            {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </StyledSelect>
+          <SearchSelect
+            value={selectedAgent}
+            onChange={setSelectedAgent}
+            placeholder="All Agents"
+            options={agents.map((a) => ({ id: a.id, name: a.name }))}
+          />
+          <SearchSelect
+            value={selectedCampaign}
+            onChange={setSelectedCampaign}
+            placeholder="All Campaigns"
+            options={campaigns.map((c) => ({ id: c.id, name: c.name }))}
+          />
         </div>
       </div>
 
@@ -571,14 +662,14 @@ export function AnalyticsView() {
           {/* Table header */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1.4fr 60px 80px 80px 80px 70px 90px 75px',
+            gridTemplateColumns: '1.5fr 52px 62px 70px 75px 68px 75px 80px 62px',
             padding: '8px 24px',
             background: 'rgba(255,255,255,0.025)',
             borderTop: '1px solid rgba(255,255,255,0.05)',
             borderBottom: '1px solid rgba(255,255,255,0.05)',
             gap: 4,
           }}>
-            {['Agent','Calls','Interested','Confirmed','No Interest','Voicemail','Sentiment','Conv %'].map((h) => (
+            {['Agent','Calls','Talk %','Interested','Confirmed','Follow-up','No Interest','Voicemail','Conv %'].map((h) => (
               <div key={h} style={{
                 fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
                 letterSpacing: '0.08em', color: 'var(--text-muted)',
@@ -590,11 +681,11 @@ export function AnalyticsView() {
           {amLoad ? (
             Array.from({ length: 3 }).map((_, i) => (
               <div key={i} style={{
-                display: 'grid', gridTemplateColumns: '1.4fr 60px 80px 80px 80px 70px 90px 75px',
+                display: 'grid', gridTemplateColumns: '1.5fr 52px 62px 70px 75px 68px 75px 80px 62px',
                 padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)', gap: 4,
               }}>
                 <Sk h={11} w="70%" />
-                {Array.from({ length: 7 }).map((_, j) => <Sk key={j} h={11} w="50%" />)}
+                {Array.from({ length: 8 }).map((_, j) => <Sk key={j} h={11} w="50%" />)}
               </div>
             ))
           ) : agentList.length === 0 ? (
@@ -603,12 +694,15 @@ export function AnalyticsView() {
             </div>
           ) : (
             agentList.map((a: any, idx: number) => {
-              const sc = sentimentColor(a.avg_sentiment);
+              const total = a.total_calls ?? 0;
+              const vm = a.voicemail_count ?? 0;
+              const talkRate = total > 0 ? Math.round(((total - vm) / total) * 100) : 0;
+              const talkColor = talkRate >= 70 ? '#00D082' : talkRate >= 40 ? '#F0B429' : '#FF4D6D';
               return (
                 <div
                   key={a.agent_id}
                   style={{
-                    display: 'grid', gridTemplateColumns: '1.4fr 60px 80px 80px 80px 70px 90px 75px',
+                    display: 'grid', gridTemplateColumns: '1.5fr 52px 62px 70px 75px 68px 75px 80px 62px',
                     padding: '11px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)',
                     animation: `fade-in 0.4s ${idx * 60}ms both`, gap: 4,
                     transition: 'background 0.15s',
@@ -629,7 +723,10 @@ export function AnalyticsView() {
                     {a.agent_name ?? `Agent ${a.agent_id.slice(0, 6)}`}
                   </div>
                   <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                    {a.total_calls ?? 0}
+                    {total}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: talkColor, fontWeight: 700 }}>
+                    {talkRate}%
                   </div>
                   <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00D082' }}>
                     {a.interested_count ?? 0}
@@ -637,14 +734,14 @@ export function AnalyticsView() {
                   <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00C2B8' }}>
                     {a.order_confirmed_count ?? 0}
                   </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#A89AF9' }}>
+                    {a.connect_later_count ?? 0}
+                  </div>
                   <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#FF4D6D' }}>
                     {a.not_interested_count ?? 0}
                   </div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#A89AF9' }}>
-                    {a.voicemail_count ?? 0}
-                  </div>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: sc }}>
-                    {sentimentLabel(a.avg_sentiment)}
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#94A3B8' }}>
+                    {vm}
                   </div>
                   <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00C2B8', fontWeight: 700 }}>
                     {a.conversion_rate ?? 0}%
