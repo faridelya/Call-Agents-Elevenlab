@@ -1,13 +1,12 @@
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans, JetBrains_Mono, Syne, Raleway } from 'next/font/google';
+import { Manrope, JetBrains_Mono, Syne } from 'next/font/google';
 import { Providers } from './providers';
 import './globals.css';
 
-// Plus Jakarta Sans replaces Inter — more refined, slightly geometric, great at small sizes
-const plusJakartaSans = Plus_Jakarta_Sans({
+const manrope = Manrope({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700', '800'],
-  variable: '--font-inter',  // keep var name so all existing refs work unchanged
+  variable: '--font-inter',
   display: 'swap',
 });
 
@@ -25,14 +24,6 @@ const syne = Syne({
   display: 'swap',
 });
 
-// Raleway — elegant geometric display font for the brand wordmark
-const raleway = Raleway({
-  subsets: ['latin'],
-  weight: ['700', '800', '900'],
-  variable: '--font-brand',
-  display: 'swap',
-});
-
 export const metadata: Metadata = {
   title: 'Voxara — AI Voice Agents for Your Business',
   description:
@@ -43,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} ${syne.variable} ${raleway.variable}`}
+      className={`${manrope.variable} ${jetbrainsMono.variable} ${syne.variable}`}
     >
       <body>
         <Providers>{children}</Providers>

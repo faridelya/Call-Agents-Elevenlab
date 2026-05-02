@@ -269,6 +269,13 @@ async def outbound_twiml(
         log.warning("native_twiml_call_not_found", call_record_id=call_record_id)
         return xml_response(build_hangup_twiml())
 
+    if settings.campaign_debug and call.campaign_id:
+        log.debug("campaign_twiml_answered",
+                  call_record_id=call_record_id,
+                  call_sid=call_sid,
+                  campaign_id=call.campaign_id,
+                  to_number=call.to_number)
+
     # Confirm call_sid (may differ from the initiated SID in edge cases)
     if call_sid and not call.twilio_call_sid:
         call.twilio_call_sid = call_sid
@@ -309,6 +316,14 @@ async def call_status_callback(
     if not call:
         return Response(status_code=204)
 
+    if settings.campaign_debug and call.campaign_id:
+        log.debug("campaign_twilio_status",
+                  call_id=call.id,
+                  call_sid=call_sid,
+                  campaign_id=call.campaign_id,
+                  twilio_status=call_status,
+                  duration_s=duration)
+
     if call_status in ("completed", "failed", "busy", "no-answer", "canceled"):
         call.status = call_status
         if duration:
@@ -344,6 +359,14 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
     processing we skip and let the ARQ worker (enqueued with a 30s delay) handle it.
     This guarantees the transcript is saved regardless of which side ended the call.
     """
+    if settings.campaign_debug and call.campaign_id:
+        log.debug("campaign_finalize_call",
+                  call_id=call.id,
+                  campaign_id=call.campaign_id,
+                  final_status=call.status,
+                  duration_s=call.duration_seconds,
+                  conv_id=call.elevenlabs_conversation_id)
+
     # ── Transcript from ElevenLabs ───────────────────────────────────────────
     if call.elevenlabs_conversation_id:
         el_status = await elevenlabs_service.get_conversation_status(
@@ -426,13 +449,26 @@ async def recording_callback(
 # ─── Redis context seeder ─────────────────────────────────────────────────────
 
 async def _seed_redis_context(redis, call: Call, agent_id: str, db: AsyncSession) -> None:
-    """Pre-load call context into Redis so tier 1 tools have fast access."""
+    """Pre-load call context into Redis so tier 1 tools have fast access.
+
+    For outbound calls (single test calls and campaign calls) the context is
+    already seeded at call-creation time with the correct lead_data.  This
+    function acts as a safety-net re-seed — it must NOT overwrite lead_data
+    that was already set, otherwise campaign contact details are lost.
+    """
     from app.models.agent import Agent as AgentModel
 
     result = await db.execute(select(AgentModel).where(AgentModel.id == agent_id))
     agent = result.scalar_one_or_none()
     if not agent:
         return
+
+    # Preserve existing lead_data (set by campaign task or POST /calls/outbound).
+    # hget returns bytes in most aioredis builds; decode defensively.
+    existing_lead_data_raw = await redis.hget(f"call:{call.id}", "lead_data")
+    if isinstance(existing_lead_data_raw, bytes):
+        existing_lead_data_raw = existing_lead_data_raw.decode()
+    lead_data = existing_lead_data_raw or json.dumps({})
 
     context = {
         "call_record_id": call.id,
@@ -449,7 +485,7 @@ async def _seed_redis_context(redis, call: Call, agent_id: str, db: AsyncSession
             "product_name":        agent.product_name,
             "elevenlabs_agent_id": agent.elevenlabs_agent_id,
         }),
-        "lead_data": json.dumps({}),
+        "lead_data": lead_data,
     }
     await redis.hset(f"call:{call.id}", mapping=context)
     await redis.expire(f"call:{call.id}", _CTX_TTL)
@@ -592,10 +628,10 @@ async def elevenlabs_post_call(
     try:
         from app.websockets.event_bus import event_manager
         await event_manager.broadcast(call.user_id, {
-            "type":          "call_processed",
-            "call_id":       call.id,
+            "type":           "call_processed",
+            "call_record_id": call.id,   # matches LiveEvent type in frontend
             "transcript_len": len(call.transcript or []),
-            "auto_summary":  call.auto_summary,
+            "auto_summary":   call.auto_summary,
             "sentiment_score": call.sentiment_score,
         })
     except Exception:

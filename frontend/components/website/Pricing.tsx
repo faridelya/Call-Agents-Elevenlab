@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { SectionLabel, SectionHeading, Btn } from './shared';
 
 const checkGreenIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00D082" strokeWidth="2.5" strokeLinecap="round">
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
@@ -43,27 +43,43 @@ function PlanCard({ plan, onCTA }: { plan: (typeof plans)[number]; onCTA?: () =>
   const [hov, setHov] = useState(false);
   return (
     <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
       style={{
         background: plan.hi
-          ? 'linear-gradient(160deg, rgba(124,110,250,0.12), rgba(34,211,238,0.05) 100%)'
-          : '#0D1422',
-        border: plan.hi ? '1px solid rgba(124,110,250,0.45)' : '1px solid rgba(255,255,255,0.06)',
+          ? 'rgba(9,20,38,0.80)'
+          : 'rgba(9,20,38,0.55)',
+        border: plan.hi
+          ? '1px solid rgba(0,208,130,0.45)'
+          : `1px solid ${hov ? 'rgba(0,208,130,0.18)' : 'rgba(0,208,130,0.08)'}`,
         borderRadius: 18,
         padding: plan.hi ? '34px 28px' : '26px 28px',
-        boxShadow: plan.hi ? '0 0 40px rgba(124,110,250,0.15)' : 'none',
-        transform: plan.hi ? 'scale(1.04)' : 'none',
+        boxShadow: plan.hi
+          ? '0 0 60px rgba(0,208,130,0.12), 0 24px 48px rgba(0,0,0,0.35)'
+          : hov ? '0 8px 32px rgba(0,0,0,0.3)' : 'none',
+        transform: plan.hi ? 'scale(1.04)' : hov ? 'translateY(-2px)' : 'none',
+        transition: 'all 0.3s',
+        backdropFilter: 'blur(20px) saturate(140%)',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
+      {plan.hi && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+          background: 'linear-gradient(90deg, transparent, #00D082, #00C2B8, transparent)',
+        }} />
+      )}
       {plan.hi && (
         <div
           style={{
             fontSize: 10,
             fontWeight: 700,
-            letterSpacing: '0.08em',
+            letterSpacing: '0.1em',
             textTransform: 'uppercase',
-            color: '#7C6EFA',
-            background: 'rgba(124,110,250,0.12)',
-            border: '1px solid rgba(124,110,250,0.25)',
+            color: '#00D082',
+            background: 'rgba(0,208,130,0.1)',
+            border: '1px solid rgba(0,208,130,0.28)',
             padding: '3px 11px',
             borderRadius: 9999,
             display: 'inline-block',
@@ -74,16 +90,16 @@ function PlanCard({ plan, onCTA }: { plan: (typeof plans)[number]; onCTA?: () =>
           MOST POPULAR
         </div>
       )}
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#64748B', marginBottom: 10, fontFamily: 'var(--font-inter), sans-serif' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#4A6080', marginBottom: 10, fontFamily: 'var(--font-inter), sans-serif', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
         {plan.name}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginBottom: 8 }}>
         <span
           style={{
-            fontFamily: 'var(--font-space-grotesk), sans-serif',
+            fontFamily: 'var(--font-jetbrains-mono), monospace',
             fontSize: 40,
-            fontWeight: 700,
-            color: '#F1F5F9',
+            fontWeight: 600,
+            color: plan.hi ? '#00D082' : '#F1F5F9',
             letterSpacing: '-0.03em',
           }}
         >
@@ -91,26 +107,27 @@ function PlanCard({ plan, onCTA }: { plan: (typeof plans)[number]; onCTA?: () =>
         </span>
         <span style={{ fontSize: 14, color: '#3D4F68', fontFamily: 'var(--font-inter), sans-serif' }}>{plan.period}</span>
       </div>
-      <div style={{ fontSize: 13, color: '#3D4F68', marginBottom: 22, lineHeight: 1.55, fontFamily: 'var(--font-inter), sans-serif' }}>
+      <div style={{ fontSize: 13, color: '#4A6080', marginBottom: 22, lineHeight: 1.55, fontFamily: 'var(--font-inter), sans-serif' }}>
         {plan.desc}
       </div>
       <button
-        onClick={() => plan.hi && onCTA?.()}
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => setHov(false)}
+        onClick={() => onCTA?.()}
         style={{
           width: '100%',
-          background: plan.hi ? (hov ? '#6355E8' : '#7C6EFA') : hov ? 'rgba(255,255,255,0.05)' : 'transparent',
-          border: plan.hi ? 'none' : '1px solid rgba(255,255,255,0.12)',
+          background: plan.hi
+            ? 'linear-gradient(135deg, #00D082, #00C2B8)'
+            : hov ? 'rgba(0,208,130,0.06)' : 'transparent',
+          border: plan.hi ? 'none' : '1px solid rgba(0,208,130,0.2)',
           borderRadius: 10,
           padding: 11,
           fontFamily: 'var(--font-inter), sans-serif',
-          fontWeight: 600,
+          fontWeight: 700,
           fontSize: 14,
-          color: plan.hi ? '#fff' : '#64748B',
+          color: plan.hi ? '#060F1A' : '#64748B',
           cursor: 'pointer',
           marginBottom: 22,
-          transition: 'all 0.2s',
+          transition: 'all 0.25s',
+          boxShadow: plan.hi ? '0 4px 20px rgba(0,208,130,0.35)' : 'none',
         }}
       >
         {plan.cta}
@@ -136,7 +153,7 @@ export function PricingSection({ onCTA }: { onCTA?: () => void }) {
           The right plan for every team
         </SectionHeading>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignItems: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, alignItems: 'center' }}>
         {plans.map((p) => (
           <PlanCard key={p.name} plan={p} onCTA={onCTA} />
         ))}
@@ -153,10 +170,10 @@ export function SocialProof() {
   return (
     <div
       style={{
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        borderTop: '1px solid rgba(0,208,130,0.08)',
+        borderBottom: '1px solid rgba(0,208,130,0.08)',
         padding: '18px 80px',
-        background: 'rgba(6,9,16,0.8)',
+        background: 'rgba(6,9,16,0.7)',
       }}
     >
       <div
@@ -172,8 +189,8 @@ export function SocialProof() {
         <span
           style={{
             fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.09em',
+            fontWeight: 700,
+            letterSpacing: '0.1em',
             textTransform: 'uppercase',
             color: '#1E293B',
             whiteSpace: 'nowrap',
@@ -188,9 +205,9 @@ export function SocialProof() {
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: '#1E293B',
+              color: '#1E2D3D',
               letterSpacing: '0.02em',
-              fontFamily: 'var(--font-space-grotesk), sans-serif',
+              fontFamily: 'var(--font-inter), sans-serif',
             }}
           >
             {n}
@@ -206,24 +223,35 @@ export function SocialProof() {
 export function CTASection({ onCTA }: { onCTA?: () => void }) {
   return (
     <section style={{ padding: '100px 80px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+      {/* Green aurora */}
       <div
         style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
           transform: 'translate(-50%,-50%)',
-          width: 700,
+          width: 800,
           height: 500,
-          background: 'radial-gradient(ellipse, rgba(124,110,250,0.08) 0%, transparent 65%)',
+          background: 'radial-gradient(ellipse, rgba(0,208,130,0.07) 0%, rgba(0,194,184,0.04) 40%, transparent 70%)',
+          pointerEvents: 'none',
+        }}
+      />
+      {/* Dot grid */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: 'radial-gradient(rgba(0,208,130,0.03) 1px, transparent 1px)',
+          backgroundSize: '32px 32px',
           pointerEvents: 'none',
         }}
       />
       <div style={{ position: 'relative', maxWidth: 640, margin: '0 auto' }}>
         <h2
           style={{
-            fontFamily: 'var(--font-space-grotesk), sans-serif',
+            fontFamily: 'var(--font-syne), sans-serif',
             fontSize: 54,
-            fontWeight: 700,
+            fontWeight: 800,
             letterSpacing: '-0.035em',
             color: '#F1F5F9',
             lineHeight: 1.05,
@@ -234,7 +262,7 @@ export function CTASection({ onCTA }: { onCTA?: () => void }) {
           <br />
           <span
             style={{
-              background: 'linear-gradient(130deg, #7C6EFA 20%, #22D3EE 100%)',
+              background: 'linear-gradient(130deg, #00D082 20%, #00C2B8 60%, #38BDF8 100%)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
@@ -243,7 +271,7 @@ export function CTASection({ onCTA }: { onCTA?: () => void }) {
             waiting to work.
           </span>
         </h2>
-        <p style={{ fontSize: 17, color: '#3D4F68', marginBottom: 36, lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
+        <p style={{ fontSize: 17, color: '#4A6080', marginBottom: 36, lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
           No engineers needed. Powered by ElevenLabs + Twilio. Go live in under 5 minutes.
         </p>
         <Btn variant="primary" size="lg" onClick={onCTA}>

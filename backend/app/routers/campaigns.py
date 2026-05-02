@@ -14,7 +14,7 @@ from app.models.base import new_uuid
 from app.models.call import Call
 from app.models.campaign import Campaign
 from app.models.user import User
-from app.schemas.campaign import CampaignCreate, CampaignResponse, CampaignUpdate
+from app.schemas.campaign import CampaignCreate, CampaignResponse, CampaignUpdate, ContactPoolSave
 from app.schemas.common import MessageResponse, PaginatedResponse
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -64,12 +64,33 @@ async def create_campaign(
         id=new_uuid(),
         user_id=current_user.id,
         total_contacts=len(contacts),
-        **body.model_dump(),
+        **body.model_dump(exclude_none=True),
     )
     db.add(campaign)
     await db.commit()
     await db.refresh(campaign)
     return campaign
+
+
+@router.get("/pool")
+async def get_contact_pool(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the user's saved contact pool (staging area before campaign creation)."""
+    return {"contacts": current_user.contact_pool or [], "total": len(current_user.contact_pool or [])}
+
+
+@router.put("/pool", response_model=MessageResponse)
+async def save_contact_pool(
+    body: ContactPoolSave,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Overwrite the user's contact pool with the supplied list."""
+    current_user.contact_pool = body.contacts
+    await db.commit()
+    return MessageResponse(message=f"Pool saved: {len(body.contacts)} contacts")
 
 
 @router.get("/{campaign_id}", response_model=CampaignResponse)
@@ -121,26 +142,93 @@ async def start_campaign(
     db: AsyncSession = Depends(get_db),
 ):
     """Start a draft or paused campaign. Sets status to 'running' and enqueues the first contact dial via ARQ."""
+    from sqlalchemy import select as _select
+    from app.models.agent import Agent as AgentModel
+    from app.config import settings as _settings
+
     campaign = await get_campaign_or_404(campaign_id, current_user.id, db)
     if campaign.status not in _MUTABLE_STATUSES:
         raise ValidationError(f"Cannot start campaign in status: {campaign.status}")
     if not campaign.contacts:
         raise ValidationError("Campaign has no contacts")
 
+    # ── Pre-flight: validate agent + credentials before queuing ───────────────
+    agent_result = await db.execute(_select(AgentModel).where(AgentModel.id == campaign.agent_id))
+    agent = agent_result.scalar_one_or_none()
+
+    if not agent:
+        raise ValidationError("The agent attached to this campaign no longer exists.")
+
+    if not agent.is_active:
+        raise ValidationError(
+            f"Agent '{agent.name}' is disabled. Enable it in the Agents page before starting."
+        )
+
+    if not agent.elevenlabs_agent_id:
+        raise ValidationError(
+            f"Agent '{agent.name}' has not been synced to ElevenLabs. "
+            "Open the agent, save it, then try again."
+        )
+
+    if agent.call_type == "inbound":
+        raise ValidationError(
+            f"Agent '{agent.name}' is configured for inbound calls only. "
+            "Switch it to outbound in the agent settings."
+        )
+
+    from_number = agent.twilio_phone_number or _settings.twilio_phone_number
+    if not from_number:
+        raise ValidationError(
+            f"No outbound phone number configured. "
+            "Set a Twilio phone number on the agent or add one in Settings → Credentials."
+        )
+
+    has_twilio_creds = (
+        (current_user.twilio_account_sid and current_user.twilio_auth_token)
+        or (_settings.twilio_account_sid and _settings.twilio_auth_token)
+    )
+    if not has_twilio_creds:
+        raise ValidationError(
+            "Twilio credentials are not configured. "
+            "Add your Account SID and Auth Token in Settings → Credentials."
+        )
+
+    from app.config import settings as _cfg
+    import structlog as _sl
+    _log = _sl.get_logger(__name__)
+
+    original_status = campaign.status
     campaign.status = "running"
     campaign.started_at = campaign.started_at or datetime.now(timezone.utc).isoformat()
     await db.commit()
 
-    # Enqueue the first contact dial via ARQ
+    if _cfg.campaign_debug:
+        _log.debug("campaign_start_committed",
+                   campaign_id=campaign_id,
+                   name=campaign.name,
+                   max_concurrent=campaign.max_concurrent_calls,
+                   total_contacts=campaign.total_contacts)
+
+    # Enqueue N staggered dial jobs — one per configured parallel slot.
+    # Each job checks the slot ceiling before dialling, so the concurrency
+    # limits in campaign_tasks.py act as the real throttle.
     try:
         from arq import create_pool
         from arq.connections import RedisSettings
         from app.config import settings
         pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-        await pool.enqueue_job("dial_next_contact", campaign.id)
+        slots = max(1, campaign.max_concurrent_calls)
+        for i in range(slots):
+            await pool.enqueue_job("dial_next_contact", campaign.id, _defer_by=i)
         await pool.aclose()
     except Exception:
-        pass
+        # Roll back — don't leave campaign stuck in "running" with no worker jobs.
+        campaign.status = original_status
+        await db.commit()
+        raise ValidationError(
+            "Failed to queue campaign jobs — the background worker is unreachable. "
+            "Ensure Redis and the ARQ worker are running, then try again."
+        )
 
     return MessageResponse(message=f"Campaign started: {campaign.name}")
 

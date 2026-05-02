@@ -47,12 +47,12 @@ const featureIcons = {
 };
 
 const features = [
-  { icon: featureIcons.phone,    color: '#7C6EFA', title: 'Outbound Campaigns',  desc: 'Launch AI-powered campaigns at scale. Personalize every call with live CRM data.' },
-  { icon: featureIcons.mic,      color: '#22D3EE', title: 'Inbound Handling',    desc: 'Your agent answers, qualifies, and routes — 24/7. Never miss a call again.' },
-  { icon: featureIcons.activity, color: '#10B981', title: 'Live Transcription',  desc: 'Every word transcribed in real time. Review, search, and share conversations instantly.' },
-  { icon: featureIcons.grid,     color: '#F59E0B', title: 'Tool Integrations',   desc: 'Connect CRM, calendars, product catalogs. Your agent acts on real data, not guesses.' },
-  { icon: featureIcons.smile,    color: '#A89AF9', title: 'Custom Persona',      desc: 'Choose voices or clone your own. Set tone, style, and personality per agent.' },
-  { icon: featureIcons.chart,    color: '#22D3EE', title: 'Analytics',           desc: 'Track outcomes, sentiment, and conversion. Continuously improve with every call.' },
+  { icon: featureIcons.phone,    color: '#00D082', title: 'Outbound Campaigns',  desc: 'Launch AI-powered campaigns at scale. Personalize every call with live CRM data.' },
+  { icon: featureIcons.mic,      color: '#38BDF8', title: 'Inbound Handling',    desc: 'Your agent answers, qualifies, and routes — 24/7. Never miss a call again.' },
+  { icon: featureIcons.activity, color: '#00C2B8', title: 'Live Transcription',  desc: 'Every word transcribed in real time. Review, search, and share conversations instantly.' },
+  { icon: featureIcons.grid,     color: '#F0B429', title: 'Tool Integrations',   desc: 'Connect CRM, calendars, product catalogs. Your agent acts on real data, not guesses.' },
+  { icon: featureIcons.smile,    color: '#8B5CF6', title: 'Custom Persona',      desc: 'Choose voices or clone your own. Set tone, style, and personality per agent.' },
+  { icon: featureIcons.chart,    color: '#38BDF8', title: 'Analytics',           desc: 'Track outcomes, sentiment, and conversion. Continuously improve with every call.' },
 ];
 
 export function FeaturesSection() {
@@ -64,7 +64,7 @@ export function FeaturesSection() {
           Everything your voice team needs
         </SectionHeading>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
         {features.map((f) => (
           <FeatureCard key={f.title} {...f} />
         ))}
@@ -80,36 +80,49 @@ function FeatureCard({ icon, color, title, desc }: (typeof features)[number]) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        background: '#0D1422',
-        border: `1px solid ${hov ? `${color}35` : 'rgba(255,255,255,0.06)'}`,
+        background: hov ? 'rgba(9,20,38,0.80)' : 'rgba(9,20,38,0.55)',
+        border: `1px solid ${hov ? `${color}40` : 'rgba(0,208,130,0.08)'}`,
         borderRadius: 16,
-        padding: 24,
-        transition: 'all 0.25s',
+        padding: 26,
+        transition: 'all 0.3s',
         cursor: 'default',
-        transform: hov ? 'translateY(-2px)' : 'none',
-        boxShadow: hov ? `0 8px 32px ${color}12` : 'none',
+        transform: hov ? 'translateY(-3px)' : 'none',
+        boxShadow: hov ? `0 12px 40px ${color}15, 0 0 0 1px ${color}15` : '0 2px 12px rgba(0,0,0,0.2)',
+        backdropFilter: 'blur(20px) saturate(140%)',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
+      {/* top accent line on hover */}
+      {hov && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+          background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
+          opacity: 0.7,
+        }} />
+      )}
       <div
         style={{
-          width: 42,
-          height: 42,
-          borderRadius: 11,
-          background: `${color}14`,
-          border: `1px solid ${color}28`,
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          background: `${color}15`,
+          border: `1px solid ${color}30`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 18,
           color,
+          boxShadow: hov ? `0 0 16px ${color}25` : 'none',
+          transition: 'box-shadow 0.3s',
         }}
       >
         {icon}
       </div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: '#E2E8F0', marginBottom: 8, fontFamily: 'var(--font-inter), sans-serif' }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: '#E2E8F0', marginBottom: 8, fontFamily: 'var(--font-syne), sans-serif' }}>
         {title}
       </div>
-      <div style={{ fontSize: 13, color: '#3D4F68', lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
+      <div style={{ fontSize: 13, color: '#4A6080', lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
         {desc}
       </div>
     </div>
@@ -131,9 +144,9 @@ export function HowItWorksSection() {
       id="How It Works"
       style={{
         padding: '80px 0',
-        background: '#060910',
-        borderTop: '1px solid rgba(255,255,255,0.04)',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        background: 'rgba(6,9,16,0.9)',
+        borderTop: '1px solid rgba(0,208,130,0.07)',
+        borderBottom: '1px solid rgba(0,208,130,0.07)',
       }}
     >
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 80px' }}>
@@ -142,6 +155,7 @@ export function HowItWorksSection() {
           <SectionHeading>Four steps to your first live call</SectionHeading>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0, position: 'relative' }}>
+          {/* Connector line */}
           <div
             style={{
               position: 'absolute',
@@ -150,7 +164,7 @@ export function HowItWorksSection() {
               right: 'calc(12.5% + 8px)',
               height: 1,
               background:
-                'linear-gradient(90deg, transparent 0%, rgba(124,110,250,0.5) 30%, rgba(34,211,238,0.5) 70%, transparent 100%)',
+                'linear-gradient(90deg, transparent 0%, rgba(0,208,130,0.6) 30%, rgba(0,194,184,0.6) 70%, transparent 100%)',
             }}
           />
           {steps.map((s, i) => (
@@ -160,27 +174,30 @@ export function HowItWorksSection() {
                   width: 56,
                   height: 56,
                   borderRadius: '50%',
-                  background: i === 0 ? 'linear-gradient(135deg, #7C6EFA, #5B4FD4)' : '#0D1422',
-                  border: `1px solid ${i === 0 ? 'transparent' : 'rgba(255,255,255,0.09)'}`,
+                  background: i === 0
+                    ? 'linear-gradient(135deg, #00D082, #00A866)'
+                    : 'rgba(9,20,38,0.8)',
+                  border: `1px solid ${i === 0 ? 'transparent' : 'rgba(0,208,130,0.15)'}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto 22px',
                   fontFamily: 'var(--font-jetbrains-mono), monospace',
                   fontSize: 13,
-                  fontWeight: 600,
-                  color: i === 0 ? '#fff' : '#334155',
+                  fontWeight: 700,
+                  color: i === 0 ? '#060F1A' : '#334155',
                   position: 'relative',
                   zIndex: 1,
-                  boxShadow: i === 0 ? '0 0 20px rgba(124,110,250,0.4)' : 'none',
+                  boxShadow: i === 0 ? '0 0 24px rgba(0,208,130,0.5)' : 'none',
+                  backdropFilter: 'blur(12px)',
                 }}
               >
                 {s.n}
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#E2E8F0', marginBottom: 10, fontFamily: 'var(--font-inter), sans-serif' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#E2E8F0', marginBottom: 10, fontFamily: 'var(--font-syne), sans-serif' }}>
                 {s.title}
               </div>
-              <div style={{ fontSize: 12, color: '#3D4F68', lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
+              <div style={{ fontSize: 12, color: '#4A6080', lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
                 {s.desc}
               </div>
             </div>

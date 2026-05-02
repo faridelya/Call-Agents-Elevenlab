@@ -12,7 +12,7 @@ PARAMS = {
         "reason": {
             "type": "string",
             "enum": ["goal_achieved", "not_interested", "voicemail", "callback_requested", "no_answer", "completed"],
-            "description": "Why the call is ending",
+            "description": "Why the call is ending. NOTE: 'not_interested' does NOT mean end the call the moment the contact says no — it means the call concluded naturally after the contact confirmed disinterest and you said goodbye.",
         },
         "summary": {"type": "string", "description": "Brief summary of the conversation"},
     },

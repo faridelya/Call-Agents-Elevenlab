@@ -34,6 +34,14 @@ export function useAgentMetrics() {
   });
 }
 
+export function useCampaignOutcomes(campaignId?: string, agentId?: string) {
+  return useQuery({
+    queryKey: ['analytics', 'campaign-outcomes', campaignId ?? 'all', agentId ?? 'all'],
+    queryFn: () => analytics.campaignOutcomes(campaignId, agentId),
+    staleTime: 30_000,
+  });
+}
+
 export function useUsage() {
   return useQuery({
     queryKey: ['settings', 'usage'],

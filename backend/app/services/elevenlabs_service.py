@@ -80,12 +80,20 @@ class ElevenLabsService:
                 "dynamic_variables": dynamic_vars,
             }
 
+        if settings.campaign_debug:
+            log.debug("el_register_call_attempt",
+                      agent_id=agent_id,
+                      to_number=to_number,
+                      direction=direction,
+                      dynamic_vars_keys=list((dynamic_vars or {}).keys()))
+
         async with self._client() as c:
             # Correct endpoint uses a hyphen, not underscore
             r = await c.post(f"{self._base}/convai/twilio/register-call", json=payload)
             if r.status_code not in (200, 201):
                 log.error("el_register_call_failed",
-                          status=r.status_code, body=r.text[:300])
+                          status=r.status_code, body=r.text[:300],
+                          agent_id=agent_id, to_number=to_number)
                 raise ExternalServiceError("ElevenLabs", r.text)
 
             # EL returns raw TwiML (XML), not JSON
@@ -105,7 +113,8 @@ class ElevenLabsService:
             log.info("el_register_call_ok",
                      agent_id=agent_id,
                      conversation_id=conversation_id,
-                     direction=direction)
+                     direction=direction,
+                     to_number=to_number)
 
             return {
                 "conversation_id": conversation_id,
@@ -122,6 +131,61 @@ class ElevenLabsService:
         except Exception:
             pass
         return "unknown"
+
+    async def get_conversation_full(self, conversation_id: str) -> dict:
+        """Fetch transcript + duration + status in one API call.
+
+        Returns:
+            {
+                "status": str,                    # "done" | "failed" | "processing"
+                "duration_seconds": int | None,   # call duration from EL metadata
+                "transcript": list[dict],         # parsed [{role, text, timestamp}]
+            }
+        """
+        try:
+            async with self._client() as c:
+                r = await c.get(f"{self._base}/convai/conversations/{conversation_id}")
+                if r.status_code != 200:
+                    return {"status": "unknown", "duration_seconds": None, "transcript": []}
+
+                data = r.json()
+                status = data.get("status", "unknown")
+
+                meta = data.get("metadata", {})
+                duration_secs = meta.get("call_duration_secs")
+                duration = int(duration_secs) if duration_secs else None
+
+                start_unix = meta.get("start_time_unix_secs")
+                base_dt = (
+                    datetime.fromtimestamp(start_unix, tz=timezone.utc)
+                    if start_unix else datetime.now(timezone.utc)
+                )
+
+                transcript = []
+                for entry in data.get("transcript", []):
+                    text = (entry.get("message") or "").strip()
+                    if not text:
+                        continue
+                    time_offset = entry.get("time_in_call_secs", 0) or 0
+                    iso_ts = datetime.fromtimestamp(
+                        base_dt.timestamp() + time_offset, tz=timezone.utc
+                    ).isoformat()
+                    transcript.append({
+                        "role": "agent" if entry.get("role") == "agent" else "user",
+                        "text": text,
+                        "timestamp": iso_ts,
+                    })
+
+                log.info("el_conversation_full_fetched",
+                         conversation_id=conversation_id,
+                         status=status,
+                         messages=len(transcript),
+                         duration=duration)
+                return {"status": status, "duration_seconds": duration, "transcript": transcript}
+
+        except Exception as exc:
+            log.error("el_conversation_full_error", conversation_id=conversation_id, error=str(exc))
+            return {"status": "unknown", "duration_seconds": None, "transcript": []}
 
     async def get_conversation_transcript(self, conversation_id: str) -> list[dict]:
         """Fetch the full transcript for a completed ElevenLabs conversation.
@@ -183,10 +247,23 @@ class ElevenLabsService:
         """Build the full ElevenLabs agent config payload from a Voxara Agent model."""
         tool_definitions = self._build_tool_definitions(agent, tools)
 
-        llm_model   = getattr(agent, "llm_model", "gemini-1.5-flash") or "gemini-1.5-flash"
-        temperature = getattr(agent, "llm_temperature", 0.7) or 0.7
-        stability   = agent.voice_stability  if agent.voice_stability  is not None else 0.5
-        similarity  = agent.voice_similarity if agent.voice_similarity is not None else 0.75
+        llm_model    = getattr(agent, "llm_model",    "gemini-2.0-flash")         or "gemini-2.0-flash"
+        temperature  = getattr(agent, "llm_temperature", 0.7)                    or 0.7
+        tts_model    = getattr(agent, "tts_model",    "eleven_v3_conversational") or "eleven_v3_conversational"
+        stt_provider = getattr(agent, "stt_provider", "elevenlabs")              or "elevenlabs"
+        max_call_dur = getattr(agent, "max_call_duration_seconds", 1800)         or 1800
+
+        # TTS — stability/similarity are flat fields at the tts level (not nested in voice_settings).
+        # When None the agent uses the voice's own ElevenLabs defaults.
+        tts_config: dict = {
+            "voice_id": agent.voice_id,
+            "model_id": tts_model,
+            "optimize_streaming_latency": 3,
+        }
+        if agent.voice_stability is not None:
+            tts_config["stability"] = agent.voice_stability
+        if agent.voice_similarity is not None:
+            tts_config["similarity_boost"] = agent.voice_similarity
 
         return {
             "name": f"Voxara: {agent.name}",
@@ -202,25 +279,17 @@ class ElevenLabsService:
                     "first_message": agent.first_message or "",
                     "language": agent.language,
                 },
-                "tts": {
-                    "voice_id": agent.voice_id,
-                    "model_id": "eleven_turbo_v2",
-                    "voice_settings": {
-                        "stability": stability,
-                        "similarity_boost": similarity,
-                        "use_speaker_boost": True,
-                    },
-                    "optimize_streaming_latency": 3,
-                    "output_format": "ulaw_8000",
-                },
-                "stt": {
+                "tts": tts_config,
+                "asr": {
                     "quality": "high",
+                    "provider": stt_provider,
                 },
                 "turn": {
                     "turn_timeout": agent.silence_timeout_seconds,
                     "silence_end_call_timeout": 30,
                     "mode": "turn",
                 },
+                "max_duration_seconds": max_call_dur,
             },
             "platform_settings": {
                 "auth": {"enable_auth": False},

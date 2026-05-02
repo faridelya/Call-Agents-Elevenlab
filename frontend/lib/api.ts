@@ -53,11 +53,11 @@ export class ApiError extends Error {
   }
 }
 
-type FetchOpts = RequestInit & { auth?: boolean; retry?: boolean };
+type FetchOpts = RequestInit & { auth?: boolean; retry?: boolean; timeoutMs?: number };
 
 export async function apiFetch<T = unknown>(
   path: string,
-  { auth = true, retry = true, ...init }: FetchOpts = {},
+  { auth = true, retry = true, timeoutMs, ...init }: FetchOpts = {},
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -68,7 +68,12 @@ export async function apiFetch<T = unknown>(
     headers['Authorization'] = `Bearer ${tokenStore.get()}`;
   }
 
-  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+  const fetchInit: RequestInit = { ...init, headers };
+  if (timeoutMs && !fetchInit.signal) {
+    fetchInit.signal = AbortSignal.timeout(timeoutMs);
+  }
+
+  const res = await fetch(`${BASE}${path}`, fetchInit);
 
   // Auto-refresh on 401 and retry once
   if (res.status === 401 && retry) {
@@ -148,8 +153,10 @@ export interface Agent {
   silence_timeout_seconds: number;
   llm_model: string;
   llm_temperature: number;
-  voice_stability: number;
-  voice_similarity: number;
+  tts_model: string;
+  stt_provider: string;
+  voice_stability: number | null;
+  voice_similarity: number | null;
   call_script: {
     opener?: string;
     discovery?: string;
@@ -185,6 +192,8 @@ export interface AgentCreate {
   silence_timeout_seconds?: number;
   llm_model?: string;
   llm_temperature?: number;
+  tts_model?: string;
+  stt_provider?: string;
   voice_stability?: number;
   voice_similarity?: number;
   call_script?: {
@@ -305,8 +314,19 @@ export interface CampaignCreate {
   agent_id: string;
   phone_number_id?: string;
   call_interval_seconds?: number;
+  max_concurrent_calls?: number;
   contacts?: object[];
 }
+
+export const contactPool = {
+  get: () =>
+    apiFetch<{ contacts: object[]; total: number }>('/api/v1/campaigns/pool'),
+  save: (contacts: object[]) =>
+    apiFetch<{ message: string }>('/api/v1/campaigns/pool', {
+      method: 'PUT',
+      body: JSON.stringify({ contacts }),
+    }),
+};
 
 export const campaigns = {
   list: (page = 1) =>
@@ -324,16 +344,36 @@ export const campaigns = {
     apiFetch(`/api/v1/campaigns/${id}`, { method: 'DELETE' }),
 
   start: (id: string) =>
-    apiFetch<Campaign>(`/api/v1/campaigns/${id}/start`, { method: 'POST' }),
+    apiFetch<Campaign>(`/api/v1/campaigns/${id}/start`, { method: 'POST', timeoutMs: 12_000 }),
 
   pause: (id: string) =>
-    apiFetch<Campaign>(`/api/v1/campaigns/${id}/pause`, { method: 'POST' }),
+    apiFetch<Campaign>(`/api/v1/campaigns/${id}/pause`, { method: 'POST', timeoutMs: 12_000 }),
 
   resume: (id: string) =>
-    apiFetch<Campaign>(`/api/v1/campaigns/${id}/resume`, { method: 'POST' }),
+    apiFetch<Campaign>(`/api/v1/campaigns/${id}/resume`, { method: 'POST', timeoutMs: 12_000 }),
 
   stop: (id: string) =>
-    apiFetch<Campaign>(`/api/v1/campaigns/${id}/stop`, { method: 'POST' }),
+    apiFetch<Campaign>(`/api/v1/campaigns/${id}/stop`, { method: 'POST', timeoutMs: 12_000 }),
+};
+
+// ── Leads ─────────────────────────────────────────────────────────────────────
+
+export interface LeadCreate {
+  phone: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  notes?: string | null;
+  tags?: string[];
+  custom_fields?: Record<string, string>;
+}
+
+export const leads = {
+  create: (body: LeadCreate) =>
+    apiFetch<{ id: string; phone: string }>('/api/v1/leads', { method: 'POST', body: JSON.stringify(body) }),
+  list: (page = 1, search?: string) =>
+    apiFetch<PaginatedResponse<{ id: string; phone: string; first_name: string | null; last_name: string | null }>>(
+      `/api/v1/leads?page=${page}&page_size=50${search ? `&search=${encodeURIComponent(search)}` : ''}`
+    ),
 };
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
@@ -359,10 +399,25 @@ export interface OutcomeDistribution {
 export interface AgentMetrics {
   agents: Array<{
     agent_id: string;
+    agent_name: string | null;
     total_calls: number;
     avg_duration_seconds: number;
     avg_sentiment: number;
+    interested_count: number;
+    order_confirmed_count: number;
+    connect_later_count: number;
+    not_interested_count: number;
+    voicemail_count: number;
+    callback_count: number;
+    conversion_rate: number;
   }>;
+}
+
+export interface CampaignOutcomes {
+  campaigns: Array<{ id: string; name: string; status: string }>;
+  agents: Array<{ id: string; name: string }>;
+  outcomes: Array<{ outcome: string; count: number }>;
+  total_calls: number;
 }
 
 export const analytics = {
@@ -372,6 +427,13 @@ export const analytics = {
   outcomes: () => apiFetch<OutcomeDistribution>('/api/v1/analytics/outcomes'),
   agents: () => apiFetch<AgentMetrics>('/api/v1/analytics/agents'),
   campaigns: () => apiFetch<{ campaigns: object[] }>('/api/v1/analytics/campaigns'),
+  campaignOutcomes: (campaignId?: string, agentId?: string) => {
+    const params = new URLSearchParams();
+    if (campaignId) params.set('campaign_id', campaignId);
+    if (agentId) params.set('agent_id', agentId);
+    const qs = params.toString();
+    return apiFetch<CampaignOutcomes>(`/api/v1/analytics/campaign-outcomes${qs ? `?${qs}` : ''}`);
+  },
 };
 
 // ── Settings / Usage ──────────────────────────────────────────────────────────

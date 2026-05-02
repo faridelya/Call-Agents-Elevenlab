@@ -1,117 +1,761 @@
 'use client';
 
-import { useAnalyticsOverview, useCallsOverTime, useOutcomeDistribution, useAgentMetrics } from '@/lib/hooks/useAnalytics';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  useAnalyticsOverview,
+  useCallsOverTime,
+  useOutcomeDistribution,
+  useAgentMetrics,
+  useCampaignOutcomes,
+} from '@/lib/hooks/useAnalytics';
+import { OUTCOME_META, getOutcomeColor, getOutcomeLabel, getOutcomeIcon } from '@/lib/outcomeUtils';
 
-interface BarData { l: string; v: number; }
+function outcomeColor(o: string)  { return getOutcomeColor(o); }
+function outcomeLabel(o: string)  { return getOutcomeLabel(o); }
+function outcomeIcon(o: string)   { return getOutcomeIcon(o); }
 
-function BarChart({ data, color = '#7C6EFA', height = 80 }: { data: BarData[]; color?: string; height?: number }) {
-  const max = Math.max(...data.map((d) => d.v), 1);
-  return (
-    <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height }}>
-      {data.map((d, i) => (
-        <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <div style={{ width: '100%', background: color, borderRadius: '3px 3px 0 0', height: `${(d.v / max) * height * 0.85}px`, opacity: 0.4 + 0.6 * (d.v / max), transition: 'height 0.4s' }} />
-          <span style={{ fontSize: 9, color: '#334155', whiteSpace: 'nowrap' }}>{d.l}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StatCard({ label, value, sub, trend }: { label: string; value: string; sub?: string; trend?: 'up' | 'down' }) {
-  return (
-    <div style={{ background: '#0F1623', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '18px 20px' }}>
-      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#334155', marginBottom: 10 }}>{label}</div>
-      <div style={{ fontSize: 30, fontWeight: 700, fontFamily: 'var(--font-jetbrains-mono), monospace', color: '#F1F5F9', lineHeight: 1, marginBottom: 6 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: trend === 'up' ? '#10B981' : trend === 'down' ? '#EF4444' : '#475569' }}>{sub}</div>}
-    </div>
-  );
-}
-
-function Skeleton({ h = 16, w = '100%', r = 6 }: { h?: number; w?: string | number; r?: number }) {
-  return <div style={{ width: w, height: h, borderRadius: r, background: 'rgba(255,255,255,0.05)', animation: 'shimmer 1.5s infinite' }} />;
-}
-
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDuration(secs: number) {
   if (!secs) return '—';
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}m ${String(s).padStart(2, '0')}s`;
 }
+function sentimentColor(score?: number) {
+  if (score == null) return '#3D607A';
+  if (score >= 0.65) return '#00D082';
+  if (score <= 0.35) return '#FF4D6D';
+  return '#7BA5C8';
+}
+function sentimentLabel(score?: number) {
+  if (score == null) return '—';
+  if (score >= 0.65) return 'Positive';
+  if (score <= 0.35) return 'Negative';
+  return 'Neutral';
+}
 
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+function Sk({ w = '100%', h = 14, r = 5 }: { w?: string | number; h?: number; r?: number }) {
+  return (
+    <div style={{
+      width: w, height: h, borderRadius: r,
+      background: 'linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.07) 50%,rgba(255,255,255,0.04) 75%)',
+      backgroundSize: '800px 100%', animation: 'shimmer 1.8s infinite linear',
+    }} />
+  );
+}
+
+// ─── Glass Card ───────────────────────────────────────────────────────────────
+function GCard({ children, style, glow }: { children: React.ReactNode; style?: React.CSSProperties; glow?: string }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        background: 'rgba(9,20,38,0.60)',
+        backdropFilter: 'blur(20px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+        border: `1px solid ${hov ? (glow ? `${glow}28` : 'rgba(0,208,130,0.18)') : 'rgba(255,255,255,0.07)'}`,
+        borderRadius: 16, overflow: 'hidden',
+        transform: hov ? 'translateY(-2px)' : 'translateY(0)',
+        boxShadow: hov
+          ? `0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)${glow ? `, 0 0 24px ${glow}10` : ''}`
+          : '0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
+        transition: 'all 0.25s ease-out',
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+function StatCard({ label, value, sub, trend, accent = '#00D082', delay = 0 }: {
+  label: string; value: string; sub?: string;
+  trend?: 'up' | 'down'; accent?: string; delay?: number;
+}) {
+  return (
+    <GCard glow={accent} style={{ padding: '22px 24px', animation: `fade-in 0.5s ${delay}ms both`, position: 'relative' } as any}>
+      <div style={{
+        position: 'absolute', top: 0, right: 0, width: 110, height: 110,
+        background: `radial-gradient(circle at 100% 0%, ${accent}14 0%, transparent 70%)`,
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
+        textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16,
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 30, fontWeight: 700, fontFamily: 'var(--font-mono)',
+        color: 'var(--text-primary)', lineHeight: 1, marginBottom: 8,
+        textShadow: `0 0 24px ${accent}35`,
+      }}>
+        {value}
+      </div>
+      {sub && (
+        <div style={{
+          fontSize: 11, color: trend === 'up' ? '#00D082' : trend === 'down' ? '#FF4D6D' : 'var(--text-muted)',
+          display: 'flex', alignItems: 'center', gap: 4,
+        }}>
+          {trend === 'up' && <span style={{ fontSize: 10 }}>↑</span>}
+          {trend === 'down' && <span style={{ fontSize: 10 }}>↓</span>}
+          {sub}
+        </div>
+      )}
+    </GCard>
+  );
+}
+
+// ─── Bar Chart ────────────────────────────────────────────────────────────────
+function BarChart({ data, height = 100 }: { data: { l: string; v: number; c?: string }[]; height?: number }) {
+  const max = Math.max(...data.map((d) => d.v), 1);
+  const [hovIdx, setHovIdx] = useState<number | null>(null);
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height }}>
+      {data.map((d, i) => {
+        const pct = (d.v / max) * 0.88;
+        const c = d.c ?? '#00D082';
+        const active = hovIdx === i;
+        return (
+          <div
+            key={i}
+            onMouseEnter={() => setHovIdx(i)}
+            onMouseLeave={() => setHovIdx(null)}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'default' }}
+          >
+            {active && (
+              <div style={{
+                fontSize: 10, fontWeight: 700, color: c,
+                background: `${c}18`, border: `1px solid ${c}35`,
+                borderRadius: 5, padding: '2px 6px', whiteSpace: 'nowrap',
+              }}>
+                {d.v}
+              </div>
+            )}
+            <div style={{
+              width: '100%', borderRadius: '4px 4px 0 0',
+              height: `${pct * height}px`,
+              background: active ? `linear-gradient(to top, ${c}, ${c}bb)` : `linear-gradient(to top, ${c}65, ${c}32)`,
+              boxShadow: active ? `0 0 12px ${c}45` : 'none',
+              transition: 'all 0.2s ease-out', minHeight: 2,
+            }} />
+            <span style={{ fontSize: 9, color: active ? c : 'var(--text-muted)', whiteSpace: 'nowrap', transition: 'color 0.15s' }}>
+              {d.l}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Funnel Bar ───────────────────────────────────────────────────────────────
+function FunnelBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const pct = max > 0 ? (value / max) * 100 : 0;
+  const [hov, setHov] = useState(false);
+  return (
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+        <span style={{ fontSize: 12, color: hov ? color : 'var(--text-secondary)', transition: 'color 0.15s' }}>{label}</span>
+        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: hov ? color : 'var(--text-muted)', fontWeight: 600, transition: 'color 0.15s' }}>
+          {value.toLocaleString()}
+        </span>
+      </div>
+      <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 9999, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', width: `${pct}%`,
+          background: `linear-gradient(90deg, ${color}, ${color}99)`,
+          borderRadius: 9999,
+          boxShadow: hov ? `0 0 8px ${color}55` : 'none',
+          transition: 'box-shadow 0.2s',
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Styled Select ────────────────────────────────────────────────────────────
+function SearchSelect({ value, onChange, options, placeholder }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { id: string; name: string }[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        panelRef.current && !panelRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleToggle = () => {
+    if (!open && btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen((o) => !o);
+    setSearch('');
+  };
+
+  const select = (id: string) => { onChange(id); setOpen(false); setSearch(''); };
+  const selected = options.find((o) => o.id === value);
+  const filtered = options.filter((o) => o.name.toLowerCase().includes(search.toLowerCase()));
+
+  const panel = open && rect ? createPortal(
+    <div ref={panelRef} style={{
+      position: 'fixed',
+      top: rect.bottom + 4, left: rect.left, width: rect.width,
+      background: '#0C1120', border: '1px solid rgba(0,208,130,0.22)',
+      borderRadius: 10, zIndex: 9999, overflow: 'hidden',
+      boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
+    }}>
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <input
+          autoFocus
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search…"
+          style={{
+            width: '100%', background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            borderRadius: 6, padding: '5px 10px',
+            fontSize: 11.5, color: 'var(--text-primary)', outline: 'none',
+            fontFamily: 'var(--font-ui)', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+      <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+        <div
+          onClick={() => select('')}
+          style={{
+            padding: '8px 12px', fontSize: 12, cursor: 'pointer',
+            color: !value ? '#00D082' : 'var(--text-muted)',
+            background: !value ? 'rgba(0,208,130,0.07)' : 'transparent',
+          }}
+          onMouseEnter={(e) => { if (value) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+          onMouseLeave={(e) => { if (value) e.currentTarget.style.background = 'transparent'; }}
+        >{placeholder ?? 'All'}</div>
+        {filtered.map((o) => (
+          <div
+            key={o.id}
+            onClick={() => select(o.id)}
+            style={{
+              padding: '8px 12px', fontSize: 12, cursor: 'pointer',
+              color: value === o.id ? '#00D082' : 'var(--text-secondary)',
+              background: value === o.id ? 'rgba(0,208,130,0.07)' : 'transparent',
+            }}
+            onMouseEnter={(e) => { if (value !== o.id) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+            onMouseLeave={(e) => { if (value !== o.id) e.currentTarget.style.background = 'transparent'; }}
+          >{o.name}</div>
+        ))}
+        {filtered.length === 0 && (
+          <div style={{ padding: 12, fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'center' }}>
+            No results
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
+  return (
+    <div style={{ position: 'relative', flex: 1 }}>
+      <button
+        ref={btnRef}
+        onClick={handleToggle}
+        style={{
+          width: '100%', background: open ? 'rgba(0,208,130,0.06)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${open ? 'rgba(0,208,130,0.4)' : 'rgba(255,255,255,0.10)'}`,
+          borderRadius: 9, padding: '7px 32px 7px 12px',
+          fontSize: 12, color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
+          cursor: 'pointer', outline: 'none', textAlign: 'left',
+          fontFamily: 'var(--font-ui)', transition: 'all 0.15s', display: 'block',
+        }}
+      >
+        {selected?.name ?? placeholder ?? 'Select…'}
+      </button>
+      <span style={{
+        position: 'absolute', right: 10, top: '50%',
+        transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`,
+        color: 'var(--text-muted)', fontSize: 10, pointerEvents: 'none',
+        transition: 'transform 0.2s',
+      }}>▾</span>
+      {panel}
+    </div>
+  );
+}
+
+// ─── Campaign Outcomes Card ───────────────────────────────────────────────────
+function CampaignOutcomesCard() {
+  const [selectedCampaign, setSelectedCampaign] = useState('');
+  const [selectedAgent, setSelectedAgent]       = useState('');
+
+  const { data, isLoading } = useCampaignOutcomes(
+    selectedCampaign || undefined,
+    selectedAgent    || undefined,
+  );
+
+  const outcomes   = data?.outcomes   ?? [];
+  const campaigns  = data?.campaigns  ?? [];
+  const agents     = data?.agents     ?? [];
+  const totalCalls = data?.total_calls ?? 0;
+  const maxCount   = Math.max(...outcomes.map((o) => o.count), 1);
+
+  // Positive outcomes for mini summary
+  const positive = outcomes
+    .filter((o) => ['interested', 'order_confirmed', 'goal_achieved'].includes(o.outcome))
+    .reduce((s, o) => s + o.count, 0);
+  const convRate = totalCalls > 0 ? ((positive / totalCalls) * 100).toFixed(1) : '0.0';
+
+  return (
+    <GCard glow="#7C6EFA" style={{ padding: 0 }}>
+      {/* Header */}
+      <div style={{
+        padding: '22px 26px 18px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: 'linear-gradient(135deg, rgba(124,110,250,0.06) 0%, transparent 60%)',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', top: -30, right: -20, width: 180, height: 180,
+          background: 'radial-gradient(circle, rgba(124,110,250,0.08) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>
+              Campaign Outcomes
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Per-campaign breakdown by outcome</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {totalCalls > 0 && (
+              <>
+                <div style={{
+                  padding: '3px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 700,
+                  background: 'rgba(0,208,130,0.10)', border: '1px solid rgba(0,208,130,0.22)',
+                  color: '#00D082', fontFamily: 'var(--font-mono)',
+                }}>
+                  {convRate}% conv
+                </div>
+                <div style={{
+                  padding: '3px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600,
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                  color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                }}>
+                  {totalCalls.toLocaleString()} calls
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Selectors */}
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <SearchSelect
+            value={selectedAgent}
+            onChange={setSelectedAgent}
+            placeholder="All Agents"
+            options={agents.map((a) => ({ id: a.id, name: a.name }))}
+          />
+          <SearchSelect
+            value={selectedCampaign}
+            onChange={setSelectedCampaign}
+            placeholder="All Campaigns"
+            options={campaigns.map((c) => ({ id: c.id, name: c.name }))}
+          />
+        </div>
+      </div>
+
+      {/* Outcome rows */}
+      <div style={{ padding: '16px 26px 20px' }}>
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
+                <Sk h={11} w={100} />
+                <Sk h={11} w={40} />
+              </div>
+              <Sk h={4} r={9999} />
+            </div>
+          ))
+        ) : outcomes.length === 0 ? (
+          <div style={{
+            padding: '32px 0', textAlign: 'center',
+            color: 'var(--text-muted)', fontSize: 13,
+          }}>
+            No campaign calls recorded yet
+          </div>
+        ) : (
+          outcomes.map((o, idx) => {
+            const color = outcomeColor(o.outcome);
+            const label = outcomeLabel(o.outcome);
+            const icon  = outcomeIcon(o.outcome);
+            const pct   = (o.count / maxCount) * 100;
+            const pctOfTotal = totalCalls > 0 ? ((o.count / totalCalls) * 100).toFixed(1) : '0';
+
+            return (
+              <OutcomeRow
+                key={o.outcome}
+                icon={icon}
+                label={label}
+                color={color}
+                count={o.count}
+                pct={pct}
+                pctOfTotal={pctOfTotal}
+                delay={idx * 50}
+              />
+            );
+          })
+        )}
+      </div>
+    </GCard>
+  );
+}
+
+function OutcomeRow({ icon, label, color, count, pct, pctOfTotal, delay }: {
+  icon: string; label: string; color: string;
+  count: number; pct: number; pctOfTotal: string; delay: number;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        marginBottom: 11,
+        opacity: 1,
+        animation: `fade-in 0.4s ${delay}ms both`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontSize: 11, color: hov ? color : `${color}99`,
+            transition: 'color 0.15s', lineHeight: 1,
+          }}>
+            {icon}
+          </span>
+          <span style={{
+            fontSize: 12, fontWeight: 600,
+            color: hov ? 'var(--text-primary)' : 'var(--text-secondary)',
+            transition: 'color 0.15s',
+            letterSpacing: '0.01em',
+          }}>
+            {label}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            fontSize: 12.5, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            color: hov ? color : 'var(--text-primary)',
+            transition: 'color 0.15s',
+          }}>
+            {count.toLocaleString()}
+          </span>
+          <span style={{
+            fontSize: 10.5, fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)', minWidth: 38, textAlign: 'right',
+          }}>
+            {pctOfTotal}%
+          </span>
+        </div>
+      </div>
+      <div style={{ height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 9999, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', width: `${pct}%`,
+          background: hov
+            ? `linear-gradient(90deg, ${color}, ${color}cc)`
+            : `linear-gradient(90deg, ${color}80, ${color}44)`,
+          borderRadius: 9999,
+          boxShadow: hov ? `0 0 10px ${color}50` : 'none',
+          transition: 'all 0.25s ease-out',
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Analytics View ───────────────────────────────────────────────────────────
 export function AnalyticsView() {
-  const { data: overview, isLoading: overviewLoading } = useAnalyticsOverview();
-  const { data: callsTime, isLoading: callsLoading }   = useCallsOverTime('day');
-  const { data: outcomes,  isLoading: outcomesLoading } = useOutcomeDistribution();
+  const [range, setRange] = useState<'day' | 'week'>('day');
 
-  // Format calls-over-time into bar chart data (last 7 entries)
-  const callsBarData: BarData[] = (callsTime?.data ?? []).slice(-7).map((d) => ({
-    l: new Date(d.period).toLocaleDateString('en-US', { weekday: 'short' }),
+  const { data: overview, isLoading: ovLoad } = useAnalyticsOverview();
+  const { data: callsTime, isLoading: ctLoad } = useCallsOverTime(range);
+  const { data: outcomes, isLoading: ouLoad }  = useOutcomeDistribution();
+  const { data: agentMet, isLoading: amLoad }  = useAgentMetrics();
+
+  const callsBarData = (callsTime?.data ?? []).slice(-14).map((d: any) => ({
+    l: range === 'day'
+      ? new Date(d.period).toLocaleDateString('en-US', { weekday: 'short' })
+      : `W${Math.ceil(new Date(d.period).getDate() / 7)}`,
     v: d.count,
   }));
 
-  const outcomeBarData: BarData[] = (outcomes?.outcomes ?? []).slice(0, 6).map((o) => ({
-    l: o.outcome.replace(/_/g, ' ').slice(0, 5),
+  const outcomePairs = (outcomes?.outcomes ?? []).slice(0, 8).map((o: any) => ({
+    l: outcomeLabel(o.outcome).slice(0, 7),
     v: o.count,
+    c: outcomeColor(o.outcome),
   }));
 
+  const funnelItems = [
+    { label: 'Total Calls',    value: overview?.total_calls       ?? 0, color: '#38BDF8' },
+    { label: 'Connected',      value: overview?.completed_calls   ?? 0, color: '#00C2B8' },
+    { label: 'Interested',     value: overview?.interested_outcomes ?? 0, color: '#00D082' },
+    { label: 'Qualified Leads',value: overview?.qualified_leads   ?? 0, color: '#F0B429' },
+  ];
+
+  const agentList = agentMet?.agents ?? [];
+
   return (
-    <div style={{ padding: '28px 32px' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: 'var(--font-syne), sans-serif', fontSize: 22, fontWeight: 700, color: '#F1F5F9', letterSpacing: '-0.02em', marginBottom: 3 }}>Analytics</h1>
-        <p style={{ fontSize: 12, color: '#475569' }}>All time · All agents</p>
+    <div style={{ padding: '32px 36px', minHeight: '100vh', animation: 'fade-in 0.4s both' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+        <div>
+          <h1 style={{
+            fontFamily: 'var(--font-syne)', fontSize: 26, fontWeight: 700,
+            color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 6,
+          }}>Analytics</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>All time · All agents</p>
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['day', 'week'] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              style={{
+                padding: '6px 14px', borderRadius: 8,
+                background: range === r ? 'rgba(0,208,130,0.12)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${range === r ? 'rgba(0,208,130,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                color: range === r ? '#00D082' : 'var(--text-muted)',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                textTransform: 'capitalize',
+              }}
+            >
+              {r === 'day' ? 'Daily' : 'Weekly'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-        {overviewLoading ? (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 20 }}>
+        {ovLoad ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} style={{ background: '#0F1623', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '18px 20px' }}>
-              <Skeleton h={10} w="60%" /><div style={{ marginTop: 10 }} /><Skeleton h={30} w="70%" />
-            </div>
+            <GCard key={i} style={{ padding: '22px 24px', height: 110 }}>
+              <Sk h={10} w="55%" /><div style={{ marginTop: 14 }} /><Sk h={28} w="65%" />
+            </GCard>
           ))
         ) : (
           <>
-            <StatCard label="Total Calls"        value={overview?.total_calls?.toLocaleString() ?? '0'} sub={`${overview?.completed_calls ?? 0} completed`} trend="up" />
-            <StatCard label="Avg Duration"        value={fmtDuration(overview?.avg_call_duration_seconds ?? 0)} />
-            <StatCard label="Conversion Rate"     value={`${overview?.conversion_rate ?? 0}%`} sub={`${overview?.interested_outcomes ?? 0} interested`} trend="up" />
-            <StatCard label="Qualified Leads"     value={String(overview?.qualified_leads ?? 0)} sub={`of ${overview?.total_leads ?? 0} total leads`} trend="up" />
+            <StatCard label="Total Calls" value={overview?.total_calls?.toLocaleString() ?? '0'}
+              sub={`${overview?.completed_calls ?? 0} completed`} trend="up" accent="#00D082" delay={0} />
+            <StatCard label="Avg Duration" value={fmtDuration(overview?.avg_call_duration_seconds ?? 0)}
+              accent="#38BDF8" delay={60} />
+            <StatCard label="Conversion Rate" value={`${overview?.conversion_rate ?? 0}%`}
+              sub={`${overview?.interested_outcomes ?? 0} interested`} trend="up" accent="#00C2B8" delay={120} />
+            <StatCard label="Qualified Leads" value={String(overview?.qualified_leads ?? 0)}
+              sub={`of ${overview?.total_leads ?? 0} total`} trend="up" accent="#F0B429" delay={180} />
           </>
         )}
       </div>
 
       {/* Charts row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
-        <div style={{ background: '#0F1623', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#F1F5F9', marginBottom: 4 }}>Calls over time</div>
-          <div style={{ fontSize: 11, color: '#475569', marginBottom: 16 }}>Daily</div>
-          {callsLoading ? (
-            <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Skeleton h={100} />
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 20 }}>
+        {/* Calls over time */}
+        <GCard style={{ padding: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+                Calls Over Time
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                {range === 'day' ? 'Last 14 days' : 'By week'}
+              </div>
+            </div>
+            <div style={{
+              fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 9999,
+              background: 'rgba(0,208,130,0.10)', color: '#00D082', border: '1px solid rgba(0,208,130,0.22)',
+            }}>
+              {callsBarData.reduce((s, d) => s + d.v, 0)} calls
+            </div>
+          </div>
+          {ctLoad ? (
+            <div style={{ height: 120, display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+              {Array.from({ length: 14 }).map((_, i) => (
+                <div key={i} style={{ flex: 1, height: `${30 + Math.random() * 70}%`, borderRadius: '3px 3px 0 0', background: 'rgba(255,255,255,0.05)' }} />
+              ))}
             </div>
           ) : callsBarData.length === 0 ? (
-            <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#334155', fontSize: 12 }}>No data yet</div>
-          ) : (
-            <BarChart data={callsBarData} color="#7C6EFA" height={100} />
-          )}
-        </div>
-
-        <div style={{ background: '#0F1623', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#F1F5F9', marginBottom: 4 }}>Call outcomes</div>
-          <div style={{ fontSize: 11, color: '#475569', marginBottom: 16 }}>Distribution</div>
-          {outcomesLoading ? (
-            <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Skeleton h={100} />
+            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              No data yet
             </div>
-          ) : outcomeBarData.length === 0 ? (
-            <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#334155', fontSize: 12 }}>No outcomes yet</div>
           ) : (
-            <BarChart data={outcomeBarData} color="#22D3EE" height={100} />
+            <BarChart data={callsBarData} height={120} />
           )}
-        </div>
+        </GCard>
+
+        {/* Outcome distribution */}
+        <GCard style={{ padding: 24 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Call Outcomes</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 18 }}>Distribution</div>
+          {ouLoad ? (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 120 }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} style={{ flex: 1, height: `${30 + Math.random() * 70}%`, background: 'rgba(255,255,255,0.05)', borderRadius: '3px 3px 0 0' }} />
+              ))}
+            </div>
+          ) : outcomePairs.length === 0 ? (
+            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              No outcomes yet
+            </div>
+          ) : (
+            <BarChart data={outcomePairs} height={120} />
+          )}
+        </GCard>
       </div>
 
-      <style>{`@keyframes shimmer{0%,100%{opacity:0.5}50%{opacity:1}}`}</style>
+      {/* Funnel + Agent table */}
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, marginBottom: 20 }}>
+        {/* Lead funnel */}
+        <GCard style={{ padding: 24 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Lead Funnel</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 18 }}>New → Converted</div>
+          {ovLoad ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{ marginBottom: 12 }}>
+                <Sk h={10} w="60%" /><div style={{ marginTop: 6 }} /><Sk h={5} r={9999} />
+              </div>
+            ))
+          ) : (
+            funnelItems.map((item) => (
+              <FunnelBar key={item.label} label={item.label} value={item.value}
+                max={overview?.total_calls ?? 1} color={item.color} />
+            ))
+          )}
+        </GCard>
+
+        {/* Per-agent performance table */}
+        <GCard style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '20px 24px 14px' }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Agent Performance</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Per-agent outcome breakdown</div>
+          </div>
+
+          {/* Table header */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1.5fr 52px 62px 70px 75px 68px 75px 80px 62px',
+            padding: '8px 24px',
+            background: 'rgba(255,255,255,0.025)',
+            borderTop: '1px solid rgba(255,255,255,0.05)',
+            borderBottom: '1px solid rgba(255,255,255,0.05)',
+            gap: 4,
+          }}>
+            {['Agent','Calls','Talk %','Interested','Confirmed','Follow-up','No Interest','Voicemail','Conv %'].map((h) => (
+              <div key={h} style={{
+                fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.08em', color: 'var(--text-muted)',
+              }}>{h}</div>
+            ))}
+          </div>
+
+          {/* Table rows */}
+          {amLoad ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} style={{
+                display: 'grid', gridTemplateColumns: '1.5fr 52px 62px 70px 75px 68px 75px 80px 62px',
+                padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)', gap: 4,
+              }}>
+                <Sk h={11} w="70%" />
+                {Array.from({ length: 8 }).map((_, j) => <Sk key={j} h={11} w="50%" />)}
+              </div>
+            ))
+          ) : agentList.length === 0 ? (
+            <div style={{ padding: '30px 24px', color: 'var(--text-muted)', fontSize: 12, textAlign: 'center' }}>
+              No agent data yet
+            </div>
+          ) : (
+            agentList.map((a: any, idx: number) => {
+              const total = a.total_calls ?? 0;
+              const vm = a.voicemail_count ?? 0;
+              const talkRate = total > 0 ? Math.round(((total - vm) / total) * 100) : 0;
+              const talkColor = talkRate >= 70 ? '#00D082' : talkRate >= 40 ? '#F0B429' : '#FF4D6D';
+              return (
+                <div
+                  key={a.agent_id}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '1.5fr 52px 62px 70px 75px 68px 75px 80px 62px',
+                    padding: '11px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    animation: `fade-in 0.4s ${idx * 60}ms both`, gap: 4,
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <div style={{
+                    fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                      background: sentimentColor(a.avg_sentiment),
+                      boxShadow: `0 0 6px ${sentimentColor(a.avg_sentiment)}80`,
+                    }} />
+                    {a.agent_name ?? `Agent ${a.agent_id.slice(0, 6)}`}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                    {total}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: talkColor, fontWeight: 700 }}>
+                    {talkRate}%
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00D082' }}>
+                    {a.interested_count ?? 0}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00C2B8' }}>
+                    {a.order_confirmed_count ?? 0}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#A89AF9' }}>
+                    {a.connect_later_count ?? 0}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#FF4D6D' }}>
+                    {a.not_interested_count ?? 0}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#94A3B8' }}>
+                    {vm}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00C2B8', fontWeight: 700 }}>
+                    {a.conversion_rate ?? 0}%
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </GCard>
+      </div>
+
+      {/* Campaign Outcomes Card — full width */}
+      <CampaignOutcomesCard />
+
     </div>
   );
 }

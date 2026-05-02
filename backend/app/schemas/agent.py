@@ -19,10 +19,12 @@ class AgentCreate(BaseModel):
     inbound_phone_number: str | None = None  # inbound number (stored in phone_numbers table)
     max_call_duration_seconds: int = 1800
     silence_timeout_seconds: int = 10
-    llm_model: str = "gemini-1.5-flash"
+    llm_model: str = "gemini-2.0-flash"
     llm_temperature: float = 0.7
-    voice_stability: float = 0.5
-    voice_similarity: float = 0.75
+    tts_model: str = "eleven_v3_conversational"
+    stt_provider: str = "elevenlabs"
+    voice_stability: float | None = None
+    voice_similarity: float | None = None
     call_script: dict = Field(default_factory=dict)
     enabled_tools: list[str] = Field(default_factory=list)
     tool_configs: dict = Field(default_factory=dict)
@@ -47,6 +49,8 @@ class AgentUpdate(BaseModel):
     silence_timeout_seconds: int | None = None
     llm_model: str | None = None
     llm_temperature: float | None = None
+    tts_model: str | None = None
+    stt_provider: str | None = None
     voice_stability: float | None = None
     voice_similarity: float | None = None
     call_script: dict | None = None
@@ -80,8 +84,10 @@ class AgentResponse(BaseModel):
     silence_timeout_seconds: int
     llm_model: str
     llm_temperature: float
-    voice_stability: float
-    voice_similarity: float
+    tts_model: str
+    stt_provider: str
+    voice_stability: float | None
+    voice_similarity: float | None
     call_script: dict
     enabled_tools: list
     tool_configs: dict
