@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useUsage } from '@/lib/hooks/useAnalytics';
-import { settings as settingsApi, type CredentialsData } from '@/lib/api';
+import { settings as settingsApi, type CredentialsData, type ElevenLabsCostData } from '@/lib/api';
 
 // ─── Shared inputs ────────────────────────────────────────────────────────────
 function CredInput({ value, onChange, placeholder, disabled, accent, type = 'text' }: {
@@ -556,6 +556,226 @@ function CredentialsTab() {
   );
 }
 
+// ─── Cost monitoring tab ─────────────────────────────────────────────────────
+function CostMonitoringTab() {
+  const [cost, setCost] = useState<ElevenLabsCostData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refresh() {
+    setLoading(true);
+    setError(null);
+    try {
+      setCost(await settingsApi.getElevenLabsCost());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load ElevenLabs usage');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { refresh(); }, []);
+
+  const level = cost?.warning_level ?? 'ok';
+  const accent =
+    level === 'error' || level === 'critical' ? '#FF4D6D'
+      : level === 'warning' ? '#F0B429'
+      : '#00D082';
+  const usage = Math.min(Math.max(cost?.character_usage_percent ?? 0, 0), 100);
+  const remaining = cost?.character_remaining ?? 0;
+  const limit = cost?.character_limit ?? 0;
+  const used = cost?.character_count ?? 0;
+  const resetDate = cost?.next_character_count_reset_unix
+    ? new Date(cost.next_character_count_reset_unix * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Not provided';
+
+  function money(cents?: number | null, currency?: string | null) {
+    if (cents == null) return '—';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: (currency || 'usd').toUpperCase(),
+    }).format(cents / 100);
+  }
+
+  function period(value?: string | null) {
+    return value ? value.replaceAll('_', ' ') : '—';
+  }
+
+  if (loading) {
+    return (
+      <div style={{ maxWidth: 900, padding: 24, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, background: 'rgba(9,20,38,0.60)', color: 'var(--text-muted)' }}>
+        Loading ElevenLabs cost and quota data…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ maxWidth: 900, padding: 24, border: '1px solid rgba(255,77,109,0.22)', borderRadius: 16, background: 'rgba(255,77,109,0.05)', color: '#FFB4C2' }}>
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 980, animation: 'fade-in 0.4s both' }}>
+      <div style={{
+        background: 'rgba(9,20,38,0.66)',
+        border: `1px solid ${accent}30`,
+        borderRadius: 16,
+        padding: '22px 24px',
+        marginBottom: 16,
+        position: 'relative',
+        overflow: 'hidden',
+        boxShadow: `0 0 24px ${accent}10`,
+      }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${accent}00, ${accent}88, ${accent}00)` }} />
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: 11,
+            background: `${accent}14`, border: `1px solid ${accent}30`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round">
+              <path d="M3 3v18h18"/><path d="M7 14l3-3 3 2 5-7"/><path d="M18 6h-4"/><path d="M18 6v4"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 6 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-syne)' }}>
+                ElevenLabs Cost Monitoring
+              </h3>
+              <button
+                onClick={refresh}
+                style={{
+                  padding: '7px 12px', borderRadius: 8, cursor: 'pointer',
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)',
+                  color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700,
+                }}
+              >
+                Refresh
+              </button>
+            </div>
+            <p style={{ margin: 0, color: accent, fontSize: 12.5, lineHeight: 1.6 }}>
+              {cost?.warning_message || 'ElevenLabs usage is within the normal range.'}
+            </p>
+            {cost?.cached && (
+              <div style={{ marginTop: 6, fontSize: 10.5, color: 'var(--text-muted)' }}>
+                Showing cached data, refreshed every 5 minutes.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div style={{
+          background: 'rgba(9,20,38,0.60)', border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 16, padding: '22px 24px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5 }}>
+                Character Quota
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                {remaining.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+                remaining of {limit.toLocaleString()} characters
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: accent, fontFamily: 'var(--font-mono)' }}>{usage.toFixed(1)}%</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>used</div>
+            </div>
+          </div>
+
+          <div style={{ height: 12, background: 'rgba(255,255,255,0.05)', borderRadius: 999, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ width: `${usage}%`, height: '100%', background: `linear-gradient(90deg, ${accent}, ${accent}AA)`, borderRadius: 999, transition: 'width 0.3s' }} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 18 }}>
+            {[
+              ['Used', used.toLocaleString()],
+              ['Remaining', remaining.toLocaleString()],
+              ['Reset', resetDate],
+            ].map(([label, value]) => (
+              <div key={label} style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 11 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5 }}>{label}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{
+          background: 'rgba(9,20,38,0.60)', border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 16, padding: '22px 24px',
+        }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>
+            Subscription
+          </div>
+          {[
+            ['Plan', cost?.tier ?? 'unknown'],
+            ['Status', cost?.status ?? 'unknown'],
+            ['Billing period', period(cost?.billing_period)],
+            ['Refresh period', period(cost?.character_refresh_period)],
+            ['Overage allowed', cost?.can_extend_character_limit && cost?.allowed_to_extend_character_limit ? 'Yes' : 'No'],
+            ['Max extension', cost?.max_character_limit_extension != null ? cost.max_character_limit_extension.toLocaleString() : '—'],
+          ].map(([label, value]) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: label === 'Status' || label === 'Plan' ? 'capitalize' : 'none', textAlign: 'right' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{
+          background: 'rgba(9,20,38,0.60)', border: `1px solid ${cost?.has_open_invoices ? 'rgba(240,180,41,0.24)' : 'rgba(255,255,255,0.08)'}`,
+          borderRadius: 16, padding: '20px 22px',
+        }}>
+          <div style={{ fontSize: 10, color: '#F0B429', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>
+            Billing Signals
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Open invoices</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: cost?.has_open_invoices ? '#F0B429' : '#00D082' }}>
+              {cost?.has_open_invoices ? `${cost.open_invoices.length || 1} open` : 'None'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Next invoice</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
+              {money(cost?.next_invoice?.amount_due_cents, cost?.currency)}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Payment status</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
+              {cost?.next_invoice?.payment_intent_status ?? '—'}
+            </span>
+          </div>
+        </div>
+
+        <div style={{
+          background: 'rgba(9,20,38,0.60)', border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 16, padding: '20px 22px',
+        }}>
+          <div style={{ fontSize: 10, color: '#38BDF8', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
+            Why This Matters
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+            ElevenLabs may reject or terminate conversations when quota is exhausted, billing is inactive, or invoices require attention. This panel gives an early warning before test calls or campaigns start dropping without an obvious frontend error.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Account tab ──────────────────────────────────────────────────────────────
 function AccountTab() {
   const { user, logout } = useAuth();
@@ -643,7 +863,7 @@ function AccountTab() {
 }
 
 // ─── Main Settings View ───────────────────────────────────────────────────────
-type Tab = 'credentials' | 'account';
+type Tab = 'credentials' | 'cost' | 'account';
 
 export function SettingsView() {
   const [tab, setTab] = useState<Tab>('credentials');
@@ -663,7 +883,7 @@ export function SettingsView() {
           Settings
         </h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Manage API credentials, webhooks, and account details.
+          Manage API credentials, cost monitoring, webhooks, and account details.
         </p>
       </div>
 
@@ -673,7 +893,7 @@ export function SettingsView() {
         padding: 3, background: 'rgba(255,255,255,0.03)',
         border: '1px solid rgba(255,255,255,0.07)', borderRadius: 11,
       }}>
-        {(['credentials', 'account'] as Tab[]).map((t) => (
+        {(['credentials', 'cost', 'account'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -697,6 +917,7 @@ export function SettingsView() {
       </div>
 
       {tab === 'credentials' && <CredentialsTab />}
+      {tab === 'cost' && <CostMonitoringTab />}
       {tab === 'account' && <AccountTab />}
     </div>
   );

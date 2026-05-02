@@ -58,8 +58,18 @@ POSITIVE_OUTCOMES = {
 }
 
 
-async def post_call_processing(ctx: dict, call_id: str) -> None:
-    """ARQ task — runs after every call ends."""
+async def post_call_processing(
+    ctx: dict,
+    call_id: str,
+    llm_model: str = "",
+    llm_temperature: float = 0.0,
+    stt_provider: str = "",
+) -> None:
+    """ARQ task — runs after every call ends.
+
+    llm_model, llm_temperature, stt_provider are passed from _finalize_call via
+    the Redis call context — no extra DB fetch needed here.
+    """
     db_factory = ctx["db_factory"]
     redis = ctx["redis"]
 
@@ -84,9 +94,15 @@ async def post_call_processing(ctx: dict, call_id: str) -> None:
 
             fresh = conv["transcript"]
             if fresh and len(fresh) >= len(call.transcript or []):
-                call.transcript = fresh
+                # Preserve system/human_agent entries that EL doesn't track
+                extras = [
+                    e for e in (call.transcript or [])
+                    if e.get("role") in ("system", "human_agent")
+                ]
+                call.transcript = fresh + extras
                 log.info("post_call_el_transcript_saved",
                          call_id=call_id, msgs=len(fresh),
+                         extras=len(extras),
                          conv_id=call.elevenlabs_conversation_id)
 
         # Fallback: Redis bridge messages (legacy path)
@@ -101,28 +117,39 @@ async def post_call_processing(ctx: dict, call_id: str) -> None:
             if raw_stages:
                 call.stage_timeline = [json.loads(s) for s in raw_stages]
 
-        # ── 2. LLM: classify outcome + generate summary (single call) ─────────
-        # Pass any tool-logged outcome as a hint; LLM can confirm or override.
-        hint = call.outcome  # set by log_call_outcome tool during the live call
-        analysis = await _llm_analyze_call(call.transcript, hint_outcome=hint)
-
-        if analysis:
-            # LLM wins when confident (>= 0.7) OR no tool hint was logged
-            if not hint or analysis.get("confidence", 0) >= 0.7:
-                call.outcome = analysis.get("outcome") or hint
-            if not call.auto_summary:
-                call.auto_summary = analysis.get("summary")
-            if not call.next_action and analysis.get("next_action"):
-                call.next_action = analysis.get("next_action")
-
-            log.info("post_call_outcome_classified",
+        # ── 2. LLM: classify outcome + generate summary ───────────────────────
+        # Skip if the EL webhook already ran classification — no duplicate LLM cost.
+        # The webhook sets both auto_summary and outcome when it succeeds.
+        already_classified = bool(call.auto_summary and call.outcome)
+        if already_classified:
+            log.info("post_call_llm_skipped",
                      call_id=call_id,
-                     outcome=call.outcome,
-                     hint_was=hint,
-                     confidence=analysis.get("confidence"),
-                     overrode_hint=hint is not None and call.outcome != hint)
+                     reason="el_webhook_already_classified",
+                     outcome=call.outcome)
+        else:
+            hint = call.outcome  # set by log_call_outcome tool during the live call
+            analysis = await _llm_analyze_call(
+                call.transcript,
+                hint_outcome=hint,
+                llm_model=llm_model or None,
+                llm_temperature=llm_temperature or None,
+            )
+            if analysis:
+                if not hint or analysis.get("confidence", 0) >= 0.7:
+                    call.outcome = analysis.get("outcome") or hint
+                if not call.auto_summary:
+                    call.auto_summary = analysis.get("summary")
+                if not call.next_action and analysis.get("next_action"):
+                    call.next_action = analysis.get("next_action")
+                log.info("post_call_outcome_classified",
+                         call_id=call_id,
+                         outcome=call.outcome,
+                         hint_was=hint,
+                         confidence=analysis.get("confidence"),
+                         overrode_hint=hint is not None and call.outcome != hint)
 
-        # ── 3. Sentiment (keyword heuristic — no LLM cost) ───────────────────
+        # ── 3. Sentiment + talk ratio (cheap heuristic, always recompute) ─────
+        # Recompute since transcript may have been updated by step 1 above.
         call.sentiment_score = _compute_sentiment(call.transcript)
         call.talk_ratio      = _compute_talk_ratio(call.transcript)
 
@@ -146,17 +173,22 @@ async def post_call_processing(ctx: dict, call_id: str) -> None:
         log.info("post_call_done", call_id=call_id, outcome=call.outcome)
 
         # ── 6. Notify frontend ─────────────────────────────────────────────────
-        try:
-            from app.websockets.event_bus import event_manager
-            await event_manager.broadcast(call.user_id, {
-                "type": "call_processed",
-                "call_record_id": call_id,
-                "outcome": call.outcome,
-                "sentiment_score": call.sentiment_score,
-                "auto_summary": call.auto_summary,
-            })
-        except Exception:
-            pass
+        # Skip campaign calls — Campaigns page shows cards, not live transcript viewers.
+        if not call.campaign_id:
+            try:
+                from app.websockets.event_bus import event_manager
+                await event_manager.broadcast(call.user_id, {
+                    "type": "call_processed",
+                    "call_record_id": call_id,
+                    "outcome": call.outcome,
+                    "sentiment_score": call.sentiment_score,
+                    "auto_summary": call.auto_summary,
+                    "next_action": call.next_action,
+                    "talk_ratio": call.talk_ratio,
+                    "transcript_len": len(call.transcript or []),
+                })
+            except Exception:
+                pass
 
 
 # ── LLM analysis ──────────────────────────────────────────────────────────────
@@ -164,19 +196,28 @@ async def post_call_processing(ctx: dict, call_id: str) -> None:
 async def _llm_analyze_call(
     transcript: list,
     hint_outcome: str | None = None,
+    llm_model: str | None = None,
+    llm_temperature: float | None = None,
 ) -> dict | None:
     """
-    Single GPT-4o-mini call that classifies the outcome AND writes the summary.
+    Classify call outcome + write summary using the agent's configured LLM.
+    Routes to the right provider based on model name — no fallback.
 
-    Returns:
-        {outcome, confidence, summary, next_action}
-    or None if OpenAI key not set or transcript is empty.
+    Supported providers (requires matching API key in .env):
+      gpt-*     → OpenAI         (OPENAI_API_KEY)
+      gemini-*  → Google Gemini  (GOOGLE_API_KEY)
+      claude-*  → Anthropic      (ANTHROPIC_API_KEY)
+
+    Returns {outcome, confidence, summary, next_action} or None on failure.
     """
     from app.config import settings
-    if not settings.openai_api_key or not transcript:
+    import httpx
+
+    if not transcript or not llm_model:
+        if not llm_model:
+            log.warning("post_call_llm_skipped", reason="no llm_model configured on agent")
         return None
 
-    # Build transcript text (last 30 turns is enough for classification)
     text = "\n".join(
         f"{e['role'].upper()}: {e.get('text', '')}"
         for e in transcript[-30:]
@@ -185,10 +226,7 @@ async def _llm_analyze_call(
     if not text:
         return None
 
-    # Outcome options with descriptions for the LLM
-    choices_text = "\n".join(
-        f'  "{k}" — {v}' for k, v in OUTCOME_CHOICES.items()
-    )
+    choices_text = "\n".join(f'  "{k}" — {v}' for k, v in OUTCOME_CHOICES.items())
 
     hint_block = ""
     if hint_outcome:
@@ -198,7 +236,8 @@ async def _llm_analyze_call(
             "accurate outcome exists in the list."
         )
 
-    prompt = f"""You are analyzing a call transcript to classify the outcome and write a summary.
+    system_msg = "You classify call outcomes and summarize conversations. Always respond with valid JSON only — no markdown, no explanation."
+    user_msg = f"""Analyze this call transcript and classify the outcome.
 {hint_block}
 
 TRANSCRIPT:
@@ -207,7 +246,7 @@ TRANSCRIPT:
 OUTCOME OPTIONS (choose exactly one key):
 {choices_text}
 
-Respond with a JSON object only — no markdown, no explanation:
+Respond with this JSON object only:
 {{
   "outcome": "<key from the list above>",
   "confidence": <0.0 to 1.0>,
@@ -216,29 +255,99 @@ Respond with a JSON object only — no markdown, no explanation:
 }}"""
 
     try:
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You classify call outcomes and summarize conversations. Always respond with valid JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=300,
-            response_format={"type": "json_object"},
-        )
-        raw = response.choices[0].message.content
+        raw = await _route_llm(llm_model, llm_temperature or 0.3, system_msg, user_msg, settings)
+        if raw is None:
+            return None
         parsed = json.loads(raw)
-
-        # Validate outcome is a known key
         if parsed.get("outcome") not in OUTCOME_CHOICES:
-            parsed["outcome"] = hint_outcome  # fall back to tool hint
-
+            parsed["outcome"] = hint_outcome
+        log.info("post_call_llm_done", model=llm_model,
+                 outcome=parsed.get("outcome"), confidence=parsed.get("confidence"))
         return parsed
-
     except Exception as exc:
-        log.warning("post_call_llm_failed", error=str(exc))
+        log.warning("post_call_llm_failed", model=llm_model, error=str(exc))
         return None
+
+
+async def _route_llm(model: str, temperature: float, system: str, user: str, settings) -> str | None:
+    """
+    Route an LLM call to the correct provider based on the model name.
+    Returns the raw response string (JSON text) or None if the API key is missing.
+    """
+    import httpx
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+
+        # ── OpenAI: gpt-* ─────────────────────────────────────────────────────
+        if model.startswith("gpt-"):
+            if not settings.openai_api_key:
+                log.warning("post_call_llm_no_key", model=model, provider="openai")
+                return None
+            r = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                json={
+                    "model": model,
+                    "temperature": temperature,
+                    "max_tokens": 400,
+                    "response_format": {"type": "json_object"},
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user",   "content": user},
+                    ],
+                },
+            )
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
+
+        # ── Google Gemini: gemini-* (OpenAI-compatible endpoint) ──────────────
+        elif model.startswith("gemini-"):
+            if not settings.google_api_key:
+                log.warning("post_call_llm_no_key", model=model, provider="google")
+                return None
+            r = await client.post(
+                "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                headers={"Authorization": f"Bearer {settings.google_api_key}"},
+                json={
+                    "model": model,
+                    "temperature": temperature,
+                    "max_tokens": 400,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user",   "content": user},
+                    ],
+                },
+            )
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
+
+        # ── Anthropic: claude-* ───────────────────────────────────────────────
+        elif model.startswith("claude-"):
+            if not settings.anthropic_api_key:
+                log.warning("post_call_llm_no_key", model=model, provider="anthropic")
+                return None
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": settings.anthropic_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "temperature": temperature,
+                    "max_tokens": 400,
+                    "system": system,
+                    "messages": [{"role": "user", "content": user}],
+                },
+            )
+            r.raise_for_status()
+            return r.json()["content"][0]["text"]
+
+        # ── Unknown provider ──────────────────────────────────────────────────
+        else:
+            log.warning("post_call_llm_unsupported_model", model=model)
+            return None
 
 
 # ── Sentiment / talk ratio (no LLM) ──────────────────────────────────────────
@@ -271,6 +380,117 @@ def _outcome_to_status(outcome: str) -> str:
     if outcome == "do_not_call":
         return "disqualified"
     return "contacted"
+
+
+async def transcribe_human_leg(ctx: dict, call_id: str, recording_sid: str) -> None:
+    """ARQ task — download Twilio recording for a transferred call and transcribe via ElevenLabs STT.
+
+    Uses the agent's configured stt_provider as the EL STT model ID.
+    Old legacy value 'elevenlabs' maps to 'scribe_v1'.
+    """
+    from app.config import settings
+    import httpx
+
+    if not settings.twilio_account_sid or not settings.twilio_auth_token:
+        log.warning("transcribe_human_leg_no_twilio_creds", call_id=call_id)
+        return
+
+    if not settings.elevenlabs_api_key:
+        log.warning("transcribe_human_leg_no_el_key", call_id=call_id)
+        return
+
+    # ── 1. Fetch call + agent to get the configured STT model ─────────────────
+    db_factory = ctx["db_factory"]
+    stt_model_id = "scribe_v1"
+    async with db_factory() as db:
+        from app.models.call import Call
+        from app.models.agent import Agent as AgentModel
+        call_result = await db.execute(select(Call).where(Call.id == call_id))
+        call_obj = call_result.scalar_one_or_none()
+        if call_obj and call_obj.agent_id:
+            agent_result = await db.execute(select(AgentModel).where(AgentModel.id == call_obj.agent_id))
+            agent_obj = agent_result.scalar_one_or_none()
+            if agent_obj and agent_obj.stt_provider:
+                # 'elevenlabs' is the old DB default before specific scribe models were added
+                stt_model_id = (
+                    "scribe_v1"
+                    if agent_obj.stt_provider == "elevenlabs"
+                    else agent_obj.stt_provider
+                )
+
+    log.info("transcribe_human_leg_stt_model", call_id=call_id, stt_model=stt_model_id)
+
+    # ── 2. Download recording from Twilio ─────────────────────────────────────
+    recording_url = (
+        f"https://api.twilio.com/2010-04-01/Accounts/"
+        f"{settings.twilio_account_sid}/Recordings/{recording_sid}.mp3"
+    )
+    try:
+        async with httpx.AsyncClient(
+            auth=(settings.twilio_account_sid, settings.twilio_auth_token),
+            timeout=120.0,
+            follow_redirects=True,
+        ) as client:
+            r = await client.get(recording_url)
+
+        if r.status_code != 200:
+            log.error("transcribe_human_leg_download_failed",
+                      call_id=call_id, recording_sid=recording_sid,
+                      http_status=r.status_code)
+            return
+
+        audio_bytes = r.content
+        log.info("transcribe_human_leg_downloaded", call_id=call_id, bytes=len(audio_bytes))
+    except Exception as exc:
+        log.error("transcribe_human_leg_download_error", call_id=call_id, error=str(exc))
+        return
+
+    # ── 3. Transcribe with ElevenLabs STT ─────────────────────────────────────
+    transcribed_text = ""
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            r = await client.post(
+                "https://api.elevenlabs.io/v1/speech-to-text",
+                headers={"xi-api-key": settings.elevenlabs_api_key},
+                files={"file": ("recording.mp3", audio_bytes, "audio/mpeg")},
+                data={"model_id": stt_model_id},
+            )
+        if r.status_code == 200:
+            transcribed_text = (r.json().get("text") or "").strip()
+            log.info("transcribe_human_leg_el_done",
+                     call_id=call_id, model=stt_model_id, chars=len(transcribed_text))
+        else:
+            log.error("transcribe_human_leg_el_failed",
+                      call_id=call_id, model=stt_model_id,
+                      http_status=r.status_code, body=r.text[:200])
+            transcribed_text = "[Transcription failed — ElevenLabs STT returned an error.]"
+    except Exception as exc:
+        log.error("transcribe_human_leg_el_error", call_id=call_id, error=str(exc))
+        return
+
+    if not transcribed_text:
+        return
+
+    # ── 4. Append to call.transcript in DB ───────────────────────────────────
+    async with db_factory() as db:
+        from app.models.call import Call
+        result = await db.execute(select(Call).where(Call.id == call_id))
+        call = result.scalar_one_or_none()
+        if not call:
+            log.warning("transcribe_human_leg_call_not_found", call_id=call_id)
+            return
+
+        entry = {
+            "role": "human_agent",
+            "text": f"[Human Agent Conversation — ElevenLabs {stt_model_id} transcription]\n{transcribed_text}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        current = list(call.transcript or [])
+        current.append(entry)
+        call.transcript = current
+        await db.commit()
+
+        log.info("transcribe_human_leg_saved", call_id=call_id, entry_chars=len(transcribed_text))
 
 
 async def _update_campaign_counters(call, db) -> None:

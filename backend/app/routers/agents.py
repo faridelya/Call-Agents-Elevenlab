@@ -24,6 +24,35 @@ from app.services.elevenlabs_service import elevenlabs_service
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
+async def _warn_duplicate_phone(agent_id: str, user_id: str, phone: str | None, db: AsyncSession) -> None:
+    """Log a warning if another agent belonging to this user already uses the same outbound number.
+
+    Two agents sharing a Twilio phone number causes EL to fail the audio WebSocket after
+    the greeting — EL's server-side routing gets confused about which agent owns the call.
+    This is not blocked (the user may have intentional reasons) but a warning is logged.
+    """
+    if not phone:
+        return
+    result = await db.execute(
+        select(Agent).where(
+            Agent.user_id == user_id,
+            Agent.twilio_phone_number == phone,
+            Agent.id != agent_id,
+        )
+    )
+    conflicts = result.scalars().all()
+    if conflicts:
+        log.warning(
+            "duplicate_twilio_phone_number",
+            agent_id=agent_id,
+            phone=phone,
+            conflicting_agents=[a.id for a in conflicts],
+            msg="Two agents share the same outbound Twilio number. "
+                "EL may drop calls after the greeting. "
+                "Assign a unique number per agent or clear twilio_phone_number on one.",
+        )
+
+
 async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
     """Create or update the ElevenLabs agent from a Voxara agent."""
     # Check no in-progress calls before updating
@@ -176,6 +205,8 @@ async def create_agent(
     if body.inbound_phone_number:
         await _handle_inbound_phone(agent.id, current_user.id, body.inbound_phone_number, db)
 
+    await _warn_duplicate_phone(agent.id, current_user.id, body.twilio_phone_number, db)
+
     try:
         await _sync_to_elevenlabs(agent, db)
     except Exception as e:
@@ -229,6 +260,9 @@ async def update_agent(
     # Handle inbound phone only if the field was explicitly included in the request
     if "inbound_phone_number" in body.model_fields_set:
         await _handle_inbound_phone(agent.id, current_user.id, body.inbound_phone_number, db)
+
+    new_phone = update_data.get("twilio_phone_number", agent.twilio_phone_number)
+    await _warn_duplicate_phone(agent.id, current_user.id, new_phone, db)
 
     try:
         await _sync_to_elevenlabs(agent, db)

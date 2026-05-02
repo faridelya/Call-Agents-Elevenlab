@@ -41,17 +41,85 @@ log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
-async def _enqueue_post_call(call_id: str, defer_seconds: int = 30) -> None:
+async def _monitor_el_conversation(
+    conversation_id: str,
+    call_id: str,
+    user_id: str,
+) -> None:
+    """Enterprise real-time monitoring: connect to EL monitoring WebSocket and relay
+    transcript events to the frontend via the event bus.
+
+    - Non-Enterprise accounts: EL returns 403 → task exits immediately (no harm).
+    - Enterprise accounts: streams agent_response / user_transcript events as
+      {"type": "transcript", "call_record_id": ..., "role": ..., "text": ...}
+      events that the TestCallPanel already handles.
+    - Runs only for single test calls (campaign_id guard is applied by the caller).
+    - The EL monitoring WS closes itself when the conversation ends, so the task
+      always self-terminates — no manual cleanup needed.
+    """
+    try:
+        import websockets  # type: ignore[import-untyped]
+    except ImportError:
+        log.warning("el_monitor_websockets_missing", call_id=call_id)
+        return
+
+    from app.websockets.event_bus import event_manager
+
+    uri = f"wss://api.elevenlabs.io/v1/convai/conversations/{conversation_id}/monitor"
+    log.info("el_monitor_connecting", call_id=call_id, conv_id=conversation_id)
+    try:
+        async with websockets.connect(
+            uri,
+            additional_headers={"xi-api-key": settings.elevenlabs_api_key},
+        ) as ws:
+            log.info("el_monitor_connected", call_id=call_id)
+            async for raw_msg in ws:
+                try:
+                    msg = json.loads(raw_msg)
+                    event_type = msg.get("type", "")
+                    role = text = ""
+
+                    if event_type == "agent_response":
+                        role = "agent"
+                        text = msg.get("agent_response_event", {}).get("agent_response", "")
+                    elif event_type == "user_transcript":
+                        role = "user"
+                        text = msg.get("user_transcription_event", {}).get("user_transcript", "")
+
+                    if role and text:
+                        await event_manager.broadcast(user_id, {
+                            "type":            "transcript",
+                            "call_record_id":  call_id,
+                            "role":            role,
+                            "text":            text.strip(),
+                            "timestamp":       datetime.now(timezone.utc).isoformat(),
+                        })
+                except Exception:
+                    pass
+    except Exception as exc:
+        log.info("el_monitor_closed", call_id=call_id, reason=str(exc)[:120])
+
+
+async def _enqueue_post_call(
+    call_id: str,
+    defer_seconds: int = 30,
+    llm_model: str = "",
+    llm_temperature: float = 0.0,
+    stt_provider: str = "",
+) -> None:
     """Enqueue post_call_processing ARQ task with a delay. Swallows errors — non-critical."""
     try:
         from arq import create_pool  # type: ignore[import-untyped]
         from arq.connections import RedisSettings  # type: ignore[import-untyped]
         from datetime import timedelta
         pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-        await pool.enqueue_job("post_call_processing", call_id,
-                               _defer_by=timedelta(seconds=defer_seconds))
+        await pool.enqueue_job(
+            "post_call_processing", call_id, llm_model, llm_temperature, stt_provider,
+            _defer_by=timedelta(seconds=defer_seconds),
+        )
         await pool.aclose()
-        log.info("arq_enqueued", call_id=call_id, defer_seconds=defer_seconds)
+        log.info("arq_enqueued", call_id=call_id, defer_seconds=defer_seconds,
+                 llm_model=llm_model, stt_provider=stt_provider)
     except Exception as exc:
         log.warning("arq_enqueue_error", call_id=call_id, error=str(exc))
 
@@ -115,8 +183,20 @@ async def _register_and_respond(
         el_agent_id = ag.elevenlabs_agent_id if ag else ""
 
     if not el_agent_id:
-        log.error("native_register_no_el_agent", call_id=call.id, agent_id=agent_id)
+        log.error("native_register_no_el_agent",
+                  call_id=call.id,
+                  agent_id=agent_id,
+                  note="Agent has no EL agent ID — was it synced to ElevenLabs?")
         return build_hangup_twiml()
+
+    log.info("native_register_starting",
+             call_id=call.id,
+             agent_id=agent_id,
+             el_agent_id=el_agent_id,
+             from_number=call.from_number,
+             to_number=call.to_number,
+             direction=call.direction,
+             dynamic_var_keys=list(dynamic_vars.keys()))
 
     # Call EL register_call — returns {"conversation_id": "conv_...", "twiml": "<?xml...>"}
     try:
@@ -128,14 +208,24 @@ async def _register_and_respond(
             dynamic_vars=dynamic_vars,
         )
     except Exception as exc:
-        log.error("native_register_call_error", call_id=call.id, error=str(exc))
+        log.error("native_register_call_error",
+                  call_id=call.id,
+                  el_agent_id=el_agent_id,
+                  from_number=call.from_number,
+                  to_number=call.to_number,
+                  error=str(exc),
+                  note="EL register_call threw an exception — returning hangup TwiML")
         return build_hangup_twiml()
 
     conversation_id = result.get("conversation_id", "")
     twiml           = result.get("twiml", "")
 
     if not twiml:
-        log.error("native_register_empty_twiml", call_id=call.id, result=result)
+        log.error("native_register_empty_twiml",
+                  call_id=call.id,
+                  el_agent_id=el_agent_id,
+                  result_keys=list(result.keys()),
+                  note="EL returned no TwiML — returning hangup")
         return build_hangup_twiml()
 
     # Store Twilio call_sid in call context so tools can use it
@@ -151,6 +241,19 @@ async def _register_and_respond(
     if conversation_id:
         call.elevenlabs_conversation_id = conversation_id
         await db.commit()
+
+    # Start Enterprise real-time monitoring relay (single test calls only).
+    # For non-Enterprise accounts EL returns 403 and the task exits in milliseconds.
+    # Campaign calls are excluded — they have no live transcript viewer.
+    if conversation_id and not call.campaign_id:
+        import asyncio
+        asyncio.create_task(
+            _monitor_el_conversation(
+                conversation_id=conversation_id,
+                call_id=call.id,
+                user_id=call.user_id,
+            )
+        )
 
     # Emit call_started so frontend TestCallPanel transitions to "connected"
     await _emit(call, "call_started", redis)
@@ -196,6 +299,11 @@ async def inbound_call(
     from_number = form.get("From", "")
     to_number   = form.get("To", "")
 
+    log.info("inbound_call_received",
+             call_sid=call_sid,
+             from_number=from_number,
+             to_number=to_number)
+
     # Find the configured inbound agent for this number
     result = await db.execute(
         select(PhoneNumber).where(
@@ -204,19 +312,58 @@ async def inbound_call(
         )
     )
     phone_number = result.scalar_one_or_none()
-    if not phone_number or not phone_number.inbound_enabled or not phone_number.inbound_agent_id:
+    if not phone_number:
+        log.warning("inbound_call_no_phone_record",
+                    to_number=to_number,
+                    call_sid=call_sid,
+                    note="No PhoneNumber record found for this number — hanging up. "
+                         "Add this number in Settings → Phone Numbers and link it to an agent.")
+        return xml_response(build_hangup_twiml())
+
+    if not phone_number.inbound_enabled or not phone_number.inbound_agent_id:
+        log.warning("inbound_call_not_configured",
+                    to_number=to_number,
+                    call_sid=call_sid,
+                    inbound_enabled=phone_number.inbound_enabled,
+                    inbound_agent_id=phone_number.inbound_agent_id,
+                    note="Phone number found but inbound routing not configured — hanging up.")
         return xml_response(build_hangup_twiml())
 
     # Verify the linked agent is configured to accept inbound calls
     from app.models.agent import Agent as AgentModel
     agent_result = await db.execute(select(AgentModel).where(AgentModel.id == phone_number.inbound_agent_id))
     inbound_agent = agent_result.scalar_one_or_none()
-    if not inbound_agent or inbound_agent.call_type == "outbound":
+    if not inbound_agent:
+        log.error("inbound_call_agent_not_found",
+                  to_number=to_number,
+                  agent_id=phone_number.inbound_agent_id,
+                  note="PhoneNumber points to an agent that no longer exists.")
         return xml_response(build_say_twiml(
             "Sorry, this number does not accept incoming calls. Please contact us through another channel. Goodbye."
         ))
 
+    if inbound_agent.call_type == "outbound":
+        log.warning("inbound_call_agent_is_outbound_only",
+                    to_number=to_number,
+                    agent_id=inbound_agent.id,
+                    agent_name=inbound_agent.name,
+                    note="Agent is configured for outbound only — rejecting inbound call.")
+        return xml_response(build_say_twiml(
+            "Sorry, this number does not accept incoming calls. Please contact us through another channel. Goodbye."
+        ))
+
+    log.info("inbound_call_routing",
+             call_sid=call_sid,
+             from_number=from_number,
+             to_number=to_number,
+             agent_id=inbound_agent.id,
+             agent_name=inbound_agent.name,
+             el_agent_id=inbound_agent.elevenlabs_agent_id or "MISSING")
+
     if not inbound_agent.is_active:
+        log.warning("inbound_call_agent_inactive",
+                    agent_id=inbound_agent.id,
+                    agent_name=inbound_agent.name)
         return xml_response(build_say_twiml(
             "Sorry, this service is temporarily unavailable. Please try again later. Goodbye."
         ))
@@ -261,12 +408,29 @@ async def outbound_twiml(
     """Twilio calls this when an outbound call is answered. Returns EL TwiML."""
     form = await request.form()
     _verify_twilio_signature(request, dict(form))
-    call_sid = form.get("CallSid", "")
+
+    call_sid      = form.get("CallSid", "")
+    call_status   = form.get("CallStatus", "")
+    from_number   = form.get("From", "")
+    to_number     = form.get("To", "")
+    call_duration = form.get("CallDuration", "")
+
+    log.info("twilio_twiml_request",
+             call_record_id=call_record_id,
+             call_sid=call_sid,
+             twilio_status=call_status,
+             from_number=from_number,
+             to_number=to_number,
+             duration=call_duration,
+             note="Twilio called our TwiML URL — outbound call was answered")
 
     result = await db.execute(select(Call).where(Call.id == call_record_id))
     call = result.scalar_one_or_none()
     if not call:
-        log.warning("native_twiml_call_not_found", call_record_id=call_record_id)
+        log.error("native_twiml_call_not_found",
+                  call_record_id=call_record_id,
+                  call_sid=call_sid,
+                  note="No call record found for this TwiML request — returning hangup")
         return xml_response(build_hangup_twiml())
 
     if settings.campaign_debug and call.campaign_id:
@@ -310,21 +474,42 @@ async def call_status_callback(
     call_sid    = form.get("CallSid", "")
     call_status = form.get("CallStatus", "")
     duration    = form.get("CallDuration")
+    from_num    = form.get("From", "")
+    to_num      = form.get("To", "")
+
+    log.info("twilio_status_callback",
+             call_sid=call_sid,
+             twilio_status=call_status,
+             duration_s=duration,
+             from_number=from_num,
+             to_number=to_num)
 
     result = await db.execute(select(Call).where(Call.twilio_call_sid == call_sid))
     call = result.scalar_one_or_none()
     if not call:
+        # This can happen for transfer-leg calls (different SID) or orphaned records.
+        log.warning("twilio_status_no_call_record",
+                    call_sid=call_sid,
+                    twilio_status=call_status,
+                    note="No call record matched this Twilio SID. "
+                         "Possible causes: transfer leg SID, call initiated outside Voxara, "
+                         "or DB record was deleted.")
         return Response(status_code=204)
 
-    if settings.campaign_debug and call.campaign_id:
-        log.debug("campaign_twilio_status",
-                  call_id=call.id,
-                  call_sid=call_sid,
-                  campaign_id=call.campaign_id,
-                  twilio_status=call_status,
-                  duration_s=duration)
+    log.info("twilio_status_matched",
+             call_id=call.id,
+             call_sid=call_sid,
+             twilio_status=call_status,
+             current_db_status=call.status,
+             el_conv_id=call.elevenlabs_conversation_id or "none",
+             duration_s=duration,
+             campaign_id=call.campaign_id or "none")
 
     if call_status in ("completed", "failed", "busy", "no-answer", "canceled"):
+        log.info("twilio_status_finalizing",
+                 call_id=call.id,
+                 twilio_status=call_status,
+                 duration_s=duration)
         call.status = call_status
         if duration:
             call.duration_seconds = int(duration)
@@ -342,10 +527,24 @@ async def call_status_callback(
             el_status = await elevenlabs_service.get_conversation_status(
                 call.elevenlabs_conversation_id
             )
+            log.info("twilio_status_el_check",
+                     call_id=call.id,
+                     twilio_status=call_status,
+                     el_status=el_status,
+                     el_conv_id=call.elevenlabs_conversation_id)
             if el_status in ("done", "failed"):
+                log.info("twilio_status_el_already_done",
+                         call_id=call.id,
+                         el_status=el_status,
+                         note="EL finished before Twilio sent completed — finalizing now")
                 call.status = "completed"
                 call.ended_at = datetime.now(timezone.utc).isoformat()
                 await _finalize_call(call, redis, db)
+        else:
+            log.info("twilio_status_no_el_conv",
+                     call_id=call.id,
+                     twilio_status=call_status,
+                     note="No EL conversation ID yet — call may still be ringing or EL registration failed")
 
     await db.commit()
     return Response(status_code=204)
@@ -367,11 +566,48 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
                   duration_s=call.duration_seconds,
                   conv_id=call.elevenlabs_conversation_id)
 
+    # ── Read transfer metadata from Redis ────────────────────────────────────
+    transfer_info: dict = {}
+    try:
+        raw_ctx = await redis.hgetall(f"call:{call.id}")
+        if raw_ctx.get("transferred") == "1":
+            transfer_info = {
+                "transferred_to":  raw_ctx.get("transferred_to", ""),
+                "transfer_type":   raw_ctx.get("transfer_type", "cold"),
+                "transfer_reason": raw_ctx.get("transfer_reason", ""),
+                "transferred_at":  raw_ctx.get("transferred_at", ""),
+                "fallback_status": raw_ctx.get("transfer_fallback_status", ""),
+            }
+    except Exception as exc:
+        log.warning("transfer_metadata_read_error", call_id=call.id, error=str(exc))
+
+    # ── Fetch agent config for post-call ARQ args ─────────────────────────────
+    # One DB query here — _finalize_call already has a session open and is doing
+    # writes. Typed values passed directly to ARQ; no Redis string conversion needed.
+    llm_model: str = ""
+    llm_temperature: float = 0.0
+    stt_provider: str = ""
+    if call.agent_id:
+        from app.models.agent import Agent as AgentModel
+        agent_result = await db.execute(
+            select(AgentModel).where(AgentModel.id == call.agent_id)
+        )
+        agent_obj = agent_result.scalar_one_or_none()
+        if agent_obj:
+            llm_model       = agent_obj.llm_model or ""
+            llm_temperature = agent_obj.llm_temperature or 0.0
+            stt_provider    = agent_obj.stt_provider or ""
+
     # ── Transcript from ElevenLabs ───────────────────────────────────────────
     if call.elevenlabs_conversation_id:
         el_status = await elevenlabs_service.get_conversation_status(
             call.elevenlabs_conversation_id
         )
+        log.info("finalize_el_status_check",
+                 call_id=call.id,
+                 el_status=el_status,
+                 conv_id=call.elevenlabs_conversation_id,
+                 call_status=call.status)
         if el_status == "done":
             transcript = await elevenlabs_service.get_conversation_transcript(
                 call.elevenlabs_conversation_id
@@ -386,12 +622,53 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
                 log.warning("native_transcript_empty_after_done",
                             call_id=call.id,
                             conv_id=call.elevenlabs_conversation_id)
+        elif el_status == "failed":
+            # EL terminated abnormally — termination_reason already logged by get_conversation_status
+            log.warning("native_transcript_el_failed",
+                        call_id=call.id,
+                        conv_id=call.elevenlabs_conversation_id,
+                        note="EL conversation failed — check el_conversation_status_failed log above for error_code/reason")
         else:
             # EL still processing — ARQ task will retry after 30s
             log.info("native_transcript_deferred",
                      call_id=call.id,
                      el_status=el_status,
                      conv_id=call.elevenlabs_conversation_id)
+
+    # ── Append transfer event to transcript (if transfer happened) ───────────
+    if transfer_info:
+        transferred_to   = transfer_info["transferred_to"]
+        transfer_type    = transfer_info["transfer_type"]
+        fallback_status  = transfer_info["fallback_status"]
+        transferred_at   = transfer_info["transferred_at"] or datetime.now(timezone.utc).isoformat()
+
+        if fallback_status in ("", "answered"):
+            outcome_note = "Call successfully transferred to human agent."
+        elif fallback_status == "busy":
+            outcome_note = "Transfer attempted — human agent was busy."
+        elif fallback_status == "no-answer":
+            outcome_note = "Transfer attempted — human agent did not answer."
+        else:
+            outcome_note = f"Transfer attempted — outcome: {fallback_status}."
+
+        transfer_entry = {
+            "role": "system",
+            "text": (
+                f"[Transfer] {transfer_type.capitalize()} transfer to {transferred_to}. "
+                f"{outcome_note}"
+                + (f" Reason: {transfer_info['transfer_reason']}." if transfer_info.get("transfer_reason") else "")
+            ),
+            "timestamp": transferred_at,
+        }
+        current_transcript = list(call.transcript or [])
+        current_transcript.append(transfer_entry)
+        call.transcript = current_transcript
+        log.info(
+            "transfer_event_appended_to_transcript",
+            call_id=call.id,
+            transferred_to=transferred_to,
+            fallback_status=fallback_status or "answered",
+        )
 
     # ── Stage timeline from Redis ────────────────────────────────────────────
     stages_key = f"call:{call.id}:stages"
@@ -410,7 +687,13 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
     # ARQ fires at 1.5x call duration (min 60s) as a fallback if the webhook missed.
     duration = call.duration_seconds or 0
     arq_delay = max(60, int(duration * 1.5))
-    await _enqueue_post_call(call.id, defer_seconds=arq_delay)
+    await _enqueue_post_call(
+        call.id,
+        defer_seconds=arq_delay,
+        llm_model=llm_model,
+        llm_temperature=llm_temperature,
+        stt_provider=stt_provider,
+    )
 
     # ── Cleanup Redis call context ───────────────────────────────────────────
     try:
@@ -424,7 +707,120 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
         pass
 
 
+# ─── Transfer fallback ────────────────────────────────────────────────────────
+#
+# Twilio calls this URL as the <Dial action> when the human-agent leg ends.
+# DialCallStatus values: answered | busy | no-answer | failed | canceled
+#
+# "answered" means the call was successfully transferred and both parties spoke.
+# All other statuses mean the human agent was unreachable — we handle each case
+# with a spoken message and a clean hang-up so the customer is never left in silence.
+
+def _num_for_speech(e164: str) -> str:
+    """Convert E.164 to a spoken-friendly digit string."""
+    digits = e164.lstrip("+")
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"{digits[1:4]} {digits[4:7]} {digits[7:]}"
+    return " ".join(digits[i : i + 3] for i in range(0, len(digits), 3))
+
+
+@router.post("/twilio/transfer-fallback")
+async def transfer_fallback(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+):
+    """
+    Handle the outcome of a human-agent transfer dial.
+    Always returns TwiML — Twilio will execute it on the customer's leg.
+    """
+    form = await request.form()
+    dial_status = form.get("DialCallStatus", "completed")
+
+    # Query-string params were appended by transfer_to_human.py when building the URL
+    call_record_id = request.query_params.get("call_record_id", "")
+    transfer_to    = request.query_params.get("transfer_to", "")
+
+    log.info(
+        "transfer_fallback_received",
+        dial_status=dial_status,
+        call_record_id=call_record_id,
+        transfer_to=transfer_to,
+    )
+
+    # ── Stamp the fallback outcome in Redis for transcript annotation ──────────
+    if call_record_id:
+        await redis.hset(
+            f"call:{call_record_id}",
+            "transfer_fallback_status",
+            dial_status,
+        )
+
+    # ── Answered: call completed normally — just hang up gracefully ────────────
+    if dial_status == "answered":
+        return xml_response(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            "<Response><Hangup/></Response>"
+        )
+
+    # ── Human agent unreachable — craft an appropriate spoken message ──────────
+    num_spoken = _num_for_speech(transfer_to) if transfer_to else "our direct line"
+
+    if dial_status == "busy":
+        primary = (
+            "Our team member is currently on another call. "
+            f"You can reach them directly at {num_spoken}, "
+            "or please try calling back in a few minutes."
+        )
+    elif dial_status == "no-answer":
+        primary = (
+            "Our team member is not available to take your call right now. "
+            f"You can reach us directly at {num_spoken}, "
+            "or leave a message and someone will get back to you shortly."
+        )
+    elif dial_status in ("failed", "canceled"):
+        primary = (
+            "The transfer could not be completed at this time. "
+            f"Please contact our team directly at {num_spoken}. "
+            "We apologize for the inconvenience."
+        )
+    else:
+        primary = (
+            f"We were unable to connect you with a human agent. "
+            f"Please reach us at {num_spoken}."
+        )
+
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Response>"
+        f"<Say>{primary}</Say>"
+        '<Pause length="1"/>'
+        "<Say>Thank you for your patience. Goodbye.</Say>"
+        "<Hangup/>"
+        "</Response>"
+    )
+    return xml_response(twiml)
+
+
 # ─── Recording callback ───────────────────────────────────────────────────────
+
+async def _enqueue_transcribe_human_leg(call_id: str, recording_sid: str) -> None:
+    """Enqueue transcribe_human_leg ARQ task. Swallows errors — non-critical."""
+    try:
+        from arq import create_pool
+        from arq.connections import RedisSettings
+        from datetime import timedelta
+        pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        # Allow 30s for Twilio to finish processing the recording before we download it
+        await pool.enqueue_job(
+            "transcribe_human_leg", call_id, recording_sid,
+            _defer_by=timedelta(seconds=30),
+        )
+        await pool.aclose()
+        log.info("arq_transcribe_enqueued", call_id=call_id, recording_sid=recording_sid)
+    except Exception as exc:
+        log.warning("arq_transcribe_enqueue_error", call_id=call_id, error=str(exc))
+
 
 @router.post("/twilio/recording")
 async def recording_callback(
@@ -436,12 +832,28 @@ async def recording_callback(
     recording_url = form.get("RecordingUrl", "")
     recording_sid = form.get("RecordingSid", "")
 
-    result = await db.execute(select(Call).where(Call.twilio_call_sid == call_sid))
-    call = result.scalar_one_or_none()
+    call_record_id = request.query_params.get("call_record_id", "")
+    is_transfer    = request.query_params.get("is_transfer", "0") == "1"
+
+    call = None
+
+    # For transfer recordings the recording CallSid is the dialed-leg SID, not the
+    # original call SID. Use the call_record_id query param as the primary lookup.
+    if call_record_id:
+        result = await db.execute(select(Call).where(Call.id == call_record_id))
+        call = result.scalar_one_or_none()
+
+    if not call and call_sid:
+        result = await db.execute(select(Call).where(Call.twilio_call_sid == call_sid))
+        call = result.scalar_one_or_none()
+
     if call:
         call.recording_url = recording_url
         call.recording_sid = recording_sid
         await db.commit()
+
+        if is_transfer and recording_sid:
+            await _enqueue_transcribe_human_leg(call.id, recording_sid)
 
     return Response(status_code=204)
 
@@ -471,14 +883,14 @@ async def _seed_redis_context(redis, call: Call, agent_id: str, db: AsyncSession
     lead_data = existing_lead_data_raw or json.dumps({})
 
     context = {
-        "call_record_id": call.id,
-        "call_sid":       call.twilio_call_sid or "",
-        "agent_id":       agent.id,
-        "user_id":        agent.user_id,
-        "direction":      call.direction,
-        "enabled_tools":  json.dumps(agent.enabled_tools),
-        "tool_configs":   json.dumps(agent.tool_configs),
-        "agent_config":   json.dumps({
+        "call_record_id":  call.id,
+        "call_sid":        call.twilio_call_sid or "",
+        "agent_id":        agent.id,
+        "user_id":         agent.user_id,
+        "direction":       call.direction,
+        "enabled_tools":   json.dumps(agent.enabled_tools),
+        "tool_configs":    json.dumps(agent.tool_configs),
+        "agent_config":    json.dumps({
             "call_script":         agent.call_script,
             "system_prompt":       agent.system_prompt,
             "company_name":        agent.company_name,
@@ -602,16 +1014,23 @@ async def elevenlabs_post_call(
             })
 
         if transcript:
-            call.transcript = transcript
+            # Preserve system/human_agent entries (transfer annotation, Whisper transcription)
+            # that EL does not know about — same logic as post_call_processing ARQ task.
+            extras = [
+                e for e in (call.transcript or [])
+                if e.get("role") in ("system", "human_agent")
+            ]
+            call.transcript = transcript + extras
             log.info("el_webhook_transcript_saved",
                      call_id=call.id, msgs=len(transcript),
+                     extras=len(extras),
                      conversation_id=conversation_id)
 
-    # ── Pull analysis fields EL provides ─────────────────────────────────────
-    analysis = data.get("analysis", {})
-    if analysis:
-        call.auto_summary   = analysis.get("transcript_summary") or call.auto_summary
-        call.sentiment_score = analysis.get("user_sentiment_score") or call.sentiment_score
+    # ── Pull any analysis fields EL provides natively ────────────────────────
+    el_analysis = data.get("analysis", {})
+    if el_analysis:
+        call.auto_summary    = el_analysis.get("transcript_summary") or call.auto_summary
+        call.sentiment_score = el_analysis.get("user_sentiment_score") or call.sentiment_score
 
     # ── Duration from metadata ────────────────────────────────────────────────
     meta = data.get("metadata", {})
@@ -622,19 +1041,70 @@ async def elevenlabs_post_call(
     if not call.ended_at:
         call.ended_at = datetime.now(timezone.utc).isoformat()
 
+    # ── LLM outcome classification + summary using agent's configured model ───
+    # Run immediately here so the user sees outcome/summary as soon as the
+    # webhook fires — no need to wait for the ARQ safety-net task.
+    # ARQ will detect these fields are already set and skip its LLM step.
+    if call.transcript and call.agent_id:
+        try:
+            from app.models.agent import Agent as AgentModel
+            from app.tasks.post_call_tasks import (
+                _llm_analyze_call, _compute_sentiment, _compute_talk_ratio,
+                OUTCOME_CHOICES,
+            )
+            agent_result = await db.execute(
+                select(AgentModel).where(AgentModel.id == call.agent_id)
+            )
+            agent_obj = agent_result.scalar_one_or_none()
+            if agent_obj:
+                llm_result = await _llm_analyze_call(
+                    call.transcript,
+                    hint_outcome=call.outcome,
+                    llm_model=agent_obj.llm_model or None,
+                    llm_temperature=agent_obj.llm_temperature or None,
+                )
+                if llm_result:
+                    hint = call.outcome
+                    if not hint or llm_result.get("confidence", 0) >= 0.7:
+                        call.outcome = llm_result.get("outcome") or hint
+                    if not call.auto_summary:
+                        call.auto_summary = llm_result.get("summary")
+                    if not call.next_action and llm_result.get("next_action"):
+                        call.next_action = llm_result.get("next_action")
+                    log.info("el_webhook_llm_classified",
+                             call_id=call.id,
+                             outcome=call.outcome,
+                             confidence=llm_result.get("confidence"),
+                             model=agent_obj.llm_model)
+
+            # Sentiment + talk ratio — cheap, no LLM cost
+            if not call.sentiment_score:
+                call.sentiment_score = _compute_sentiment(call.transcript)
+            if not call.talk_ratio:
+                call.talk_ratio = _compute_talk_ratio(call.transcript)
+
+        except Exception as exc:
+            log.warning("el_webhook_llm_error", call_id=call.id, error=str(exc))
+
     await db.commit()
 
-    # ── Notify frontend ───────────────────────────────────────────────────────
-    try:
-        from app.websockets.event_bus import event_manager
-        await event_manager.broadcast(call.user_id, {
-            "type":           "call_processed",
-            "call_record_id": call.id,   # matches LiveEvent type in frontend
-            "transcript_len": len(call.transcript or []),
-            "auto_summary":   call.auto_summary,
-            "sentiment_score": call.sentiment_score,
-        })
-    except Exception:
-        pass
+    # ── Notify frontend with full processed data ──────────────────────────────
+    # Only emit for single test calls — campaign calls are shown as cards on the
+    # Campaigns page and don't have a live transcript viewer that consumes this event.
+    if not call.campaign_id:
+        try:
+            from app.websockets.event_bus import event_manager
+            await event_manager.broadcast(call.user_id, {
+                "type":            "call_processed",
+                "call_record_id":  call.id,
+                "outcome":         call.outcome,
+                "auto_summary":    call.auto_summary,
+                "next_action":     call.next_action,
+                "sentiment_score": call.sentiment_score,
+                "talk_ratio":      call.talk_ratio,
+                "transcript_len":  len(call.transcript or []),
+            })
+        except Exception:
+            pass
 
     return Response(status_code=200)

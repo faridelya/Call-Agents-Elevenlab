@@ -284,6 +284,11 @@ export const calls = {
   active: () =>
     apiFetch<{ active_calls: CallRecord[]; bridge_count: number }>('/api/v1/calls/active')
       .then((r) => r.active_calls ?? []),
+
+  liveTranscript: (id: string) =>
+    apiFetch<{ transcript: Array<{ role: string; text: string; timestamp: string }>; status: string }>(
+      `/api/v1/calls/${id}/live-transcript`,
+    ),
 };
 
 // ── Campaigns ─────────────────────────────────────────────────────────────────
@@ -462,6 +467,39 @@ export interface CredentialsSaveRequest {
   anthropic_api_key?: string | null;
 }
 
+export interface ElevenLabsInvoice {
+  amount_due_cents: number | null;
+  subtotal_cents: number | null;
+  tax_cents: number | null;
+  currency: string | null;
+  payment_intent_status: string | null;
+  next_payment_attempt_unix: number | null;
+}
+
+export interface ElevenLabsCostData {
+  configured: boolean;
+  tier: string;
+  status: string;
+  currency: string | null;
+  billing_period: string | null;
+  character_refresh_period: string | null;
+  character_count: number;
+  character_limit: number;
+  character_remaining: number;
+  character_usage_percent: number;
+  max_character_limit_extension: number | null;
+  can_extend_character_limit: boolean;
+  allowed_to_extend_character_limit: boolean;
+  next_character_count_reset_unix: number | null;
+  has_open_invoices: boolean;
+  open_invoices: ElevenLabsInvoice[];
+  next_invoice: ElevenLabsInvoice | null;
+  warning_level: 'ok' | 'warning' | 'critical' | 'error';
+  warning_message: string;
+  cached: boolean;
+  error: string | null;
+}
+
 export const settings = {
   usage: () => apiFetch<{ total_calls: number; total_minutes: number }>('/api/v1/settings/usage'),
   billing: () =>
@@ -476,6 +514,10 @@ export const settings = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  getELPlan: () =>
+    apiFetch<{ tier: string; is_enterprise: boolean }>('/api/v1/settings/el-plan'),
+  getElevenLabsCost: () =>
+    apiFetch<ElevenLabsCostData>('/api/v1/settings/elevenlabs/cost'),
 };
 
 // ── Phone Numbers ─────────────────────────────────────────────────────────────

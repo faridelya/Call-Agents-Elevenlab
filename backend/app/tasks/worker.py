@@ -2,7 +2,7 @@ from arq import cron
 from arq.connections import RedisSettings
 
 from app.config import settings
-from app.tasks.post_call_tasks import post_call_processing
+from app.tasks.post_call_tasks import post_call_processing, transcribe_human_leg
 from app.tasks.campaign_tasks import dial_next_contact
 from app.tasks.maintenance_tasks import cleanup_stale_calls, purge_old_calls, reset_failed_campaigns
 
@@ -20,7 +20,7 @@ async def shutdown(ctx: dict):
 
 
 class WorkerSettings:
-    functions = [post_call_processing, dial_next_contact, cleanup_stale_calls, purge_old_calls, reset_failed_campaigns]
+    functions = [post_call_processing, transcribe_human_leg, dial_next_contact, cleanup_stale_calls, purge_old_calls, reset_failed_campaigns]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
