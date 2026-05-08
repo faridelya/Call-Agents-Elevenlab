@@ -124,13 +124,6 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
                       total_contacts=len(campaign.contacts),
                       max_concurrent=campaign.max_concurrent_calls)
 
-        if called_count >= len(campaign.contacts):
-            campaign.status = "completed"
-            campaign.completed_at = datetime.now(timezone.utc).isoformat()
-            await db.commit()
-            log.info("campaign_completed", campaign_id=campaign_id)
-            return
-
         # ── Stale "initiated" call cleanup ────────────────────────────────────
         # Twilio's max ring time is ~90 s. Any call still "initiated" after
         # 5 minutes never received a TwiML response and is permanently orphaned.
@@ -154,6 +147,32 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
                 campaign_id=campaign_id,
                 count=len(stale_calls),
             )
+
+        if called_count >= len(campaign.contacts):
+            active_remaining = (
+                await db.execute(
+                    select(func.count())
+                    .select_from(Call)
+                    .where(
+                        Call.campaign_id == campaign_id,
+                        Call.status.in_(_ACTIVE_STATUSES),
+                    )
+                )
+            ).scalar_one()
+            if active_remaining:
+                log.info(
+                    "campaign_waiting_for_active_calls",
+                    campaign_id=campaign_id,
+                    active_remaining=active_remaining,
+                )
+                await _enqueue_next(campaign_id, settings.campaign_backoff_seconds)
+                return
+
+            campaign.status = "completed"
+            campaign.completed_at = datetime.now(timezone.utc).isoformat()
+            await db.commit()
+            log.info("campaign_completed", campaign_id=campaign_id)
+            return
 
         # ── 2a. Per-campaign active call count ────────────────────────────────
         per_campaign_active = (
@@ -224,14 +243,14 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
             return
 
         # ── DNC check ─────────────────────────────────────────────────────────
-        dnc = await db.execute(
+        lead_result = await db.execute(
             select(Lead).where(
                 Lead.user_id == campaign.user_id,
                 Lead.phone == phone,
-                Lead.do_not_call.is_(True),
             )
         )
-        if dnc.scalar_one_or_none():
+        existing_lead = lead_result.scalar_one_or_none()
+        if existing_lead and existing_lead.do_not_call:
             campaign.contacts_called += 1
             campaign.contacts_dnc += 1
             await db.commit()
@@ -289,6 +308,7 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
             user_id=campaign.user_id,
             agent_id=campaign.agent_id,
             campaign_id=campaign.id,
+            lead_id=existing_lead.id if existing_lead else None,
             from_number=from_number,
             to_number=phone,
             direction="outbound",
@@ -312,6 +332,7 @@ async def _dial(ctx: dict, campaign_id: str) -> None:
                 "call_record_id": call.id,
                 "agent_id": agent.id,
                 "user_id": campaign.user_id,
+                "lead_id": existing_lead.id if existing_lead else "",
                 "direction": "outbound",
                 "enabled_tools": json.dumps(agent.enabled_tools),
                 "tool_configs": json.dumps(agent.tool_configs),

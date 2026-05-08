@@ -80,20 +80,35 @@ class ElevenLabsService:
                 "dynamic_variables": dynamic_vars,
             }
 
-        if settings.campaign_debug:
-            log.debug("el_register_call_attempt",
-                      agent_id=agent_id,
-                      to_number=to_number,
-                      direction=direction,
-                      dynamic_vars_keys=list((dynamic_vars or {}).keys()))
+        log.info("el_register_call_attempt",
+                 agent_id=agent_id,
+                 from_number=from_number,
+                 to_number=to_number,
+                 direction=direction,
+                 dynamic_vars_keys=list((dynamic_vars or {}).keys()),
+                 endpoint=f"{self._base}/convai/twilio/register-call")
 
         async with self._client() as c:
             # Correct endpoint uses a hyphen, not underscore
             r = await c.post(f"{self._base}/convai/twilio/register-call", json=payload)
+
+            log.info("el_register_call_response",
+                     agent_id=agent_id,
+                     to_number=to_number,
+                     http_status=r.status_code,
+                     content_type=r.headers.get("content-type", ""),
+                     response_length=len(r.text))
+
             if r.status_code not in (200, 201):
                 log.error("el_register_call_failed",
-                          status=r.status_code, body=r.text[:300],
-                          agent_id=agent_id, to_number=to_number)
+                          http_status=r.status_code,
+                          body=r.text[:500],
+                          agent_id=agent_id,
+                          from_number=from_number,
+                          to_number=to_number,
+                          direction=direction,
+                          hint="Check that the EL agent_id is valid, the phone number is not "
+                              "shared by multiple EL agents, and your EL plan supports this call type.")
                 raise ExternalServiceError("ElevenLabs", r.text)
 
             # EL returns raw TwiML (XML), not JSON
@@ -107,13 +122,23 @@ class ElevenLabsService:
                     if param.get("name") == "conversation_id":
                         conversation_id = param.get("value", "")
                         break
-            except Exception:
-                pass
+            except Exception as xml_err:
+                log.warning("el_register_call_twiml_parse_error",
+                            agent_id=agent_id, error=str(xml_err),
+                            twiml_preview=twiml[:200])
+
+            if not conversation_id:
+                log.warning("el_register_call_no_conv_id",
+                            agent_id=agent_id,
+                            twiml_preview=twiml[:300],
+                            note="EL returned TwiML but no conversation_id Parameter was found. "
+                                 "The audio WebSocket may still work but transcript tracking will fail.")
 
             log.info("el_register_call_ok",
                      agent_id=agent_id,
-                     conversation_id=conversation_id,
+                     conversation_id=conversation_id or "MISSING",
                      direction=direction,
+                     from_number=from_number,
                      to_number=to_number)
 
             return {
@@ -121,13 +146,68 @@ class ElevenLabsService:
                 "twiml": twiml,
             }
 
+    async def get_subscription_tier(self, api_key: str) -> dict:
+        """Return {tier, is_enterprise} for the given EL API key.
+
+        Calls GET /v1/user/subscription. Callers should cache the result — this
+        does a live API round-trip every time.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as c:
+                r = await c.get(
+                    f"{self._base}/user/subscription",
+                    headers={"xi-api-key": api_key},
+                )
+            if r.status_code == 200:
+                tier = r.json().get("tier", "free")
+                return {"tier": tier, "is_enterprise": tier == "enterprise"}
+        except Exception as exc:
+            log.warning("el_subscription_check_failed", error=str(exc))
+        return {"tier": "unknown", "is_enterprise": False}
+
+    async def get_subscription_usage(self, api_key: str) -> dict:
+        """Return raw ElevenLabs subscription usage and billing fields."""
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as c:
+                r = await c.get(
+                    f"{self._base}/user/subscription",
+                    headers={"xi-api-key": api_key},
+                )
+            if r.status_code == 200:
+                return r.json()
+            log.warning(
+                "el_subscription_usage_failed",
+                http_status=r.status_code,
+                body=r.text[:300],
+            )
+            return {
+                "error": f"ElevenLabs returned HTTP {r.status_code}",
+                "status_code": r.status_code,
+            }
+        except Exception as exc:
+            log.warning("el_subscription_usage_error", error=str(exc))
+            return {"error": str(exc)}
+
     async def get_conversation_status(self, conversation_id: str) -> str:
         """Return the EL conversation status string: 'processing'|'done'|'failed'|'unknown'."""
         try:
             async with self._client() as c:
                 r = await c.get(f"{self._base}/convai/conversations/{conversation_id}")
                 if r.status_code == 200:
-                    return r.json().get("status", "unknown")
+                    data = r.json()
+                    status = data.get("status", "unknown")
+                    if status == "failed":
+                        meta = data.get("metadata", {})
+                        el_error = meta.get("error") or {}
+                        log.warning("el_conversation_status_failed",
+                                    conversation_id=conversation_id,
+                                    termination_reason=meta.get("termination_reason", ""),
+                                    error_code=el_error.get("code"),
+                                    error_reason=el_error.get("reason"),
+                                    tier=meta.get("charging", {}).get("tier", ""),
+                                    hint="If error_code=1002, the EL account has exceeded its quota. "
+                                        "Upgrade the ElevenLabs plan at elevenlabs.io/pricing.")
+                    return status
         except Exception:
             pass
         return "unknown"
@@ -176,12 +256,27 @@ class ElevenLabsService:
                         "timestamp": iso_ts,
                     })
 
-                log.info("el_conversation_full_fetched",
-                         conversation_id=conversation_id,
-                         status=status,
-                         messages=len(transcript),
-                         duration=duration)
-                return {"status": status, "duration_seconds": duration, "transcript": transcript}
+                termination_reason = meta.get("termination_reason") or ""
+                el_error = meta.get("error") or {}
+                tier = meta.get("charging", {}).get("tier", "")
+
+                if status == "failed":
+                    log.warning("el_conversation_failed",
+                                conversation_id=conversation_id,
+                                termination_reason=termination_reason,
+                                error_code=el_error.get("code"),
+                                error_reason=el_error.get("reason"),
+                                tier=tier,
+                                duration=duration,
+                                messages=len(transcript))
+                else:
+                    log.info("el_conversation_full_fetched",
+                             conversation_id=conversation_id,
+                             status=status,
+                             messages=len(transcript),
+                             duration=duration)
+                return {"status": status, "duration_seconds": duration, "transcript": transcript,
+                        "termination_reason": termination_reason, "error": el_error, "tier": tier}
 
         except Exception as exc:
             log.error("el_conversation_full_error", conversation_id=conversation_id, error=str(exc))
@@ -327,8 +422,11 @@ class ElevenLabsService:
                     },
                 })
 
-        # ── Tier 2 client tools (transfer_to_human, leave_voicemail) ──────────
-        tier2_client = {"transfer_to_human", "leave_voicemail"}
+        # ── Tier 2 client tools (leave_voicemail only — transfer_to_human ──────
+        # is now a webhook so the EL tool callback actually hits our endpoint.
+        # In the native Twilio integration there is no JS client, so "client"
+        # type tools are silently dropped by EL; transfer MUST be a webhook.
+        tier2_client = {"leave_voicemail"}
         tier2_server = {
             "book_meeting", "send_followup_sms", "lookup_product_info",
             "check_crm_record", "update_crm_record", "qualify_lead",
@@ -394,7 +492,35 @@ class ElevenLabsService:
         }
 
         for tool_name in agent.enabled_tools:
-            if tool_name in tier2_client:
+            if tool_name == "transfer_to_human":
+                # Webhook tool — EL calls our endpoint which performs the real Twilio redirect.
+                # We enrich the description with the configured number so EL understands
+                # it does not need to supply one; it just calls the tool.
+                tool = get_tool(tool_name)
+                if tool:
+                    cfg = (getattr(agent, "tool_configs", None) or {}).get("transfer_to_human", {})
+                    configured_number = (cfg.get("transfer_to") or "").strip()
+                    number_note = (
+                        f" The transfer number {configured_number} is pre-configured — "
+                        f"you do not need to supply it as a parameter."
+                        if configured_number
+                        else " WARNING: no transfer number has been configured for this agent."
+                    )
+                    defs.append({
+                        "type": "webhook",
+                        "name": "transfer_to_human",
+                        "description": tool["description"] + number_note,
+                        "api_schema": {
+                            "url": f"{base_url}/api/v1/el/tools/transfer_to_human",
+                            "method": "POST",
+                            "request_headers": {
+                                "X-Voxara-Secret": agent.signing_secret,
+                                "X-Agent-Id": agent.id,
+                            },
+                            "request_body_schema": tool["parameters"],
+                        },
+                    })
+            elif tool_name in tier2_client:
                 tool = get_tool(tool_name)
                 if tool:
                     defs.append({

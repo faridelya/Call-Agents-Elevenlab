@@ -32,5 +32,7 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
         "started_at": datetime.now(timezone.utc).isoformat(),
         "duration_seconds": duration,
     })
-    await redis.rpush(f"call:{ctx.call_sid}:stages", entry)
+    await redis.rpush(f"call:{ctx.call_record_id}:stages", entry)
+    if ctx.call_sid and ctx.call_sid != ctx.call_record_id:
+        await redis.rpush(f"call:{ctx.call_sid}:stages", entry)
     return f"Stage updated: {stage}"

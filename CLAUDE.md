@@ -83,6 +83,23 @@ frontend/            — Next.js 15 App Router + custom WebSocket server
 - **Tier 1** (`tools/tier1/`): zero-latency client-side tools always active on every agent — `save_lead`, `get_contact_info`, `end_call`, `log_call_outcome`, `get_call_script`, `update_call_stage`
 - **Tier 2** (`tools/tier2/`): optional server-side tools — `transfer_to_human`, `leave_voicemail` (and others configured in `AgentBuilder`)
 - Tool IDs in `agent.enabled_tools` must exactly match the keys registered in `tools/registry.py`
+- **IMPORTANT — EL tool types:** Tier 2 tools must be registered as `"webhook"` type in ElevenLabs (not `"client"`). In the native Twilio/EL integration there is no JS client, so `"client"` tools are silently dropped. See `elevenlabs_service.py` for how each tier-2 tool is registered.
+
+**`transfer_to_human` tool — full flow:**
+1. EL agent calls our webhook at `/api/v1/el/tools/transfer_to_human`
+2. Tool reads the transfer number from `ctx.tool_configs["transfer_to_human"]["transfer_to"]` (configured per-agent, never passed as an LLM parameter)
+3. Stamps Redis: `transferred=1`, `transferred_to`, `transfer_type`, `transfer_reason`, `transferred_at`
+4. Builds TwiML `<Dial>` with:
+   - `action` → `/twilio/transfer-fallback?call_record_id=...&transfer_to=...` (fires when dialed leg ends)
+   - `recordingStatusCallback` → `/twilio/recording?call_record_id=...&is_transfer=1` (fires when recording is ready)
+   - `record="record-from-answer"` — records the human-agent leg
+5. POSTs to Twilio REST API (`/Calls/{call_sid}.json`) to redirect the live call; EL is immediately out of the loop
+6. **Fallback** (`/twilio/transfer-fallback`): if human agent is busy/no-answer/failed → speaks a message and hangs up; if answered → `<Hangup/>` only
+7. **Recording callback** (`/twilio/recording`): looks up call by `call_record_id` query param (the recording's `CallSid` is the dialed-leg SID, not the original); if `is_transfer=1` → enqueues `transcribe_human_leg` ARQ task (30s defer)
+8. **`transcribe_human_leg` ARQ task** (`tasks/post_call_tasks.py`): downloads MP3 from Twilio, sends to OpenAI Whisper, appends `{"role": "human_agent", "text": "[Human Agent Conversation]\n..."}` to `call.transcript`
+9. **`post_call_processing`** preserves `role: system` and `role: human_agent` entries when replacing transcript with fresh EL data — those entries do not exist in EL's transcript so they must be merged, not overwritten
+
+**Transfer number configuration:** Set in agent tool_configs UI as `transfer_to_human.transfer_to` (E.164 format, e.g. `+15551234567`). The LLM never sees or guesses the number.
 
 **Twilio webhooks — ngrok is required for local dev:**
 - `settings.public_url` is the URL embedded in TwiML and status callbacks

@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: str = ""
 
+    # Google (Gemini models)
+    google_api_key: str = ""
+
+    # Anthropic (Claude models)
+    anthropic_api_key: str = ""
+
     # Encryption
     encryption_key: str = ""
 

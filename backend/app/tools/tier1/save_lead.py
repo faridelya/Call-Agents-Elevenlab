@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from app.tools.registry import register_tool
 from app.tools.schemas import CallContext
+from app.models.call import Call
 from app.models.lead import Lead
 from app.models.base import new_uuid
 
@@ -72,11 +73,19 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
         )
         db.add(lead)
 
+    call_result = await db.execute(select(Call).where(Call.id == ctx.call_record_id))
+    call = call_result.scalar_one_or_none()
+    if call:
+        call.lead_id = lead.id
+
     await db.commit()
     await db.refresh(lead)
 
-    # Update Redis call context with lead_id
-    await redis.hset(f"call:{ctx.call_sid}", "lead_id", lead.id)
+    # Update Redis call context with lead_id. Native calls are keyed by call_record_id;
+    # mirror to call_sid for legacy bridge compatibility.
+    await redis.hset(f"call:{ctx.call_record_id}", "lead_id", lead.id)
+    if ctx.call_sid and ctx.call_sid != ctx.call_record_id:
+        await redis.hset(f"call:{ctx.call_sid}", "lead_id", lead.id)
 
     name = " ".join(filter(None, [lead.first_name, lead.last_name])) or phone
     return f"Lead saved: {name}"

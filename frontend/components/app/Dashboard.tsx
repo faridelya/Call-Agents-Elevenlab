@@ -710,7 +710,6 @@ export function AgentsView({ onSelectAgent, onNewAgent }: {
             agentName={testTarget.name}
             isSynced={Boolean(testTarget.elevenlabs_agent_id)}
             agentPhoneNumber={testTarget.twilio_phone_number}
-            onCallEnded={() => setTestTarget(null)}
           />
         </div>
       )}

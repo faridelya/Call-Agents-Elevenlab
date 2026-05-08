@@ -7,6 +7,26 @@ import { apiFetch } from '@/lib/api';
 import type { CallRecord } from '@/lib/api';
 import { getOutcomeColor, getOutcomeLabel, getOutcomeIcon } from '@/lib/outcomeUtils';
 
+// ─── Transfer-pending helpers ─────────────────────────────────────────────────
+function hasTransferEvent(t: any[]): boolean {
+  return t.some(e => e.role === 'system' && (e.text || '').includes('[Transfer]'));
+}
+function hasHumanLeg(t: any[]): boolean {
+  return t.some(e => e.role === 'human_agent' || e.role === 'customer');
+}
+function isCallRecent(timestamp?: string, maxMs = 5 * 60 * 1000): boolean {
+  if (!timestamp) return false;
+  return Date.now() - new Date(timestamp).getTime() < maxMs;
+}
+type PendingPhase = 'transcribing' | 'classifying' | null;
+function getPendingPhase(t: any[], outcome?: string, summary?: string, callTimestamp?: string): PendingPhase {
+  if (!hasTransferEvent(t)) return null;
+  if (!isCallRecent(callTimestamp)) return null;
+  if (!hasHumanLeg(t)) return 'transcribing';
+  if (!outcome || !summary) return 'classifying';
+  return null;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDuration(secs?: number) {
   if (!secs) return '—';
@@ -77,13 +97,45 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
     })();
   }, [call.id]);
 
-  const si = sentimentInfo(call.sentiment_score);
+  // Auto-poll while human-leg transcription or post-call classification is pending
+  useEffect(() => {
+    if (loading) return;
+    const src = detail ?? call;
+    const t: any[] = (src as any).transcript ?? [];
+    const ts = (src as any).ended_at ?? (src as any).created_at ?? call.created_at;
+    const phase = getPendingPhase(t, (src as any).outcome, (src as any).auto_summary, ts);
+    if (!phase) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 22;
+    const poll = async () => {
+      if (cancelled || attempts >= maxAttempts) return;
+      attempts++;
+      try {
+        const updated = await apiFetch<CallRecord>(`/api/v1/calls/${call.id}`);
+        if (!cancelled) {
+          setDetail(updated);
+          const ut: any[] = (updated as any).transcript ?? [];
+          const uts = (updated as any).ended_at ?? (updated as any).created_at ?? call.created_at;
+          const stillPending = getPendingPhase(ut, (updated as any).outcome, (updated as any).auto_summary, uts);
+          if (stillPending) setTimeout(poll, 8000);
+        }
+      } catch { if (!cancelled) setTimeout(poll, 8000); }
+    };
+    const timer = setTimeout(poll, 8000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [loading, call.id, detail?.outcome, (detail as any)?.auto_summary]);
+
+  const src = detail ?? call;
+  const si = sentimentInfo((src as any).sentiment_score ?? call.sentiment_score);
   const isOut = call.direction === 'outbound';
   const contact = isOut ? call.to_number : call.from_number;
-  const src = detail ?? call;
   const transcript = (src as any).transcript_entries ?? (src as any).transcript ?? [];
-  const oc = getOutcomeColor(call.outcome);
-  const ol = getOutcomeLabel(call.outcome);
+  const callTs = (src as any).ended_at ?? (src as any).created_at ?? call.created_at;
+  const pendingPhase = getPendingPhase(transcript, (src as any).outcome, (src as any).auto_summary, callTs);
+  const oc = getOutcomeColor((src as any).outcome ?? call.outcome);
+  const ol = getOutcomeLabel((src as any).outcome ?? call.outcome);
 
   return (
     <div style={{
@@ -139,8 +191,8 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
               background: `${c}10`, border: `1px solid ${c}20`,
               borderRadius: 8, padding: '5px 10px', textAlign: 'center',
             }}>
-              <div style={{ fontSize: 9, color: c, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: c, marginTop: 1 }}>{v}</div>
+              <div style={{ fontSize: 10, color: c, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: c, marginTop: 1 }}>{v}</div>
             </div>
           ))}
         </div>
@@ -154,10 +206,10 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
           flexShrink: 0,
           background: 'rgba(0,208,130,0.04)',
         }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, color: '#00D082', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#00D082', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7 }}>
             AI Summary
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             {(detail ?? call).auto_summary}
           </div>
         </div>
@@ -175,14 +227,55 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
             ))}
           </div>
         ) : transcript.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13.5 }}>
             No transcript available
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {transcript.map((entry: any, i: number) => {
+              const text = entry.text ?? entry.message ?? '';
+              const ts = entry.timestamp
+                ? new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                : null;
+
+              // System event — centered divider
+              if (entry.role === 'system') {
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: '4px 0', animation: `fade-in 0.3s ${i * 30}ms both` }}>
+                    <div style={{
+                      background: 'rgba(124,110,250,0.08)', border: '1px solid rgba(124,110,250,0.22)',
+                      borderRadius: 8, padding: '7px 14px', maxWidth: '92%', textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#7C6EFA', marginBottom: 3 }}>System Event</div>
+                      <div style={{ fontSize: 13, color: '#A89AF9', lineHeight: 1.55 }}>{text}</div>
+                    </div>
+                    {ts && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{ts}</span>}
+                  </div>
+                );
+              }
+
+              // Human agent leg — left-aligned, amber
+              if (entry.role === 'human_agent') {
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', animation: `fade-in 0.3s ${i * 30}ms both` }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#F59E0B', marginBottom: 4 }}>Human Agent</div>
+                    <div style={{
+                      maxWidth: '85%',
+                      background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.18)',
+                      borderRadius: '4px 12px 12px 12px',
+                      padding: '9px 13px', fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.55,
+                    }}>
+                      {text}
+                    </div>
+                    {ts && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 3 }}>{ts}</span>}
+                  </div>
+                );
+              }
+
+              // AI agent or customer
               const isAgent = entry.role === 'agent';
               const accentClr = isAgent ? '#00D082' : '#38BDF8';
+              const label = isAgent ? (call.agent_name ?? 'AI Agent') : 'Customer';
               return (
                 <div key={i} style={{
                   display: 'flex', flexDirection: 'column',
@@ -190,14 +283,14 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
                   animation: `fade-in 0.3s ${i * 30}ms both`,
                 }}>
                   <div style={{
-                    fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+                    fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
                     textTransform: 'uppercase', color: accentClr,
                     marginBottom: 4,
                   }}>
-                    {isAgent ? 'Agent' : 'Customer'}
-                    {entry.timestamp && (
-                      <span style={{ color: 'var(--text-muted)', marginLeft: 6, fontWeight: 400, textTransform: 'none' }}>
-                        {entry.timestamp}
+                    {label}
+                    {ts && (
+                      <span style={{ color: 'var(--text-muted)', marginLeft: 6, fontWeight: 400, textTransform: 'none', fontSize: 10.5 }}>
+                        {ts}
                       </span>
                     )}
                   </div>
@@ -207,13 +300,32 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
                     border: `1px solid ${isAgent ? 'rgba(0,208,130,0.15)' : 'rgba(56,189,248,0.12)'}`,
                     borderRadius: isAgent ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
                     padding: '9px 13px',
-                    fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.55,
+                    fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.55,
                   }}>
-                    {entry.text ?? entry.message ?? ''}
+                    {text}
                   </div>
                 </div>
               );
             })}
+            {pendingPhase && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '7px 11px', marginTop: 4,
+                background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)',
+                borderRadius: 8,
+              }}>
+                <div style={{
+                  width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                  border: '1.5px solid rgba(245,158,11,0.3)', borderTopColor: '#F59E0B',
+                  animation: 'spin 1s linear infinite',
+                }} />
+                <span style={{ fontSize: 12, color: '#F59E0B' }}>
+                  {pendingPhase === 'transcribing'
+                    ? 'Human conversation is being transcribed — will update shortly.'
+                    : 'Analyzing full conversation — summary updating shortly.'}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -322,7 +434,7 @@ export function OrdersView() {
             {/* Table header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '160px 1fr 1fr 150px 80px 90px 1fr',
+              gridTemplateColumns: '125px 150px 150px 155px 72px 82px 1fr',
               gap: 0,
               padding: '11px 20px',
               background: 'rgba(255,255,255,0.03)',
@@ -330,7 +442,7 @@ export function OrdersView() {
             }}>
               {['Date', 'Customer', 'Agent', 'Status', 'Duration', 'Sentiment', 'Summary'].map((h) => (
                 <div key={h} style={{
-                  fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase',
+                  fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
                   letterSpacing: '0.09em', color: 'var(--text-muted)', paddingRight: 8,
                 }}>
                   {h}
@@ -342,7 +454,7 @@ export function OrdersView() {
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} style={{
-                  display: 'grid', gridTemplateColumns: '160px 1fr 1fr 150px 80px 90px 1fr',
+                  display: 'grid', gridTemplateColumns: '125px 150px 150px 155px 72px 82px 1fr',
                   padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.04)',
                   gap: 0, alignItems: 'center',
                 }}>
@@ -411,7 +523,7 @@ function OrderRow({ call, idx, selected, onClick }: {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        display: 'grid', gridTemplateColumns: '160px 1fr 1fr 150px 80px 90px 1fr',
+        display: 'grid', gridTemplateColumns: '125px 150px 150px 155px 72px 82px 1fr',
         padding: '13px 20px', alignItems: 'center', gap: 0,
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         background: selected
@@ -422,35 +534,35 @@ function OrderRow({ call, idx, selected, onClick }: {
         animation: `fade-in 0.4s ${idx * 40}ms both`,
       }}
     >
-      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', paddingRight: 8 }}>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', paddingRight: 8 }}>
         {fmtDate(call.started_at)}
       </div>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', paddingRight: 8 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13.5, color: 'var(--text-primary)', paddingRight: 8 }}>
         {contact ?? '—'}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', paddingRight: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', paddingRight: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {call.agent_name ?? '—'}
       </div>
       <div style={{ paddingRight: 8 }}>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 4,
-          fontSize: 10, fontWeight: 600, padding: '3px 9px', borderRadius: 9999,
+          fontSize: 11.5, fontWeight: 600, padding: '3px 9px', borderRadius: 9999,
           background: `${oc}15`, color: oc, border: `1px solid ${oc}30`, whiteSpace: 'nowrap',
         }}>
-          {oi && <span style={{ fontSize: 9 }}>{oi}</span>}
+          {oi && <span style={{ fontSize: 10 }}>{oi}</span>}
           {ol}
         </span>
       </div>
-      <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', paddingRight: 8 }}>
+      <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', paddingRight: 8 }}>
         {fmtDuration(call.duration_seconds)}
       </div>
       <div style={{ paddingRight: 8 }}>
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: si.color }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: si.color }}>
           {si.label}
         </span>
       </div>
       <div style={{
-        fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden',
+        fontSize: 13, color: 'var(--text-muted)', overflow: 'hidden',
         textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
         {call.auto_summary ? call.auto_summary.slice(0, 80) + (call.auto_summary.length > 80 ? '…' : '') : '—'}

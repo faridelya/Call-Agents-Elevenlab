@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useOutboundCall, useCalls, useEndCall } from '@/lib/hooks/useCalls';
 import { useEventStream, type LiveEvent } from '@/lib/hooks/useEventStream';
-import { apiFetch, settings as apiSettings } from '@/lib/api';
+import { apiFetch, calls as callsApi, settings as apiSettings } from '@/lib/api';
 
 type CallState = 'idle' | 'calling' | 'connected' | 'ended';
 
@@ -223,11 +223,16 @@ export function TestCallPanel({
   // Credential status — null = loading, true/false = known
   const [twilioCxn, setTwilioCxn] = useState<boolean | null>(null);
   const [elCxn, setElCxn] = useState<boolean | null>(null);
+  // EL plan — null = loading, true = enterprise (real-time WS relay), false = not enterprise (poll)
+  const [isEnterprise, setIsEnterprise] = useState<boolean | null>(null);
 
   useEffect(() => {
     apiSettings.getCredentials()
       .then(d => { setTwilioCxn(d.twilio_connected); setElCxn(d.elevenlabs_connected); })
       .catch(() => {});
+    apiSettings.getELPlan()
+      .then(d => setIsEnterprise(d.is_enterprise))
+      .catch(() => setIsEnterprise(false));
   }, []);
 
   useEffect(() => { callRecordIdRef.current = callRecordId; }, [callRecordId]);
@@ -242,7 +247,7 @@ export function TestCallPanel({
         if (d.transcript?.length) {
           setMessages(d.transcript.map(m => ({ role: m.role as 'user' | 'agent', text: m.text, timestamp: m.timestamp })));
         }
-        if (d.duration_seconds) setDuration(d.duration_seconds);
+        if (d.duration_seconds != null) setDuration(d.duration_seconds);
         // Keep retrying — ARQ job ~60s later may return a fuller transcript
         if (attempt < retryGaps.length) {
           setTimeout(() => loadTranscript(rid, attempt + 1), retryGaps[attempt]);
@@ -255,6 +260,80 @@ export function TestCallPanel({
       });
   }, []);
 
+  const applyFinalDuration = useCallback(async (rid: string) => {
+    try {
+      const call = await callsApi.get(rid);
+      if (call.duration_seconds != null) {
+        setDuration(call.duration_seconds);
+        return;
+      }
+      if (call.started_at && call.ended_at) {
+        const started = new Date(call.started_at).getTime();
+        const ended = new Date(call.ended_at).getTime();
+        if (Number.isFinite(started) && Number.isFinite(ended) && ended > started) {
+          setDuration(Math.max(0, Math.round((ended - started) / 1000)));
+        }
+      }
+    } catch {
+      // Keep the local stopwatch value if the final record is not ready yet.
+    }
+  }, []);
+
+  const finishCallUi = useCallback((reason: string, rid = callRecordIdRef.current) => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (callStateRef.current !== 'ended') {
+      setCallState('ended');
+      setEndReason(reason);
+      onCallEnded?.();
+    }
+    if (rid) {
+      void applyFinalDuration(rid);
+    }
+  }, [applyFinalDuration, onCallEnded]);
+
+  // Non-Enterprise polling: fetch partial transcript from EL every 2s while connected.
+  // Enterprise users receive live transcript via the WS monitoring relay (transcript events).
+  // Only runs for single test calls — campaign calls are blocked server-side (returns 403).
+  // Auto-ends the UI when EL reports status=failed/done (call dropped on EL side).
+  useEffect(() => {
+    if (callState !== 'connected' || isEnterprise !== false || !callRecordId) return;
+    let stopped = false;
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const d = await callsApi.liveTranscript(callRecordId);
+        if (stopped) return;
+        if (d.transcript?.length) {
+          setMessages(
+            d.transcript.map(m => ({
+              role: m.role as 'user' | 'agent',
+              text: m.text,
+              timestamp: m.timestamp,
+            })),
+          );
+        }
+        // EL reported the conversation is over — transition to ended state
+        if (d.status === 'failed' || d.status === 'done') {
+          stopped = true;
+          finishCallUi(d.status === 'failed' ? 'Call dropped by network' : 'Call completed', callRecordId);
+          const rid = callRecordIdRef.current;
+          if (rid) {
+            try { await endCallMutation.mutateAsync(rid); } catch {}
+            setTimeout(() => loadTranscript(rid), 3500);
+          }
+        }
+      } catch {
+        // silently ignore — call may not have a conversation yet
+      }
+    };
+    poll(); // immediate first fetch
+    const interval = setInterval(poll, 2000);
+    return () => { stopped = true; clearInterval(interval); };
+  }, [callState, isEnterprise, callRecordId, finishCallUi, loadTranscript, endCallMutation.mutateAsync]);
+
   useEventStream(
     useCallback((event: LiveEvent) => {
       const rid = callRecordIdRef.current;
@@ -262,20 +341,17 @@ export function TestCallPanel({
       if (event.type === 'call_started' && event.call_record_id === rid) {
         setCallState('connected');
       } else if (event.type === 'call_ended' && event.call_record_id === rid) {
-        if (callStateRef.current !== 'ended') {
-          setCallState('ended');
-          setEndReason('Call completed');
-          onCallEnded?.();
-        }
+        finishCallUi('Call completed', rid);
         // Start transcript retry chain — ARQ job completes ~60s later with full transcript
         loadTranscript(rid);
       } else if (event.type === 'transcript' && event.call_record_id === rid) {
         setMessages((prev) => [...prev, { role: event.role, text: event.text, timestamp: event.timestamp }]);
       } else if (event.type === 'call_processed' && event.call_record_id === rid) {
+        finishCallUi('Call completed', rid);
         // ARQ post-call job finished — fetch the final (most complete) transcript
         loadTranscript(rid);
       }
-    }, [onCallEnded, loadTranscript])
+    }, [finishCallUi, loadTranscript])
   );
 
   useEffect(() => {
@@ -460,12 +536,20 @@ export function TestCallPanel({
         <div style={{ flex: '0 0 55%', display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
           <div style={{ padding: '13px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'linear-gradient(90deg,#0C1120,#0D1226)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 8px rgba(239,68,68,0.9)', animation: 'rec-blink 1.4s ease-in-out infinite' }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#F1F5F9', letterSpacing: '0.09em', textTransform: 'uppercase', fontFamily: 'var(--font-inter)' }}>Live Transcript</span>
-            <div style={{ display: 'flex', gap: 2.5, alignItems: 'center', marginLeft: 8 }}>
-              {[0, 0.1, 0.2, 0.1, 0].map((delay, i) => (
-                <div key={i} style={{ width: 2.5, height: 3, background: 'linear-gradient(to top,#7C6EFA,#22D3EE)', borderRadius: 2, transformOrigin: 'bottom', animation: `hdr-wave 0.75s ease-in-out ${delay}s infinite` }} />
-              ))}
-            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#F1F5F9', letterSpacing: '0.09em', textTransform: 'uppercase', fontFamily: 'var(--font-inter)' }}>
+              {isEnterprise ? 'Live Transcript' : 'Transcript'}
+            </span>
+            {isEnterprise ? (
+              <div style={{ display: 'flex', gap: 2.5, alignItems: 'center', marginLeft: 8 }}>
+                {[0, 0.1, 0.2, 0.1, 0].map((delay, i) => (
+                  <div key={i} style={{ width: 2.5, height: 3, background: 'linear-gradient(to top,#7C6EFA,#22D3EE)', borderRadius: 2, transformOrigin: 'bottom', animation: `hdr-wave 0.75s ease-in-out ${delay}s infinite` }} />
+                ))}
+              </div>
+            ) : (
+              <span style={{ fontSize: 9, color: '#475569', fontFamily: 'var(--font-inter)', background: 'rgba(255,255,255,0.04)', padding: '2px 7px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.07)' }}>
+                updates every 2s
+              </span>
+            )}
             {customerName && <span style={{ fontSize: 10, color: '#475569', fontFamily: 'var(--font-inter)', marginLeft: 'auto' }}>with {customerName}</span>}
             {!customerName && <span style={{ fontSize: 10, color: '#334155', fontFamily: 'var(--font-jetbrains-mono)', marginLeft: 'auto' }}>{messages.length} msgs</span>}
           </div>
@@ -477,7 +561,14 @@ export function TestCallPanel({
                     <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: '#1E2A3D', animation: `rec-blink 1.2s ease-in-out ${d}s infinite` }} />
                   ))}
                 </div>
-                <span style={{ fontSize: 12, color: '#334155', fontFamily: 'var(--font-inter)' }}>Waiting for conversation…</span>
+                <span style={{ fontSize: 12, color: '#334155', fontFamily: 'var(--font-inter)' }}>
+                  {isEnterprise ? 'Waiting for conversation…' : 'Transcript will appear shortly…'}
+                </span>
+                {isEnterprise === false && (
+                  <span style={{ fontSize: 10, color: '#1E2A3D', fontFamily: 'var(--font-inter)', textAlign: 'center', maxWidth: 200 }}>
+                    Full transcript available after call ends
+                  </span>
+                )}
               </div>
             ) : (
               messages.map((msg, i) => <MsgBubble key={i} msg={msg} agentName={agentName} customerName={customerName} />)

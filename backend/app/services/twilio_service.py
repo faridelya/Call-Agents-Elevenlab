@@ -117,6 +117,29 @@ class TwilioService:
             raise ExternalServiceError("Twilio", str(e)) from e
 
     @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=4),
+        retry=retry_if_exception_type((httpx.RequestError, _TwilioTransientError)),
+        reraise=True,
+    )
+    async def _redirect_call_inner(self, call_sid: str, twiml: str) -> dict:
+        r = await self._request(
+            "POST",
+            self._url(f"Calls/{call_sid}.json"),
+            data={"Twiml": twiml},
+        )
+        self._check(r, "redirect_call")
+        return r.json()
+
+    async def redirect_call(self, call_sid: str, twiml: str) -> dict:
+        """Redirect a live Twilio call to new inline TwiML. Retries on transient network errors."""
+        logger.info("twilio_redirect_call sid=%s", call_sid)
+        try:
+            return await self._redirect_call_inner(call_sid, twiml)
+        except _TwilioTransientError as e:
+            raise ExternalServiceError("Twilio", str(e)) from e
+
+    @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=1, max=3),
         retry=retry_if_exception_type((httpx.RequestError, _TwilioTransientError)),
@@ -139,6 +162,16 @@ class TwilioService:
             return await self._send_sms_inner(to, from_, body, idempotency_key)
         except _TwilioTransientError as e:
             raise ExternalServiceError("Twilio", str(e)) from e
+
+    async def get_balance(self) -> dict:
+        """Return the Twilio account balance payload.
+
+        Twilio returns the remaining project balance as a string decimal and a
+        currency code from the Balance resource.
+        """
+        r = await self._request("GET", self._url("Balance.json"))
+        self._check(r, "get_balance")
+        return r.json()
 
     async def search_available_numbers(
         self,

@@ -27,10 +27,14 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
             "Please call us back at your earliest convenience. Thank you."
         )
 
-    # Signal bridge to play voicemail then end
-    await redis.hset(f"call:{ctx.call_sid}", mapping={
+    # Signal bridge to play voicemail then end. Native calls are keyed by
+    # call_record_id; mirror to call_sid for the legacy bridge path.
+    mapping = {
         "voicemail_requested": "1",
         "voicemail_message": message,
-    })
+    }
+    await redis.hset(f"call:{ctx.call_record_id}", mapping=mapping)
+    if ctx.call_sid and ctx.call_sid != ctx.call_record_id:
+        await redis.hset(f"call:{ctx.call_sid}", mapping=mapping)
 
     return f"Voicemail queued: {message[:60]}..."
