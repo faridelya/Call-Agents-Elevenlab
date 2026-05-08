@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { CustomToolCreate, ToolParameter, HeaderPair, QueryParam } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -9,6 +10,7 @@ type ToolType = 'webhook' | 'client' | 'mcp';
 
 interface Props {
   agentId: string;
+  initialType?: ToolType;
   editTool?: {
     id: string;
     el_tool_type: ToolType;
@@ -30,33 +32,32 @@ interface Props {
 // ── Animations ────────────────────────────────────────────────────────────────
 
 const MODAL_STYLES = `
-  @keyframes ctm-backdrop { from{opacity:0} to{opacity:1} }
-  @keyframes ctm-slide-up { from{opacity:0;transform:translateY(24px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }
-  @keyframes ctm-tab-in   { from{opacity:0;transform:translateX(8px)} to{opacity:1;transform:translateX(0)} }
-  @keyframes ctm-row-in   { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
-  @keyframes ctm-spin     { to{transform:rotate(360deg)} }
-  @keyframes ctm-pulse    { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  @keyframes ctm-slide-right { from{transform:translateX(100%)} to{transform:translateX(0)} }
+  @keyframes ctm-tab-in      { from{opacity:0;transform:translateX(8px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes ctm-row-in      { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes ctm-spin        { to{transform:rotate(360deg)} }
+  @keyframes ctm-pulse       { 0%,100%{opacity:1} 50%{opacity:0.5} }
 `;
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
+// ── Design tokens (light theme) ───────────────────────────────────────────────
 
 const T = {
-  bg0:     '#080B14',
-  bg1:     '#0C1120',
-  bg2:     '#0F1623',
-  bg3:     '#111827',
-  green:   '#00D082',
-  greenD:  '#00C2B8',
-  purple:  '#7C6EFA',
-  purpleL: '#A89AF9',
-  cyan:    '#22D3EE',
-  red:     '#FF4D6D',
-  yellow:  '#F0B429',
-  border:  'rgba(255,255,255,0.07)',
-  borderH: 'rgba(255,255,255,0.13)',
-  textP:   'rgba(255,255,255,0.92)',
-  textS:   'rgba(255,255,255,0.60)',
-  textM:   'rgba(255,255,255,0.38)',
+  bg0:     '#F8FAFC',
+  bg1:     '#FFFFFF',
+  bg2:     '#F1F5F9',
+  bg3:     '#F8FAFC',
+  green:   '#10B981',
+  greenD:  '#06B6D4',
+  purple:  '#8B5CF6',
+  purpleL: '#A78BFA',
+  cyan:    '#06B6D4',
+  red:     '#F43F5E',
+  yellow:  '#F59E0B',
+  border:  '#E2E8F0',
+  borderH: '#CBD5E1',
+  textP:   '#0F172A',
+  textS:   '#374151',
+  textM:   '#64748B',
 };
 
 const TYPE_META: Record<ToolType, { label: string; color: string; icon: React.ReactElement; desc: string }> = {
@@ -220,14 +221,14 @@ function FToggle({ value, onChange, label }: { value: boolean; onChange: (v: boo
     >
       <div style={{
         width: 34, height: 18, borderRadius: 9999, position: 'relative',
-        background: value ? `${T.green}30` : 'rgba(255,255,255,0.06)',
+        background: value ? `${T.green}18` : '#F1F5F9',
         border: `1px solid ${value ? `${T.green}50` : T.border}`,
         transition: 'all 0.2s', flexShrink: 0,
       }}>
         <div style={{
           position: 'absolute', top: 3, left: value ? 16 : 3,
           width: 10, height: 10, borderRadius: '50%',
-          background: value ? T.green : 'rgba(255,255,255,0.25)',
+          background: value ? T.green : '#CBD5E1',
           transition: 'left 0.2s, background 0.2s',
           boxShadow: value ? `0 0 6px ${T.green}` : 'none',
         }} />
@@ -272,7 +273,7 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
       style={{
         padding: '4px 6px', borderRadius: 6,
         border: `1px solid ${hov ? `${T.red}50` : T.border}`,
-        background: hov ? `${T.red}10` : 'transparent',
+        background: hov ? `${T.red}08` : '#F8FAFC',
         color: hov ? T.red : T.textM,
         cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
       }}
@@ -771,10 +772,10 @@ function BehaviourFields({
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export function CreateToolModal({ agentId, editTool, onSave, onClose }: Props) {
+export function CreateToolModal({ agentId, initialType, editTool, onSave, onClose }: Props) {
   const isEdit = !!editTool;
 
-  const [toolType,             setToolType]             = useState<ToolType>(editTool?.el_tool_type ?? 'webhook');
+  const [toolType,             setToolType]             = useState<ToolType>(editTool?.el_tool_type ?? initialType ?? 'webhook');
   const [name,                 setName]                 = useState(editTool?.name ?? '');
   const [description,          setDescription]          = useState(editTool?.description ?? '');
   const [disableInterruptions, setDisableInterruptions] = useState(editTool?.disable_interruptions ?? false);
@@ -858,51 +859,35 @@ export function CreateToolModal({ agentId, editTool, onSave, onClose }: Props) {
     disableInterruptions, executionMode, preToolSpeech, onSave,
   ]);
 
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 20,
-      animation: 'ctm-backdrop 0.2s both',
-    }}>
+  const panel = (
+    <>
       <style>{MODAL_STYLES}</style>
 
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'absolute', inset: 0,
-          background: 'rgba(4,7,14,0.82)',
-          backdropFilter: 'blur(8px)',
-        }}
-      />
-
-      {/* Sheet */}
+      {/* Right-side panel — no backdrop, just the panel */}
       <div style={{
-        position: 'relative', zIndex: 1,
-        width: '100%', maxWidth: 680,
-        maxHeight: 'calc(100vh - 40px)',
+        position: 'fixed', top: 0, right: 0, bottom: 0,
+        width: 'min(560px, 90vw)',
+        zIndex: 9001,
         display: 'flex', flexDirection: 'column',
-        background: T.bg1,
-        border: `1px solid ${T.border}`,
-        borderRadius: 18,
-        boxShadow: '0 40px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)',
-        animation: 'ctm-slide-up 0.3s cubic-bezier(0.16,1,0.3,1) both',
+        background: '#FFFFFF',
+        borderLeft: '1px solid #E2E8F0',
+        boxShadow: '-12px 0 48px rgba(15,23,42,0.12)',
+        animation: 'ctm-slide-right 0.32s cubic-bezier(0.16,1,0.3,1) both',
         overflow: 'hidden',
       }}>
 
-        {/* Top accent */}
+        {/* Left accent spine */}
         <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 1.5,
-          background: `linear-gradient(90deg, transparent 5%, ${meta.color}60 40%, ${meta.color}45 60%, transparent 95%)`,
+          position: 'absolute', top: 0, left: 0, bottom: 0, width: 3,
+          background: `linear-gradient(180deg, ${meta.color}, ${meta.color}55, transparent)`,
           transition: 'background 0.3s',
         }} />
 
         {/* Header */}
         <div style={{
-          padding: '18px 22px 16px',
-          borderBottom: `1px solid ${T.border}`,
-          flexShrink: 0,
+          padding: '20px 24px 18px',
+          borderBottom: `1px solid #F1F5F9`,
+          flexShrink: 0, position: 'relative',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -973,7 +958,8 @@ export function CreateToolModal({ agentId, editTool, onSave, onClose }: Props) {
 
         {/* Body */}
         <div style={{
-          flex: 1, overflowY: 'auto', padding: '18px 22px',
+          flex: 1, overflowY: 'auto', padding: '20px 24px',
+          background: '#FFFFFF',
           animation: 'ctm-tab-in 0.22s cubic-bezier(0.16,1,0.3,1) both',
         }}>
           {/* Name & Description — common to all types */}
@@ -1041,9 +1027,9 @@ export function CreateToolModal({ agentId, editTool, onSave, onClose }: Props) {
         {/* Footer */}
         <div style={{
           padding: '14px 22px',
-          borderTop: `1px solid ${T.border}`,
+          borderTop: '1px solid #F1F5F9',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: T.bg0, flexShrink: 0,
+          background: '#FFFFFF', flexShrink: 0,
         }}>
           <div style={{ fontSize: 11, color: T.textM }}>
             <span style={{ color: meta.color, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', fontSize: 10 }}>
@@ -1052,18 +1038,18 @@ export function CreateToolModal({ agentId, editTool, onSave, onClose }: Props) {
             {' · '}
             Fields marked <span style={{ color: T.red }}>*</span> are required
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}
               style={{
-                padding: '8px 18px', borderRadius: 9,
-                border: `1px solid ${T.border}`,
-                background: 'transparent', color: T.textS,
+                padding: '9px 18px', borderRadius: 9,
+                border: '1px solid #E2E8F0',
+                background: '#F8FAFC', color: '#64748B',
                 fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                transition: 'all 0.15s', fontFamily: 'Inter, sans-serif',
+                transition: 'all 0.15s', fontFamily: 'var(--font-ui), Inter, sans-serif',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.borderH; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.border; }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.color = '#0F172A'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#64748B'; }}
             >
               Cancel
             </button>
@@ -1071,21 +1057,21 @@ export function CreateToolModal({ agentId, editTool, onSave, onClose }: Props) {
               onClick={handleSubmit}
               disabled={saving}
               style={{
-                padding: '8px 22px', borderRadius: 9,
-                border: `1px solid ${saving ? `${meta.color}30` : `${meta.color}55`}`,
-                background: saving ? `${meta.color}10` : `${meta.color}18`,
-                color: saving ? `${meta.color}70` : meta.color,
+                padding: '9px 22px', borderRadius: 9,
+                border: 'none',
+                background: saving ? '#94A3B8' : meta.color,
+                color: '#FFFFFF',
                 fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
-                transition: 'all 0.18s', fontFamily: 'Inter, sans-serif',
+                transition: 'all 0.18s', fontFamily: 'var(--font-ui), Inter, sans-serif',
                 display: 'flex', alignItems: 'center', gap: 8,
-                boxShadow: saving ? 'none' : `0 0 20px ${meta.color}15`,
+                boxShadow: saving ? 'none' : `0 3px 10px ${meta.color}40`,
               }}
-              onMouseEnter={(e) => { if (!saving) { e.currentTarget.style.background = `${meta.color}25`; e.currentTarget.style.boxShadow = `0 0 28px ${meta.color}22`; } }}
-              onMouseLeave={(e) => { if (!saving) { e.currentTarget.style.background = `${meta.color}18`; e.currentTarget.style.boxShadow = `0 0 20px ${meta.color}15`; } }}
+              onMouseEnter={(e) => { if (!saving) { e.currentTarget.style.opacity = '0.9'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 5px 16px ${meta.color}55`; } }}
+              onMouseLeave={(e) => { if (!saving) { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = `0 3px 10px ${meta.color}40`; } }}
             >
               {saving ? (
                 <>
-                  <div style={{ width: 13, height: 13, borderRadius: '50%', border: `2px solid ${meta.color}30`, borderTopColor: meta.color, animation: 'ctm-spin 0.7s linear infinite' }} />
+                  <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.35)', borderTopColor: '#FFFFFF', animation: 'ctm-spin 0.7s linear infinite' }} />
                   Saving…
                 </>
               ) : (
@@ -1100,6 +1086,9 @@ export function CreateToolModal({ agentId, editTool, onSave, onClose }: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
+
+  if (typeof window === 'undefined') return null;
+  return createPortal(panel, document.body);
 }

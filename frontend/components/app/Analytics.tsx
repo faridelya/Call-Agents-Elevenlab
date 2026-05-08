@@ -23,10 +23,10 @@ function fmtDuration(secs: number) {
   return `${m}m ${String(s).padStart(2, '0')}s`;
 }
 function sentimentColor(score?: number) {
-  if (score == null) return '#3D607A';
-  if (score >= 0.65) return '#00D082';
-  if (score <= 0.35) return '#FF4D6D';
-  return '#7BA5C8';
+  if (score == null) return '#94A3B8';
+  if (score >= 0.65) return '#10B981';
+  if (score <= 0.35) return '#EF4444';
+  return '#64748B';
 }
 function sentimentLabel(score?: number) {
   if (score == null) return '—';
@@ -40,13 +40,13 @@ function Sk({ w = '100%', h = 14, r = 5 }: { w?: string | number; h?: number; r?
   return (
     <div style={{
       width: w, height: h, borderRadius: r,
-      background: 'linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.07) 50%,rgba(255,255,255,0.04) 75%)',
+      background: 'linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%)',
       backgroundSize: '800px 100%', animation: 'shimmer 1.8s infinite linear',
     }} />
   );
 }
 
-// ─── Glass Card ───────────────────────────────────────────────────────────────
+// ─── Card ─────────────────────────────────────────────────────────────────────
 function GCard({ children, style, glow }: { children: React.ReactNode; style?: React.CSSProperties; glow?: string }) {
   const [hov, setHov] = useState(false);
   return (
@@ -54,15 +54,13 @@ function GCard({ children, style, glow }: { children: React.ReactNode; style?: R
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        background: 'rgba(9,20,38,0.60)',
-        backdropFilter: 'blur(20px) saturate(160%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-        border: `1px solid ${hov ? (glow ? `${glow}28` : 'rgba(0,208,130,0.18)') : 'rgba(255,255,255,0.07)'}`,
-        borderRadius: 16, overflow: 'hidden',
+        background: '#FFFFFF',
+        border: `1px solid ${hov ? (glow ? `${glow}40` : '#CBD5E1') : '#E2E8F0'}`,
+        borderRadius: 20, overflow: 'hidden',
         transform: hov ? 'translateY(-2px)' : 'translateY(0)',
         boxShadow: hov
-          ? `0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)${glow ? `, 0 0 24px ${glow}10` : ''}`
-          : '0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
+          ? '0 8px 25px rgba(15,23,42,0.10), 0 3px 8px rgba(15,23,42,0.06)'
+          : '0 1px 3px rgba(15,23,42,0.06)',
         transition: 'all 0.25s ease-out',
         ...style,
       }}
@@ -73,7 +71,7 @@ function GCard({ children, style, glow }: { children: React.ReactNode; style?: R
 }
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, trend, accent = '#00D082', delay = 0 }: {
+function StatCard({ label, value, sub, trend, accent = '#10B981', delay = 0 }: {
   label: string; value: string; sub?: string;
   trend?: 'up' | 'down'; accent?: string; delay?: number;
 }) {
@@ -81,25 +79,24 @@ function StatCard({ label, value, sub, trend, accent = '#00D082', delay = 0 }: {
     <GCard glow={accent} style={{ padding: '22px 24px', animation: `fade-in 0.5s ${delay}ms both`, position: 'relative' } as any}>
       <div style={{
         position: 'absolute', top: 0, right: 0, width: 110, height: 110,
-        background: `radial-gradient(circle at 100% 0%, ${accent}14 0%, transparent 70%)`,
+        background: `radial-gradient(circle at 100% 0%, ${accent}10 0%, transparent 70%)`,
         pointerEvents: 'none',
       }} />
       <div style={{
-        fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
-        textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16,
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: '#94A3B8', marginBottom: 16,
       }}>
         {label}
       </div>
       <div style={{
         fontSize: 30, fontWeight: 700, fontFamily: 'var(--font-mono)',
-        color: 'var(--text-primary)', lineHeight: 1, marginBottom: 8,
-        textShadow: `0 0 24px ${accent}35`,
+        color: '#0F172A', lineHeight: 1, marginBottom: 8,
       }}>
         {value}
       </div>
       {sub && (
         <div style={{
-          fontSize: 11, color: trend === 'up' ? '#00D082' : trend === 'down' ? '#FF4D6D' : 'var(--text-muted)',
+          fontSize: 11, color: trend === 'up' ? '#10B981' : trend === 'down' ? '#EF4444' : '#64748B',
           display: 'flex', alignItems: 'center', gap: 4,
         }}>
           {trend === 'up' && <span style={{ fontSize: 10 }}>↑</span>}
@@ -119,7 +116,7 @@ function BarChart({ data, height = 100 }: { data: { l: string; v: number; c?: st
     <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height }}>
       {data.map((d, i) => {
         const pct = (d.v / max) * 0.88;
-        const c = d.c ?? '#00D082';
+        const c = d.c ?? '#10B981';
         const active = hovIdx === i;
         return (
           <div
@@ -141,10 +138,10 @@ function BarChart({ data, height = 100 }: { data: { l: string; v: number; c?: st
               width: '100%', borderRadius: '4px 4px 0 0',
               height: `${pct * height}px`,
               background: active ? `linear-gradient(to top, ${c}, ${c}bb)` : `linear-gradient(to top, ${c}65, ${c}32)`,
-              boxShadow: active ? `0 0 12px ${c}45` : 'none',
+              boxShadow: active ? `0 0 12px ${c}30` : 'none',
               transition: 'all 0.2s ease-out', minHeight: 2,
             }} />
-            <span style={{ fontSize: 9, color: active ? c : 'var(--text-muted)', whiteSpace: 'nowrap', transition: 'color 0.15s' }}>
+            <span style={{ fontSize: 9, color: active ? c : '#94A3B8', whiteSpace: 'nowrap', transition: 'color 0.15s' }}>
               {d.l}
             </span>
           </div>
@@ -161,17 +158,17 @@ function FunnelBar({ label, value, max, color }: { label: string; value: number;
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{ marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-        <span style={{ fontSize: 12, color: hov ? color : 'var(--text-secondary)', transition: 'color 0.15s' }}>{label}</span>
-        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: hov ? color : 'var(--text-muted)', fontWeight: 600, transition: 'color 0.15s' }}>
+        <span style={{ fontSize: 12, color: hov ? color : '#334155', transition: 'color 0.15s' }}>{label}</span>
+        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: hov ? color : '#64748B', fontWeight: 600, transition: 'color 0.15s' }}>
           {value.toLocaleString()}
         </span>
       </div>
-      <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 9999, overflow: 'hidden' }}>
+      <div style={{ height: 5, background: '#F1F5F9', borderRadius: 9999, overflow: 'hidden' }}>
         <div style={{
           height: '100%', width: `${pct}%`,
           background: `linear-gradient(90deg, ${color}, ${color}99)`,
           borderRadius: 9999,
-          boxShadow: hov ? `0 0 8px ${color}55` : 'none',
+          boxShadow: hov ? `0 0 8px ${color}30` : 'none',
           transition: 'box-shadow 0.2s',
         }} />
       </div>
@@ -221,21 +218,21 @@ function SearchSelect({ value, onChange, options, placeholder }: {
     <div ref={panelRef} style={{
       position: 'fixed',
       top: rect.bottom + 4, left: rect.left, width: rect.width,
-      background: '#0C1120', border: '1px solid rgba(0,208,130,0.22)',
+      background: '#FFFFFF', border: '1px solid #E2E8F0',
       borderRadius: 10, zIndex: 9999, overflow: 'hidden',
-      boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
+      boxShadow: '0 12px 40px rgba(15,23,42,0.15)',
     }}>
-      <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9' }}>
         <input
           autoFocus
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search…"
           style={{
-            width: '100%', background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.10)',
+            width: '100%', background: '#F8FAFC',
+            border: '1px solid #E2E8F0',
             borderRadius: 6, padding: '5px 10px',
-            fontSize: 11.5, color: 'var(--text-primary)', outline: 'none',
+            fontSize: 11.5, color: '#0F172A', outline: 'none',
             fontFamily: 'var(--font-ui)', boxSizing: 'border-box',
           }}
         />
@@ -245,10 +242,10 @@ function SearchSelect({ value, onChange, options, placeholder }: {
           onClick={() => select('')}
           style={{
             padding: '8px 12px', fontSize: 12, cursor: 'pointer',
-            color: !value ? '#00D082' : 'var(--text-muted)',
-            background: !value ? 'rgba(0,208,130,0.07)' : 'transparent',
+            color: !value ? '#10B981' : '#64748B',
+            background: !value ? '#ECFDF5' : 'transparent',
           }}
-          onMouseEnter={(e) => { if (value) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+          onMouseEnter={(e) => { if (value) e.currentTarget.style.background = '#F8FAFC'; }}
           onMouseLeave={(e) => { if (value) e.currentTarget.style.background = 'transparent'; }}
         >{placeholder ?? 'All'}</div>
         {filtered.map((o) => (
@@ -257,15 +254,15 @@ function SearchSelect({ value, onChange, options, placeholder }: {
             onClick={() => select(o.id)}
             style={{
               padding: '8px 12px', fontSize: 12, cursor: 'pointer',
-              color: value === o.id ? '#00D082' : 'var(--text-secondary)',
-              background: value === o.id ? 'rgba(0,208,130,0.07)' : 'transparent',
+              color: value === o.id ? '#10B981' : '#334155',
+              background: value === o.id ? '#ECFDF5' : 'transparent',
             }}
-            onMouseEnter={(e) => { if (value !== o.id) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+            onMouseEnter={(e) => { if (value !== o.id) e.currentTarget.style.background = '#F8FAFC'; }}
             onMouseLeave={(e) => { if (value !== o.id) e.currentTarget.style.background = 'transparent'; }}
           >{o.name}</div>
         ))}
         {filtered.length === 0 && (
-          <div style={{ padding: 12, fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'center' }}>
+          <div style={{ padding: 12, fontSize: 11.5, color: '#64748B', textAlign: 'center' }}>
             No results
           </div>
         )}
@@ -280,10 +277,10 @@ function SearchSelect({ value, onChange, options, placeholder }: {
         ref={btnRef}
         onClick={handleToggle}
         style={{
-          width: '100%', background: open ? 'rgba(0,208,130,0.06)' : 'rgba(255,255,255,0.04)',
-          border: `1px solid ${open ? 'rgba(0,208,130,0.4)' : 'rgba(255,255,255,0.10)'}`,
+          width: '100%', background: open ? '#ECFDF5' : '#F8FAFC',
+          border: `1px solid ${open ? '#A7F3D0' : '#E2E8F0'}`,
           borderRadius: 9, padding: '7px 32px 7px 12px',
-          fontSize: 12, color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
+          fontSize: 12, color: selected ? '#0F172A' : '#64748B',
           cursor: 'pointer', outline: 'none', textAlign: 'left',
           fontFamily: 'var(--font-ui)', transition: 'all 0.15s', display: 'block',
         }}
@@ -293,7 +290,7 @@ function SearchSelect({ value, onChange, options, placeholder }: {
       <span style={{
         position: 'absolute', right: 10, top: '50%',
         transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`,
-        color: 'var(--text-muted)', fontSize: 10, pointerEvents: 'none',
+        color: '#64748B', fontSize: 10, pointerEvents: 'none',
         transition: 'transform 0.2s',
       }}>▾</span>
       {panel}
@@ -324,40 +321,40 @@ function CampaignOutcomesCard() {
   const convRate = totalCalls > 0 ? ((positive / totalCalls) * 100).toFixed(1) : '0.0';
 
   return (
-    <GCard glow="#7C6EFA" style={{ padding: 0 }}>
+    <GCard glow="#8B5CF6" style={{ padding: 0 }}>
       {/* Header */}
       <div style={{
         padding: '22px 26px 18px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        background: 'linear-gradient(135deg, rgba(124,110,250,0.06) 0%, transparent 60%)',
+        borderBottom: '1px solid #F1F5F9',
+        background: 'linear-gradient(135deg, #F5F3FF 0%, #FFFFFF 60%)',
         position: 'relative', overflow: 'hidden',
       }}>
         <div style={{
           position: 'absolute', top: -30, right: -20, width: 180, height: 180,
-          background: 'radial-gradient(circle, rgba(124,110,250,0.08) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A', marginBottom: 3 }}>
               Campaign Outcomes
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Per-campaign breakdown by outcome</div>
+            <div style={{ fontSize: 11, color: '#64748B' }}>Per-campaign breakdown by outcome</div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {totalCalls > 0 && (
               <>
                 <div style={{
                   padding: '3px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 700,
-                  background: 'rgba(0,208,130,0.10)', border: '1px solid rgba(0,208,130,0.22)',
-                  color: '#00D082', fontFamily: 'var(--font-mono)',
+                  background: '#ECFDF5', border: '1px solid #A7F3D0',
+                  color: '#10B981', fontFamily: 'var(--font-mono)',
                 }}>
                   {convRate}% conv
                 </div>
                 <div style={{
                   padding: '3px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600,
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                  color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                  background: '#F8FAFC', border: '1px solid #E2E8F0',
+                  color: '#64748B', fontFamily: 'var(--font-mono)',
                 }}>
                   {totalCalls.toLocaleString()} calls
                 </div>
@@ -398,7 +395,7 @@ function CampaignOutcomesCard() {
         ) : outcomes.length === 0 ? (
           <div style={{
             padding: '32px 0', textAlign: 'center',
-            color: 'var(--text-muted)', fontSize: 13,
+            color: '#64748B', fontSize: 13,
           }}>
             No campaign calls recorded yet
           </div>
@@ -454,7 +451,7 @@ function OutcomeRow({ icon, label, color, count, pct, pctOfTotal, delay }: {
           </span>
           <span style={{
             fontSize: 12, fontWeight: 600,
-            color: hov ? 'var(--text-primary)' : 'var(--text-secondary)',
+            color: hov ? '#0F172A' : '#334155',
             transition: 'color 0.15s',
             letterSpacing: '0.01em',
           }}>
@@ -464,27 +461,27 @@ function OutcomeRow({ icon, label, color, count, pct, pctOfTotal, delay }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{
             fontSize: 12.5, fontFamily: 'var(--font-mono)', fontWeight: 700,
-            color: hov ? color : 'var(--text-primary)',
+            color: hov ? color : '#0F172A',
             transition: 'color 0.15s',
           }}>
             {count.toLocaleString()}
           </span>
           <span style={{
             fontSize: 10.5, fontFamily: 'var(--font-mono)',
-            color: 'var(--text-muted)', minWidth: 38, textAlign: 'right',
+            color: '#64748B', minWidth: 38, textAlign: 'right',
           }}>
             {pctOfTotal}%
           </span>
         </div>
       </div>
-      <div style={{ height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 9999, overflow: 'hidden' }}>
+      <div style={{ height: 4, background: '#F1F5F9', borderRadius: 9999, overflow: 'hidden' }}>
         <div style={{
           height: '100%', width: `${pct}%`,
           background: hov
             ? `linear-gradient(90deg, ${color}, ${color}cc)`
             : `linear-gradient(90deg, ${color}80, ${color}44)`,
           borderRadius: 9999,
-          boxShadow: hov ? `0 0 10px ${color}50` : 'none',
+          boxShadow: hov ? `0 0 10px ${color}30` : 'none',
           transition: 'all 0.25s ease-out',
         }} />
       </div>
@@ -506,6 +503,7 @@ export function AnalyticsView() {
       ? new Date(d.period).toLocaleDateString('en-US', { weekday: 'short' })
       : `W${Math.ceil(new Date(d.period).getDate() / 7)}`,
     v: d.count,
+    c: '#F43F5E',
   }));
 
   const outcomePairs = (outcomes?.outcomes ?? []).slice(0, 8).map((o: any) => ({
@@ -515,25 +513,28 @@ export function AnalyticsView() {
   }));
 
   const funnelItems = [
-    { label: 'Total Calls',    value: overview?.total_calls       ?? 0, color: '#38BDF8' },
-    { label: 'Connected',      value: overview?.completed_calls   ?? 0, color: '#00C2B8' },
-    { label: 'Interested',     value: overview?.interested_outcomes ?? 0, color: '#00D082' },
-    { label: 'Qualified Leads',value: overview?.qualified_leads   ?? 0, color: '#F0B429' },
+    { label: 'Total Calls',    value: overview?.total_calls       ?? 0, color: '#3B82F6' },
+    { label: 'Connected',      value: overview?.completed_calls   ?? 0, color: '#06B6D4' },
+    { label: 'Interested',     value: overview?.interested_outcomes ?? 0, color: '#10B981' },
+    { label: 'Qualified Leads',value: overview?.qualified_leads   ?? 0, color: '#F59E0B' },
   ];
 
   const agentList = agentMet?.agents ?? [];
 
   return (
-    <div style={{ padding: '32px 36px', minHeight: '100vh', animation: 'fade-in 0.4s both' }}>
+    <div style={{ padding: '32px 36px', minHeight: '100vh', background: '#F8FAFC', animation: 'fade-in 0.4s both' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8', marginBottom: 6 }}>
+            Analytics
+          </div>
           <h1 style={{
-            fontFamily: 'var(--font-syne)', fontSize: 26, fontWeight: 700,
-            color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 6,
-          }}>Analytics</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>All time · All agents</p>
+            fontSize: 26, fontWeight: 800,
+            color: '#0F172A', letterSpacing: '-0.03em', marginBottom: 6,
+          }}>Performance Overview</h1>
+          <p style={{ fontSize: 13, color: '#64748B' }}>All time · All agents</p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {(['day', 'week'] as const).map((r) => (
@@ -542,9 +543,9 @@ export function AnalyticsView() {
               onClick={() => setRange(r)}
               style={{
                 padding: '6px 14px', borderRadius: 8,
-                background: range === r ? 'rgba(0,208,130,0.12)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${range === r ? 'rgba(0,208,130,0.35)' : 'rgba(255,255,255,0.08)'}`,
-                color: range === r ? '#00D082' : 'var(--text-muted)',
+                background: range === r ? '#EFF6FF' : '#F8FAFC',
+                border: `1px solid ${range === r ? '#BFDBFE' : '#E2E8F0'}`,
+                color: range === r ? '#3B82F6' : '#64748B',
                 fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
                 textTransform: 'capitalize',
               }}
@@ -566,13 +567,13 @@ export function AnalyticsView() {
         ) : (
           <>
             <StatCard label="Total Calls" value={overview?.total_calls?.toLocaleString() ?? '0'}
-              sub={`${overview?.completed_calls ?? 0} completed`} trend="up" accent="#00D082" delay={0} />
+              sub={`${overview?.completed_calls ?? 0} completed`} trend="up" accent="#10B981" delay={0} />
             <StatCard label="Avg Duration" value={fmtDuration(overview?.avg_call_duration_seconds ?? 0)}
-              accent="#38BDF8" delay={60} />
+              accent="#3B82F6" delay={60} />
             <StatCard label="Conversion Rate" value={`${overview?.conversion_rate ?? 0}%`}
-              sub={`${overview?.interested_outcomes ?? 0} interested`} trend="up" accent="#00C2B8" delay={120} />
+              sub={`${overview?.interested_outcomes ?? 0} interested`} trend="up" accent="#06B6D4" delay={120} />
             <StatCard label="Qualified Leads" value={String(overview?.qualified_leads ?? 0)}
-              sub={`of ${overview?.total_leads ?? 0} total`} trend="up" accent="#F0B429" delay={180} />
+              sub={`of ${overview?.total_leads ?? 0} total`} trend="up" accent="#F59E0B" delay={180} />
           </>
         )}
       </div>
@@ -583,16 +584,16 @@ export function AnalyticsView() {
         <GCard style={{ padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
             <div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#0F172A', marginBottom: 2 }}>
                 Calls Over Time
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 11, color: '#64748B' }}>
                 {range === 'day' ? 'Last 14 days' : 'By week'}
               </div>
             </div>
             <div style={{
               fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 9999,
-              background: 'rgba(0,208,130,0.10)', color: '#00D082', border: '1px solid rgba(0,208,130,0.22)',
+              background: '#ECFDF5', color: '#10B981', border: '1px solid #A7F3D0',
             }}>
               {callsBarData.reduce((s, d) => s + d.v, 0)} calls
             </div>
@@ -600,11 +601,11 @@ export function AnalyticsView() {
           {ctLoad ? (
             <div style={{ height: 120, display: 'flex', alignItems: 'flex-end', gap: 6 }}>
               {Array.from({ length: 14 }).map((_, i) => (
-                <div key={i} style={{ flex: 1, height: `${30 + Math.random() * 70}%`, borderRadius: '3px 3px 0 0', background: 'rgba(255,255,255,0.05)' }} />
+                <div key={i} style={{ flex: 1, height: `${30 + Math.random() * 70}%`, borderRadius: '3px 3px 0 0', background: '#0F172A' }} />
               ))}
             </div>
           ) : callsBarData.length === 0 ? (
-            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: 13 }}>
               No data yet
             </div>
           ) : (
@@ -614,16 +615,16 @@ export function AnalyticsView() {
 
         {/* Outcome distribution */}
         <GCard style={{ padding: 24 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Call Outcomes</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 18 }}>Distribution</div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: '#0F172A', marginBottom: 4 }}>Call Outcomes</div>
+          <div style={{ fontSize: 11, color: '#64748B', marginBottom: 18 }}>Distribution</div>
           {ouLoad ? (
             <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 120 }}>
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} style={{ flex: 1, height: `${30 + Math.random() * 70}%`, background: 'rgba(255,255,255,0.05)', borderRadius: '3px 3px 0 0' }} />
+                <div key={i} style={{ flex: 1, height: `${30 + Math.random() * 70}%`, background: '#F1F5F9', borderRadius: '3px 3px 0 0' }} />
               ))}
             </div>
           ) : outcomePairs.length === 0 ? (
-            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: 13 }}>
               No outcomes yet
             </div>
           ) : (
@@ -636,8 +637,8 @@ export function AnalyticsView() {
       <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, marginBottom: 20 }}>
         {/* Lead funnel */}
         <GCard style={{ padding: 24 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Lead Funnel</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 18 }}>New → Converted</div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: '#0F172A', marginBottom: 4 }}>Lead Funnel</div>
+          <div style={{ fontSize: 11, color: '#64748B', marginBottom: 18 }}>New → Converted</div>
           {ovLoad ? (
             Array.from({ length: 4 }).map((_, i) => (
               <div key={i} style={{ marginBottom: 12 }}>
@@ -655,8 +656,8 @@ export function AnalyticsView() {
         {/* Per-agent performance table */}
         <GCard style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '20px 24px 14px' }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Agent Performance</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Per-agent outcome breakdown</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: '#0F172A', marginBottom: 2 }}>Agent Performance</div>
+            <div style={{ fontSize: 11, color: '#64748B' }}>Per-agent outcome breakdown</div>
           </div>
 
           {/* Table header */}
@@ -664,15 +665,15 @@ export function AnalyticsView() {
             display: 'grid',
             gridTemplateColumns: '1.5fr 52px 62px 70px 75px 68px 75px 80px 62px',
             padding: '8px 24px',
-            background: 'rgba(255,255,255,0.025)',
-            borderTop: '1px solid rgba(255,255,255,0.05)',
-            borderBottom: '1px solid rgba(255,255,255,0.05)',
+            background: '#F8FAFC',
+            borderTop: '1px solid #F1F5F9',
+            borderBottom: '1px solid #F1F5F9',
             gap: 4,
           }}>
             {['Agent','Calls','Talk %','Interested','Confirmed','Follow-up','No Interest','Voicemail','Conv %'].map((h) => (
               <div key={h} style={{
-                fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-                letterSpacing: '0.08em', color: 'var(--text-muted)',
+                fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.08em', color: '#94A3B8',
               }}>{h}</div>
             ))}
           </div>
@@ -682,14 +683,14 @@ export function AnalyticsView() {
             Array.from({ length: 3 }).map((_, i) => (
               <div key={i} style={{
                 display: 'grid', gridTemplateColumns: '1.5fr 52px 62px 70px 75px 68px 75px 80px 62px',
-                padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)', gap: 4,
+                padding: '12px 24px', borderBottom: '1px solid #F1F5F9', gap: 4,
               }}>
                 <Sk h={11} w="70%" />
                 {Array.from({ length: 8 }).map((_, j) => <Sk key={j} h={11} w="50%" />)}
               </div>
             ))
           ) : agentList.length === 0 ? (
-            <div style={{ padding: '30px 24px', color: 'var(--text-muted)', fontSize: 12, textAlign: 'center' }}>
+            <div style={{ padding: '30px 24px', color: '#64748B', fontSize: 12, textAlign: 'center' }}>
               No agent data yet
             </div>
           ) : (
@@ -697,53 +698,52 @@ export function AnalyticsView() {
               const total = a.total_calls ?? 0;
               const vm = a.voicemail_count ?? 0;
               const talkRate = total > 0 ? Math.round(((total - vm) / total) * 100) : 0;
-              const talkColor = talkRate >= 70 ? '#00D082' : talkRate >= 40 ? '#F0B429' : '#FF4D6D';
+              const talkColor = talkRate >= 70 ? '#10B981' : talkRate >= 40 ? '#F59E0B' : '#EF4444';
               return (
                 <div
                   key={a.agent_id}
                   style={{
                     display: 'grid', gridTemplateColumns: '1.5fr 52px 62px 70px 75px 68px 75px 80px 62px',
-                    padding: '11px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    padding: '11px 24px', borderBottom: '1px solid #F1F5F9',
                     animation: `fade-in 0.4s ${idx * 60}ms both`, gap: 4,
                     transition: 'background 0.15s',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                 >
                   <div style={{
-                    fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)',
+                    fontSize: 12.5, fontWeight: 600, color: '#0F172A',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     display: 'flex', alignItems: 'center', gap: 6,
                   }}>
                     <span style={{
                       width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
                       background: sentimentColor(a.avg_sentiment),
-                      boxShadow: `0 0 6px ${sentimentColor(a.avg_sentiment)}80`,
                     }} />
                     {a.agent_name ?? `Agent ${a.agent_id.slice(0, 6)}`}
                   </div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
                     {total}
                   </div>
                   <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: talkColor, fontWeight: 700 }}>
                     {talkRate}%
                   </div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00D082' }}>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#10B981' }}>
                     {a.interested_count ?? 0}
                   </div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00C2B8' }}>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#06B6D4' }}>
                     {a.order_confirmed_count ?? 0}
                   </div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#A89AF9' }}>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#8B5CF6' }}>
                     {a.connect_later_count ?? 0}
                   </div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#FF4D6D' }}>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#EF4444' }}>
                     {a.not_interested_count ?? 0}
                   </div>
                   <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#94A3B8' }}>
                     {vm}
                   </div>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#00C2B8', fontWeight: 700 }}>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#06B6D4', fontWeight: 700 }}>
                     {a.conversion_rate ?? 0}%
                   </div>
                 </div>

@@ -29,18 +29,18 @@ const LLM_MODELS = [
 export const BUILTIN_TOOLS: Array<{
   id: string; name: string; desc: string; color: string; tier: 1 | 2; configurable: boolean;
 }> = [
-  { id: 'save_lead',           name: 'Save Lead',           desc: 'Capture contact info during call',       color: '#00D082', tier: 1, configurable: false },
+  { id: 'save_lead',           name: 'Save Lead',           desc: 'Capture contact info during call',       color: '#10B981', tier: 1, configurable: false },
   { id: 'get_contact_info',    name: 'Get Contact',         desc: 'Fetch existing lead before call',        color: '#38BDF8', tier: 1, configurable: false },
   { id: 'end_call',            name: 'End Call',            desc: 'Terminate call with outcome',            color: '#FF4D6D', tier: 1, configurable: false },
-  { id: 'log_call_outcome',    name: 'Log Outcome',         desc: 'Record result and next action',          color: '#00C2B8', tier: 1, configurable: false },
+  { id: 'log_call_outcome',    name: 'Log Outcome',         desc: 'Record result and next action',          color: '#06B6D4', tier: 1, configurable: false },
   { id: 'get_call_script',     name: 'Get Script',          desc: 'Fetch script section on demand',         color: '#A89AF9', tier: 1, configurable: false },
   { id: 'update_call_stage',   name: 'Update Stage',        desc: 'Track call stage for analytics',         color: '#64748B', tier: 1, configurable: false },
   { id: 'book_meeting',        name: 'Book Meeting',        desc: 'Schedule via calendar integration',      color: '#F0B429', tier: 2, configurable: true },
   { id: 'send_followup_sms',   name: 'Send Follow-up SMS',  desc: 'Send SMS message after call',            color: '#38BDF8', tier: 2, configurable: true },
   { id: 'qualify_lead',        name: 'Qualify Lead',        desc: 'Score lead against your criteria',       color: '#A89AF9', tier: 2, configurable: false },
-  { id: 'lookup_product_info', name: 'Product Info Lookup', desc: 'Answer questions from product catalog',  color: '#00C2B8', tier: 2, configurable: false },
+  { id: 'lookup_product_info', name: 'Product Info Lookup', desc: 'Answer questions from product catalog',  color: '#06B6D4', tier: 2, configurable: false },
   { id: 'check_crm_record',    name: 'CRM Lookup',          desc: 'Fetch contact from HubSpot/Salesforce',  color: '#F0B429', tier: 2, configurable: true },
-  { id: 'update_crm_record',   name: 'CRM Update',          desc: 'Push outcome + notes to CRM',            color: '#00D082', tier: 2, configurable: true },
+  { id: 'update_crm_record',   name: 'CRM Update',          desc: 'Push outcome + notes to CRM',            color: '#10B981', tier: 2, configurable: true },
   { id: 'transfer_to_human',   name: 'Transfer to Human',   desc: 'Warm/cold transfer via conference',      color: '#FF4D6D', tier: 2, configurable: true },
   { id: 'leave_voicemail',     name: 'Leave Voicemail',     desc: 'Play recorded voicemail, end call',      color: '#64748B', tier: 2, configurable: true },
 ];
@@ -90,14 +90,15 @@ const LANGUAGES = [
 const GLOBAL_STYLES = `
   @keyframes ab-fade-in   { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
   @keyframes ab-shake     { 0%,100%{transform:translateX(0)} 18%,54%{transform:translateX(-5px)} 36%,72%{transform:translateX(5px)} }
-  @keyframes ab-glow-in   { from{box-shadow:none} to{box-shadow:0 0 0 3px rgba(0,208,130,0.12)} }
+  @keyframes ab-glow-in   { from{box-shadow:none} to{box-shadow:0 0 0 0 rgba(0,0,0,0)} }
   @keyframes ab-toast-in  { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes ab-unfold    { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
   @keyframes ab-spin      { to{transform:rotate(360deg)} }
-  @keyframes ab-pulse-ring{ 0%{box-shadow:0 0 0 0 rgba(0,208,130,0.4)} 70%{box-shadow:0 0 0 8px rgba(0,208,130,0)} 100%{box-shadow:0 0 0 0 rgba(0,208,130,0)} }
+  @keyframes ab-pulse-ring{ 0%{box-shadow:0 0 0 0 rgba(16,185,129,0.35)} 70%{box-shadow:0 0 0 8px rgba(0,0,0,0)} 100%{box-shadow:0 0 0 0 rgba(16,185,129,0)} }
   .ab-shake { animation: ab-shake 0.42s cubic-bezier(0.36,0.07,0.19,0.97) both; }
   .ab-field-error input, .ab-field-error textarea {
-    border-color: rgba(255,77,109,0.55) !important;
-    box-shadow: 0 0 0 3px rgba(255,77,109,0.08) !important;
+    border-color: #F43F5E !important;
+    box-shadow: 0 0 0 3px rgba(244,63,94,0.08) !important;
   }
 `;
 
@@ -110,13 +111,13 @@ function GInput({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement>
       autoComplete={props.type === 'password' ? 'new-password' : 'off'}
       {...props}
       style={{
-        background: 'rgba(6,15,26,0.8)',
-        border: `1px solid ${error ? 'rgba(255,77,109,0.55)' : focused ? 'rgba(0,208,130,0.50)' : 'rgba(255,255,255,0.08)'}`,
+        background: '#FFFFFF',
+        border: `1px solid ${error ? '#F43F5E' : focused ? '#10B981' : '#E2E8F0'}`,
         borderRadius: 9, padding: '9px 12px', fontSize: 13,
         color: 'var(--text-primary)',
         fontFamily: 'var(--font-ui), sans-serif', outline: 'none',
         width: '100%', boxSizing: 'border-box',
-        boxShadow: error ? '0 0 0 3px rgba(255,77,109,0.07)' : focused ? '0 0 0 3px rgba(0,208,130,0.08)' : 'none',
+        boxShadow: error ? '0 0 0 3px rgba(244,63,94,0.08)' : focused ? '0 0 0 3px rgba(16,185,129,0.12)' : 'none',
         transition: 'border-color 0.18s, box-shadow 0.18s',
         ...props.style,
       }}
@@ -132,13 +133,13 @@ function GSelect({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectEl
     <select
       {...props}
       style={{
-        background: 'rgba(6,15,26,0.8)',
-        border: `1px solid ${focused ? 'rgba(0,208,130,0.50)' : 'rgba(255,255,255,0.08)'}`,
+        background: '#FFFFFF',
+        border: `1px solid ${focused ? '#10B981' : '#E2E8F0'}`,
         borderRadius: 9, padding: '9px 12px', fontSize: 13,
         color: 'var(--text-primary)',
         fontFamily: 'var(--font-ui), sans-serif', outline: 'none',
         width: '100%', boxSizing: 'border-box',
-        boxShadow: focused ? '0 0 0 3px rgba(0,208,130,0.08)' : 'none',
+        boxShadow: focused ? '0 0 0 3px rgba(16,185,129,0.12)' : 'none',
         transition: 'border-color 0.18s, box-shadow 0.18s', cursor: 'pointer',
         ...props.style,
       }}
@@ -156,13 +157,13 @@ function GTextarea({ error, ...props }: React.TextareaHTMLAttributes<HTMLTextAre
     <textarea
       {...props}
       style={{
-        background: 'rgba(6,15,26,0.8)',
-        border: `1px solid ${error ? 'rgba(255,77,109,0.55)' : focused ? 'rgba(0,208,130,0.50)' : 'rgba(255,255,255,0.08)'}`,
+        background: '#FFFFFF',
+        border: `1px solid ${error ? '#F43F5E' : focused ? '#10B981' : '#E2E8F0'}`,
         borderRadius: 9, padding: '9px 12px', fontSize: 13,
         color: 'var(--text-primary)',
         fontFamily: 'var(--font-ui), sans-serif', outline: 'none',
         width: '100%', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.65,
-        boxShadow: error ? '0 0 0 3px rgba(255,77,109,0.07)' : focused ? '0 0 0 3px rgba(0,208,130,0.08)' : 'none',
+        boxShadow: error ? '0 0 0 3px rgba(244,63,94,0.08)' : focused ? '0 0 0 3px rgba(16,185,129,0.12)' : 'none',
         transition: 'border-color 0.18s, box-shadow 0.18s',
         ...props.style,
       }}
@@ -186,7 +187,7 @@ function GLabel({ children, required, hint }: { children: React.ReactNode; requi
 }
 
 // ─── Glass section card ───────────────────────────────────────────────────────
-function SCard({ title, accent = '#00D082', children }: { title: string; accent?: string; children: React.ReactNode }) {
+function SCard({ title, accent = '#10B981', children }: { title: string; accent?: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{
@@ -197,8 +198,8 @@ function SCard({ title, accent = '#00D082', children }: { title: string; accent?
         {title}
       </div>
       <div style={{
-        background: 'rgba(9,20,38,0.65)', backdropFilter: 'blur(20px) saturate(160%)',
-        border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14,
+        background: '#FFFFFF', backdropFilter: 'none',
+        border: '1px solid #E2E8F0', borderRadius: 14,
         padding: '18px 20px', position: 'relative', overflow: 'hidden',
       }}>
         <div style={{
@@ -233,13 +234,13 @@ function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
   return (
     <div style={{
       position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
-      background: ok ? 'rgba(9,20,38,0.95)' : 'rgba(9,20,38,0.95)',
+      background: ok ? '#FFFFFF' : '#FFFFFF',
       border: `1px solid ${ok ? 'rgba(0,208,130,0.35)' : 'rgba(255,77,109,0.35)'}`,
       borderRadius: 14, padding: '13px 20px',
       fontSize: 13, fontWeight: 600,
-      color: ok ? '#00D082' : '#FF4D6D',
-      backdropFilter: 'blur(20px)',
-      boxShadow: `0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px ${ok ? 'rgba(0,208,130,0.1)' : 'rgba(255,77,109,0.1)'}`,
+      color: ok ? '#10B981' : '#FF4D6D',
+      backdropFilter: 'none',
+      boxShadow: `0 12px 32px rgba(15,23,42,0.10), 0 0 0 1px ${ok ? 'rgba(0,208,130,0.1)' : 'rgba(255,77,109,0.1)'}`,
       display: 'flex', alignItems: 'center', gap: 10,
       animation: 'ab-toast-in 0.28s cubic-bezier(0.16,1,0.3,1) both',
     }}>
@@ -461,8 +462,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 14 }}>
         <div style={{
           width: 36, height: 36, borderRadius: '50%',
-          border: '2px solid rgba(0,208,130,0.15)',
-          borderTopColor: '#00D082',
+          border: '2px solid #CBD5E1',
+          borderTopColor: '#10B981',
           animation: 'ab-spin 0.8s linear infinite',
         }} />
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading agent…</span>
@@ -483,34 +484,34 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={{
         padding: '14px 28px', flexShrink: 0,
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        background: 'rgba(9,18,36,0.98)', backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid #E2E8F0',
+        background: '#FFFFFF', backdropFilter: 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         position: 'relative', zIndex: 10,
       }}>
         {/* Subtle top accent line */}
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-          background: 'linear-gradient(90deg, transparent, rgba(0,208,130,0.3), rgba(0,194,184,0.2), transparent)',
+          background: 'linear-gradient(90deg, transparent, rgba(16,185,129,0.3), rgba(6,182,212,0.2), transparent)',
         }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <button
             onClick={onBack}
             style={{
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              background: '#F8FAFC', border: '1px solid #E2E8F0',
               cursor: 'pointer', color: 'var(--text-muted)',
               display: 'flex', alignItems: 'center', gap: 5,
               fontSize: 12, padding: '6px 12px', borderRadius: 8, transition: 'all 0.15s',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
             Agents
           </button>
 
-          <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.07)' }} />
+          <div style={{ width: 1, height: 18, background: '#E2E8F0' }} />
 
           {/* Agent name input */}
           <div
@@ -525,9 +526,9 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
               placeholder="Untitled Agent"
               style={{
                 background: 'transparent', border: 'none', outline: 'none',
-                borderBottom: `1.5px solid ${nameError ? 'rgba(255,77,109,0.6)' : agentName ? 'rgba(0,208,130,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                borderBottom: `1.5px solid ${nameError ? '#F43F5E' : agentName ? '#10B981' : '#CBD5E1'}`,
                 paddingBottom: 3,
-                fontFamily: 'var(--font-syne), sans-serif',
+                fontFamily: 'var(--font-display), sans-serif',
                 fontSize: 17, fontWeight: 700,
                 color: agentName ? 'var(--text-primary)' : 'var(--text-muted)',
                 letterSpacing: '-0.02em', width: 260, lineHeight: 1.5,
@@ -553,10 +554,10 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '4px 10px', borderRadius: 9999,
               background: 'rgba(0,208,130,0.07)', border: '1px solid rgba(0,208,130,0.2)',
-              fontSize: 11, fontWeight: 600, color: '#00D082',
+              fontSize: 11, fontWeight: 600, color: '#10B981',
               animation: 'ab-pulse-ring 2.5s infinite',
             }}>
-              <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#00D082' }} />
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#10B981' }} />
               EL Synced
             </span>
           ) : (
@@ -576,16 +577,16 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
                 background: isSyncing ? 'rgba(0,208,130,0.08)' : 'rgba(0,208,130,0.1)',
                 border: '1px solid rgba(0,208,130,0.3)',
                 borderRadius: 9, padding: '7px 16px',
-                fontSize: 12.5, fontWeight: 600, color: '#00D082',
+                fontSize: 12.5, fontWeight: 600, color: '#10B981',
                 cursor: isSyncing ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
-                boxShadow: isSyncing ? 'none' : '0 0 14px rgba(0,208,130,0.12)',
+                boxShadow: isSyncing ? 'none' : '0 0 0 rgba(0,0,0,0)',
               }}
-              onMouseEnter={(e) => { if (!isSyncing) e.currentTarget.style.boxShadow = '0 0 22px rgba(0,208,130,0.25)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 0 14px rgba(0,208,130,0.12)'; }}
+              onMouseEnter={(e) => { if (!isSyncing) e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)'; }}
             >
               {isSyncing ? (
-                <div style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(0,208,130,0.3)', borderTopColor: '#00D082', animation: 'ab-spin 0.7s linear infinite' }} />
+                <div style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(0,208,130,0.3)', borderTopColor: '#10B981', animation: 'ab-spin 0.7s linear infinite' }} />
               ) : (
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -602,21 +603,21 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
               background: isSaving
                 ? 'rgba(0,208,130,0.08)'
                 : 'linear-gradient(135deg, rgba(0,208,130,0.22) 0%, rgba(0,194,184,0.14) 100%)',
-              border: `1px solid ${isSaving ? 'rgba(0,208,130,0.15)' : 'rgba(0,208,130,0.50)'}`,
+              border: `1px solid ${isSaving ? '#CBD5E1' : 'rgba(0,208,130,0.50)'}`,
               borderRadius: 10, padding: '9px 22px',
               fontSize: 13, fontWeight: 600,
-              color: isSaving ? 'rgba(0,208,130,0.5)' : '#00D082',
+              color: isSaving ? 'rgba(0,208,130,0.5)' : '#10B981',
               cursor: isSaving ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', gap: 7, transition: 'all 0.2s',
-              boxShadow: isSaving ? 'none' : '0 0 20px rgba(0,208,130,0.18)',
+              boxShadow: isSaving ? 'none' : '0 0 0 rgba(0,0,0,0)',
               letterSpacing: '0.02em',
             }}
-            onMouseEnter={(e) => { if (!isSaving) { e.currentTarget.style.boxShadow = '0 0 30px rgba(0,208,130,0.32)'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
-            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 0 20px rgba(0,208,130,0.18)'; e.currentTarget.style.transform = 'none'; }}
+            onMouseEnter={(e) => { if (!isSaving) { e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 0 0 rgba(0,0,0,0)'; e.currentTarget.style.transform = 'none'; }}
           >
             {isSaving ? (
               <>
-                <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(0,208,130,0.3)', borderTopColor: '#00D082', animation: 'ab-spin 0.7s linear infinite' }} />
+                <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(0,208,130,0.3)', borderTopColor: '#10B981', animation: 'ab-spin 0.7s linear infinite' }} />
                 Saving…
               </>
             ) : (
@@ -634,8 +635,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
       <div style={{
         display: 'flex', padding: '0 24px', flexShrink: 0,
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        background: 'rgba(9,18,36,0.95)',
+        borderBottom: '1px solid #F1F5F9',
+        background: '#FAFAFA',
         gap: 2,
       }}>
         {tabs.map((t) => {
@@ -651,12 +652,12 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 padding: '13px 16px 11px',
                 fontSize: 12.5, fontWeight: isActive ? 600 : 500,
-                color: isActive ? '#00D082' : 'var(--text-muted)',
-                borderBottom: `2px solid ${isActive ? '#00D082' : 'transparent'}`,
+                color: isActive ? '#10B981' : 'var(--text-muted)',
+                borderBottom: `2px solid ${isActive ? '#10B981' : 'transparent'}`,
                 transition: 'all 0.18s',
                 display: 'flex', alignItems: 'center', gap: 6,
                 position: 'relative',
-                boxShadow: isActive ? '0 2px 12px rgba(0,208,130,0.15)' : 'none',
+                boxShadow: isActive ? '0 2px 12px #CBD5E1' : 'none',
               }}
               onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = 'var(--text-secondary)'; }}
               onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = 'var(--text-muted)'; }}
@@ -667,7 +668,7 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
               {t.label}
               {hasBadge && (
                 <span style={{
-                  background: 'rgba(0,208,130,0.18)', color: '#00D082',
+                  background: 'rgba(0,208,130,0.18)', color: '#10B981',
                   border: '1px solid rgba(0,208,130,0.3)',
                   fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 9999,
                 }}>{tier2Active}</span>
@@ -692,6 +693,7 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
         key={tab}
         style={{
           flex: 1, overflowY: 'auto', padding: '26px 28px',
+          background: '#F8FAFC',
           animation: 'ab-fade-in 0.25s cubic-bezier(0.16,1,0.3,1) both',
         }}
       >
@@ -726,7 +728,7 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
             onShowToast={showToast}
           />
         )}
-        {tab === 'voice'    && <VoiceTab voices={voices} selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice} stability={stability} setStability={setStability} similarity={similarity} setSimilarity={setSimilarity} ttsModel={ttsModel} setTtsModel={setTtsModel} sttProvider={sttProvider} setSttProvider={setSttProvider} />}
+        {tab === 'voice'    && <VoiceTab voices={voices} selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice} ttsModel={ttsModel} setTtsModel={setTtsModel} sttProvider={sttProvider} setSttProvider={setSttProvider} />}
         {tab === 'script'   && <ScriptTab opener={scriptOpener} setOpener={setScriptOpener} discovery={scriptDiscovery} setDiscovery={setScriptDiscovery} pitch={scriptPitch} setPitch={setScriptPitch} objection={scriptObjection} setObjection={setScriptObjection} closing={scriptClosing} setClosing={setScriptClosing} faq={scriptFaq} setFaq={setScriptFaq} />}
         {tab === 'advanced' && <AdvancedTab maxDuration={maxDuration} setMaxDuration={setMaxDuration} silenceTimeout={silenceTimeout} setSilenceTimeout={setSilenceTimeout} llmModel={llmModel} setLlmModel={setLlmModel} temperature={temperature} setTemperature={setTemperature} />}
       </div>
@@ -804,17 +806,23 @@ function ConfigTab({
             <div style={{ display: 'flex', gap: 8 }}>
               {(['outbound', 'inbound', 'both'] as const).map((t) => {
                 const active = callType === t;
+                const colors: Record<string, { active: string; glow: string }> = {
+                  outbound: { active: '#38BDF8', glow: 'rgba(56,189,248,0.18)' },
+                  inbound:  { active: '#10B981', glow: 'rgba(0,208,130,0.18)' },
+                  both:     { active: '#A89AF9', glow: 'rgba(168,154,249,0.18)' },
+                };
+                const clr = colors[t];
                 return (
                   <button
                     key={t} onClick={() => setCallType(t)}
                     style={{
                       flex: 1, padding: '9px 0', borderRadius: 9,
-                      border: `1px solid ${active ? 'rgba(0,208,130,0.45)' : 'rgba(255,255,255,0.08)'}`,
-                      background: active ? 'rgba(0,208,130,0.1)' : 'rgba(6,15,26,0.8)',
-                      color: active ? '#00D082' : 'var(--text-muted)',
-                      fontSize: 13, fontWeight: active ? 600 : 500, cursor: 'pointer',
+                      border: `1px solid ${active ? clr.active : '#E2E8F0'}`,
+                      background: active ? clr.glow : '#F8FAFC',
+                      color: active ? clr.active : '#94A3B8',
+                      fontSize: 13, fontWeight: active ? 700 : 400, cursor: 'pointer',
                       textTransform: 'capitalize', transition: 'all 0.18s',
-                      boxShadow: active ? '0 0 12px rgba(0,208,130,0.12)' : 'none',
+                      opacity: active ? 1 : 0.75,
                     }}
                   >
                     {t}
@@ -901,36 +909,106 @@ function ConfigTab({
 
 const EL_SYSTEM_TOOLS: Array<{
   key: string; label: string; subtitle: string; desc: string; color: string; icon: string;
-  configFields: Array<{ key: string; label: string; type: string }>;
+  hasConfig: boolean;
 }> = [
   {
     key: 'el_transfer_to_number',
     label: 'Transfer to Number',
-    subtitle: 'ElevenLabs Native',
-    desc: 'Built-in call transfer via SIP REFER or cold/warm dial — no backend required.',
+    subtitle: 'EL Native',
+    desc: 'Built-in call transfer via cold/warm/conference/SIP REFER — no backend required.',
     color: '#7C6EFA',
     icon: 'M16 3h5v5M4 20L21 3M21 3l-5 18-4-7-7-4',
-    configFields: [{ key: 'transfers', label: 'Transfer Destinations', type: 'transfer_list' }],
+    hasConfig: true,
   },
   {
     key: 'el_end_conversation',
     label: 'End Conversation',
-    subtitle: 'ElevenLabs Native',
-    desc: 'Lets the agent cleanly hang up without additional backend logic.',
+    subtitle: 'EL Native',
+    desc: 'Agent cleanly hangs up without additional backend logic.',
     color: '#EF4444',
-    icon: 'M3 5a2 2 0 0 1 2-2h3l2 4.5-2.5 1.5a11 11 0 0 0 5 5l1.5-2.5L20 13v3a2 2 0 0 1-2 2 16 16 0 0 1-15-15',
-    configFields: [],
+    icon: 'M18 6 6 18M6 6l12 12',
+    hasConfig: false,
   },
   {
     key: 'el_language_detection',
     label: 'Language Detection',
-    subtitle: 'ElevenLabs Native',
-    desc: 'Detects caller language and switches agent response automatically.',
+    subtitle: 'EL Native',
+    desc: 'Auto-detects caller language and switches response language.',
     color: '#22D3EE',
     icon: 'M2 12a10 10 0 1 0 20 0A10 10 0 0 0 2 12zM12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z',
-    configFields: [],
+    hasConfig: false,
   },
 ];
+
+// ─── Slim toggle switch ───────────────────────────────────────────────────────
+function ToggleSwitch({ active, color = '#10B981' }: { active: boolean; color?: string }) {
+  return (
+    <div style={{
+      width: 34, height: 18, borderRadius: 9999, position: 'relative', flexShrink: 0,
+      background: active ? `${color}18` : '#F1F5F9',
+      border: `1px solid ${active ? `${color}55` : '#E2E8F0'}`,
+      transition: 'all 0.22s',
+      boxShadow: active ? `0 0 10px ${color}28` : 'none',
+    }}>
+      <div style={{
+        position: 'absolute', top: 3, left: active ? 16 : 3,
+        width: 10, height: 10, borderRadius: '50%',
+        background: active ? color : '#CBD5E1',
+        transition: 'left 0.22s, background 0.22s',
+        boxShadow: active ? `0 0 5px ${color}` : 'none',
+      }} />
+    </div>
+  );
+}
+
+// ─── Expand chevron ────────────────────────────────────────────────────────────
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" style={{ transition: 'transform 0.22s', transform: open ? 'rotate(180deg)' : 'none', opacity: 0.4 }}>
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  );
+}
+
+// ─── Inline expand panel wrapper (CSS height transition) ──────────────────────
+function ExpandPanel({ open, color = '#F8FAFC', children }: { open: boolean; color?: string; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(open);
+  useEffect(() => { if (open) setMounted(true); }, [open]);
+  if (!mounted) return null;
+  return (
+    <div style={{
+      overflow: 'hidden',
+      maxHeight: open ? 600 : 0,
+      opacity: open ? 1 : 0,
+      transition: 'max-height 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.2s',
+    }}>
+      <div style={{
+        padding: '14px 16px 16px',
+        borderTop: '1px solid #F1F5F9',
+        background: color,
+        animation: open ? 'ab-unfold 0.18s both' : 'none',
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── Section label ─────────────────────────────────────────────────────────────
+function SectionLabel({ label, accent = '#10B981', hint }: { label: string; accent?: string; hint?: string }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8, marginTop: 4,
+    }}>
+      <div style={{ width: 3, height: 13, borderRadius: 2, background: accent, flexShrink: 0 }} />
+      <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: accent }}>
+        {label}
+      </span>
+      {hint && <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>{hint}</span>}
+    </div>
+  );
+}
 
 // ─── Tools tab ────────────────────────────────────────────────────────────────
 function ToolsTab({
@@ -948,12 +1026,12 @@ function ToolsTab({
   const [customTools,     setCustomTools]     = useState<CustomTool[]>([]);
   const [loadingCustom,   setLoadingCustom]   = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createToolType,  setCreateToolType]  = useState<'webhook' | 'client' | 'mcp'>('webhook');
   const [editingTool,     setEditingTool]     = useState<CustomTool | null>(null);
-  const [expandedSys,     setExpandedSys]     = useState<string | null>(null);
-  const [expandedT2,      setExpandedT2]      = useState<string | null>(null);
-  const [_kbFocused,      _setKbFocused]      = useState(false); // reserved for future focus ring
+  const [expandedKey,     setExpandedKey]     = useState<string | null>(null);
+  const [expandedCustom,  setExpandedCustom]  = useState<string | null>(null);
+  const [kbOpen,          setKbOpen]          = useState(false);
 
-  // Load custom tools for this agent
   useEffect(() => {
     if (!agentId) return;
     setLoadingCustom(true);
@@ -963,15 +1041,18 @@ function ToolsTab({
       .finally(() => setLoadingCustom(false));
   }, [agentId]);
 
+  // Open KB panel if KB ID already set (editing existing agent)
+  useEffect(() => {
+    if (knowledgeBaseId) setKbOpen(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggle = (id: string) => {
     if (TIER1_IDS.has(id)) return;
-    const next = enabledTools.includes(id) ? enabledTools.filter((t) => t !== id) : [...enabledTools, id];
+    const willEnable = !enabledTools.includes(id);
+    const next = willEnable ? [...enabledTools, id] : enabledTools.filter((t) => t !== id);
     setEnabledTools(next);
-    // Auto-expand config when enabling a configurable tool
-    if (!enabledTools.includes(id)) {
-      if (EL_SYSTEM_TOOLS.find((s) => s.key === id)) setExpandedSys(id);
-      else setExpandedT2(id);
-    }
+    if (willEnable) setExpandedKey(id);
+    else if (expandedKey === id) setExpandedKey(null);
   };
 
   const updateConfig = (toolId: string, key: string, value: string) => {
@@ -1011,310 +1092,224 @@ function ToolsTab({
 
   const tier1 = BUILTIN_TOOLS.filter((t) => t.tier === 1);
   const tier2 = BUILTIN_TOOLS.filter((t) => t.tier === 2);
-
   const kbActive = !!knowledgeBaseId.trim();
 
+  // Row for EL Native + Platform Extension tools
+  const ToolRow = ({ id, label, desc, color, active, hasConfig, children }: {
+    id: string; label: string; desc: string; color: string;
+    active: boolean; hasConfig: boolean; children?: React.ReactNode;
+  }) => {
+    const expanded = expandedKey === id && active && hasConfig;
+    return (
+      <div style={{
+        background: active ? `${color}06` : '#FAFAFA',
+        border: `1px solid ${active ? `${color}22` : '#E2E8F0'}`,
+        borderRadius: 10, overflow: 'hidden',
+        transition: 'border-color 0.2s, background 0.2s',
+      }}>
+        <div
+          onClick={() => toggle(id)}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', cursor: 'pointer', userSelect: 'none' }}
+        >
+          <div style={{
+            width: 5, height: 28, borderRadius: 3, flexShrink: 0,
+            background: active ? color : '#E2E8F0',
+            transition: 'background 0.2s', boxShadow: active ? `0 0 8px ${color}55` : 'none',
+          }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: active ? '#0F172A' : '#94A3B8', marginBottom: 2, transition: 'color 0.2s' }}>
+              {label}
+            </div>
+            <div style={{ fontSize: 10.5, color: '#94A3B8', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {desc}
+            </div>
+          </div>
+          <ToggleSwitch active={active} color={color} />
+          {active && hasConfig && (
+            <div onClick={(e) => { e.stopPropagation(); setExpandedKey(expanded ? null : id); }}
+              style={{ padding: '4px 2px', cursor: 'pointer', color: '#94A3B8' }}>
+              <Chevron open={expanded} />
+            </div>
+          )}
+        </div>
+        {hasConfig && (
+          <ExpandPanel open={expanded} color={`${color}05`}>
+            {children}
+          </ExpandPanel>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div style={{ maxWidth: 860 }}>
+    <div style={{ maxWidth: 780, display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-      {/* ── Core Platform Tools ─────────────────────────────────────────────── */}
-      <SCard title="Core Platform Tools">
-        <div style={{
-          fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.55,
-          display: 'flex', gap: 8, alignItems: 'flex-start',
-        }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00D082" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      {/* ── Quick-add buttons — pinned to the TOP ─────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => { setCreateToolType('webhook'); setShowCreateModal(true); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 16px', borderRadius: 8,
+            background: '#F43F5E', color: '#FFFFFF', border: 'none',
+            fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            fontFamily: 'var(--font-ui), sans-serif', transition: 'all 0.18s',
+            boxShadow: '0 2px 6px rgba(244,63,94,0.28)', letterSpacing: '-0.01em',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#E0304A'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(244,63,94,0.38)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#F43F5E'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 6px rgba(244,63,94,0.28)'; }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          Always active on every call — no configuration needed.
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 7 }}>
-          {tier1.map((tool) => (
-            <ToolCard key={tool.id} tool={tool} active locked />
-          ))}
-        </div>
-      </SCard>
+          Custom Tool
+        </button>
+        <button
+          onClick={() => { setCreateToolType('mcp'); setShowCreateModal(true); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 16px', borderRadius: 8,
+            background: '#8B5CF6', color: '#FFFFFF', border: 'none',
+            fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            fontFamily: 'var(--font-ui), sans-serif', transition: 'all 0.18s',
+            boxShadow: '0 2px 6px rgba(139,92,246,0.28)', letterSpacing: '-0.01em',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#7C3AED'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.38)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#8B5CF6'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 6px rgba(139,92,246,0.28)'; }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+          </svg>
+          MCP Server
+        </button>
+      </div>
 
-      {/* ── ElevenLabs Native Tools ──────────────────────────────────────────── */}
-      <SCard title="ElevenLabs Native Tools" accent="#7C6EFA">
+      {/* ── 1. Core Platform Tools ───────────────────────────────────────────── */}
+      <div>
+        <SectionLabel label="Core Platform Tools" hint="· always active, no config needed" />
         <div style={{
-          fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.55,
-          display: 'flex', gap: 8, alignItems: 'flex-start',
+          background: '#FFFFFF', border: '1px solid #E2E8F0',
+          borderRadius: 12, padding: '14px 16px',
         }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7C6EFA" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-            <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/>
-          </svg>
-          Built-in ElevenLabs capabilities — handled natively without backend callbacks.
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            {tier1.map((tool) => (
+              <div key={tool.id} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: '#F8FAFC', borderRadius: 8, padding: '8px 11px',
+                border: `1px solid ${tool.color}20`,
+              }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: tool.color, boxShadow: `0 0 6px ${tool.color}`, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tool.name}</div>
+                  <div style={{ fontSize: 9.5, color: '#94A3B8', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.desc}</div>
+                </div>
+                <span style={{ fontSize: 7.5, fontWeight: 800, color: tool.color, background: `${tool.color}18`, padding: '1.5px 5px', borderRadius: 9999, letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>core</span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      </div>
+
+      {/* ── 2. ElevenLabs Native Tools ──────────────────────────────────────── */}
+      <div>
+        <SectionLabel label="ElevenLabs Native" accent="#7C6EFA" hint="· handled by EL, no backend callback" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {EL_SYSTEM_TOOLS.map((sys) => {
             const active = enabledTools.includes(sys.key);
-            const expanded = expandedSys === sys.key && active;
             const cfg = (toolConfigs[sys.key] ?? {}) as Record<string, string>;
             return (
-              <div key={sys.key} style={{
-                background: 'rgba(6,15,26,0.8)',
-                border: `1px solid ${active ? `${sys.color}30` : 'rgba(255,255,255,0.06)'}`,
-                borderLeft: `3px solid ${active ? sys.color : 'rgba(255,255,255,0.08)'}`,
-                borderRadius: 11, overflow: 'hidden', transition: 'border-color 0.2s',
-              }}>
-                <div
-                  style={{
-                    padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => toggle(sys.key)}
-                >
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                    background: active ? `${sys.color}15` : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${active ? `${sys.color}35` : 'rgba(255,255,255,0.07)'}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.2s',
-                  }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={active ? sys.color : 'rgba(255,255,255,0.3)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d={sys.icon}/>
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: active ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                        {sys.label}
-                      </span>
-                      <span style={{
-                        fontSize: 8.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
-                        color: sys.color, background: `${sys.color}14`, padding: '2px 6px', borderRadius: 9999,
-                      }}>{sys.subtitle}</span>
+              <ToolRow key={sys.key} id={sys.key} label={sys.label} desc={sys.desc}
+                color={sys.color} active={active} hasConfig={sys.hasConfig}>
+                {/* EL Transfer config */}
+                {sys.key === 'el_transfer_to_number' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <GLabel>Transfer-to number (E.164)</GLabel>
+                      <GInput value={cfg.phone_number ?? ''} onChange={(e) => updateSysConfig(sys.key, 'phone_number', e.target.value)} placeholder="+15551234567" />
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>{sys.desc}</div>
-                  </div>
-                  {/* Toggle */}
-                  <div style={{
-                    width: 36, height: 20, borderRadius: 9999, position: 'relative', flexShrink: 0,
-                    background: active ? `${sys.color}25` : 'rgba(255,255,255,0.07)',
-                    border: `1px solid ${active ? `${sys.color}50` : 'rgba(255,255,255,0.1)'}`,
-                    transition: 'all 0.25s', boxShadow: active ? `0 0 12px ${sys.color}30` : 'none',
-                  }}>
-                    <div style={{
-                      position: 'absolute', top: 3, left: active ? 17 : 3,
-                      width: 12, height: 12, borderRadius: '50%',
-                      background: active ? sys.color : 'rgba(255,255,255,0.3)',
-                      transition: 'left 0.25s, background 0.25s',
-                      boxShadow: active ? `0 0 6px ${sys.color}` : 'none',
-                    }} />
-                  </div>
-                  {/* Expand chevron */}
-                  {active && sys.configFields.length > 0 && (
-                    <div
-                      onClick={(e) => { e.stopPropagation(); setExpandedSys(expanded ? null : sys.key); }}
-                      style={{ color: 'var(--text-muted)', padding: 4, cursor: 'pointer' }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
-                        <polyline points="6 9 12 15 18 9"/>
-                      </svg>
+                    <div>
+                      <GLabel>Transfer type</GLabel>
+                      <GSelect value={cfg.transfer_type ?? 'cold'} onChange={(e) => updateSysConfig(sys.key, 'transfer_type', e.target.value)}>
+                        <option value="cold">Cold — immediate handoff</option>
+                        <option value="warm">Warm — agent stays briefly</option>
+                        <option value="conference">Conference — 3-way bridge</option>
+                        <option value="sip_refer">SIP REFER — carrier-level</option>
+                      </GSelect>
                     </div>
-                  )}
-                </div>
-
-                {/* Config panel for transfer_to_number */}
-                {expanded && sys.key === 'el_transfer_to_number' && (
-                  <div style={{
-                    padding: '14px 18px 16px', borderTop: `1px solid ${sys.color}18`,
-                    background: `${sys.color}05`,
-                    animation: 'ab-fade-in 0.18s both',
-                  }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
-                      Configure transfer destinations. The agent will use the first matching condition.
-                    </div>
-                    {/* Transfers array — simplified to first entry */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div>
-                        <GLabel>Transfer-to number (E.164)</GLabel>
-                        <GInput
-                          value={cfg.phone_number ?? ''}
-                          onChange={(e) => updateSysConfig(sys.key, 'phone_number', e.target.value)}
-                          placeholder="+15551234567"
-                        />
-                      </div>
-                      <div>
-                        <GLabel>Transfer type</GLabel>
-                        <GSelect
-                          value={cfg.transfer_type ?? 'cold'}
-                          onChange={(e) => updateSysConfig(sys.key, 'transfer_type', e.target.value)}
-                        >
-                          <option value="cold">Cold transfer</option>
-                          <option value="warm">Warm transfer</option>
-                          <option value="sip_refer">SIP REFER</option>
-                        </GSelect>
-                      </div>
-                      <div style={{ gridColumn: '1/-1' }}>
-                        <GLabel hint="— optional">Transfer condition</GLabel>
-                        <GInput
-                          value={cfg.condition ?? ''}
-                          onChange={(e) => updateSysConfig(sys.key, 'condition', e.target.value)}
-                          placeholder="e.g. when user requests to speak with a human"
-                        />
-                      </div>
+                    <div style={{ gridColumn: '1/-1' }}>
+                      <GLabel hint="— optional, leave blank to always transfer">Condition</GLabel>
+                      <GInput value={cfg.condition ?? ''} onChange={(e) => updateSysConfig(sys.key, 'condition', e.target.value)} placeholder="when user asks to speak with a human" />
                     </div>
                   </div>
                 )}
-              </div>
+              </ToolRow>
             );
           })}
         </div>
-      </SCard>
+      </div>
 
-      {/* ── Platform Extension Tools (Tier 2) ──────────────────────────────── */}
-      <SCard title="Platform Extension Tools" accent="#38BDF8">
-        <div style={{
-          fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.55,
-          display: 'flex', gap: 8, alignItems: 'flex-start',
-        }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-          </svg>
-          Optional tools with server-side execution. Some require API credentials.
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      {/* ── 3. Platform Extension Tools (Tier 2) ────────────────────────────── */}
+      <div>
+        <SectionLabel label="Platform Tools" accent="#38BDF8" hint="· optional, server-side execution" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {tier2.map((tool) => {
             const active = enabledTools.includes(tool.id);
-            const expanded = expandedT2 === tool.id && active && tool.configurable;
             const cfg = toolConfigs[tool.id] ?? {};
             return (
-              <div key={tool.id} style={{
-                background: 'rgba(6,15,26,0.8)',
-                border: `1px solid ${active ? `${tool.color}28` : 'rgba(255,255,255,0.05)'}`,
-                borderLeft: `3px solid ${active ? tool.color : 'rgba(255,255,255,0.07)'}`,
-                borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.2s',
-              }}>
-                <div
-                  style={{
-                    padding: '10px 13px', display: 'flex', alignItems: 'center', gap: 10,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => toggle(tool.id)}
-                >
-                  <div style={{
-                    width: 7, height: 7, borderRadius: '50%', background: tool.color, flexShrink: 0,
-                    opacity: active ? 1 : 0.25, boxShadow: active ? `0 0 6px ${tool.color}` : 'none', transition: 'all 0.2s',
-                  }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: active ? 'var(--text-primary)' : 'var(--text-muted)', marginBottom: 1 }}>
-                      {tool.name}
-                    </div>
-                    <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{tool.desc}</div>
-                  </div>
-                  {/* Toggle */}
-                  <div style={{
-                    width: 32, height: 17, borderRadius: 9999, position: 'relative', flexShrink: 0,
-                    background: active ? 'rgba(0,208,130,0.2)' : 'rgba(255,255,255,0.07)',
-                    border: `1px solid ${active ? 'rgba(0,208,130,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                    transition: 'all 0.25s', boxShadow: active ? '0 0 10px rgba(0,208,130,0.3)' : 'none',
-                  }}>
-                    <div style={{
-                      position: 'absolute', top: 2.5, left: active ? 15 : 2.5,
-                      width: 10, height: 10, borderRadius: '50%',
-                      background: active ? '#00D082' : 'rgba(255,255,255,0.3)',
-                      transition: 'left 0.25s, background 0.25s',
-                      boxShadow: active ? '0 0 6px #00D082' : 'none',
-                    }} />
-                  </div>
-                  {/* Config expand */}
-                  {active && tool.configurable && (
-                    <div
-                      onClick={(e) => { e.stopPropagation(); setExpandedT2(expanded ? null : tool.id); }}
-                      style={{ color: 'var(--text-muted)', padding: 4, cursor: 'pointer' }}
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
-                        <polyline points="6 9 12 15 18 9"/>
-                      </svg>
-                    </div>
-                  )}
-                </div>
-
-                {/* Inline config panel */}
-                {expanded && (
-                  <div style={{
-                    padding: '14px 16px 16px',
-                    borderTop: `1px solid ${tool.color}15`,
-                    background: `${tool.color}04`,
-                    animation: 'ab-fade-in 0.18s both',
-                  }}>
-                    <ToolConfigPanel tool={tool} config={cfg} onChange={(key, val) => updateConfig(tool.id, key, val)} />
-                  </div>
-                )}
-              </div>
+              <ToolRow key={tool.id} id={tool.id} label={tool.name} desc={tool.desc}
+                color={tool.color} active={active} hasConfig={tool.configurable}>
+                <ToolConfigPanel tool={tool} config={cfg} onChange={(key, val) => updateConfig(tool.id, key, val)} />
+              </ToolRow>
             );
           })}
         </div>
-      </SCard>
+      </div>
 
-      {/* ── Knowledge Base ───────────────────────────────────────────────────── */}
-      <SCard title="ElevenLabs Knowledge Base" accent="#10B981">
+      {/* ── 4. Knowledge Base ────────────────────────────────────────────────── */}
+      <div>
+        <SectionLabel label="Knowledge Base" accent="#10B981" hint="· ElevenLabs native KB attachment" />
         <div style={{
-          background: 'rgba(6,15,26,0.8)',
-          border: `1px solid ${kbActive ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.06)'}`,
-          borderLeft: `3px solid ${kbActive ? '#10B981' : 'rgba(255,255,255,0.08)'}`,
-          borderRadius: 11, overflow: 'hidden', transition: 'border-color 0.2s',
+          background: kbActive ? 'rgba(16,185,129,0.045)' : '#FAFAFA',
+          border: `1px solid ${kbActive ? 'rgba(16,185,129,0.22)' : '#E2E8F0'}`,
+          borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.2s, background 0.2s',
         }}>
-          {/* Header row — always visible */}
-          <div style={{ padding: '13px 15px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'default' }}>
+          {/* Toggle row */}
+          <div
+            onClick={() => setKbOpen((v) => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', cursor: 'pointer', userSelect: 'none' }}
+          >
             <div style={{
-              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-              background: kbActive ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${kbActive ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.07)'}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.2s',
-            }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={kbActive ? '#10B981' : 'rgba(255,255,255,0.3)'} strokeWidth="2" strokeLinecap="round">
-                <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-              </svg>
-            </div>
+              width: 5, height: 28, borderRadius: 3, flexShrink: 0,
+              background: kbActive ? '#10B981' : '#E2E8F0',
+              transition: 'background 0.2s', boxShadow: kbActive ? '0 0 8px rgba(16,185,129,0.5)' : 'none',
+            }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: kbActive ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                  {kbActive ? (knowledgeBaseName || 'Knowledge Base Connected') : 'Knowledge Base'}
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: kbActive ? '#FFFFFF' : '#94A3B8', transition: 'color 0.2s' }}>
+                  {kbActive ? (knowledgeBaseName || 'Knowledge Base') : 'Knowledge Base'}
                 </span>
                 {kbActive && (
-                  <span style={{
-                    fontSize: 8.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
-                    color: '#10B981', background: 'rgba(16,185,129,0.12)', padding: '2px 6px', borderRadius: 9999,
-                  }}>Connected</span>
+                  <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#10B981', background: 'rgba(16,185,129,0.15)', padding: '2px 6px', borderRadius: 9999 }}>
+                    Connected
+                  </span>
                 )}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>
-                {kbActive
-                  ? `ID: ${knowledgeBaseId}`
-                  : 'Connect an ElevenLabs KB so the agent can query your docs during calls'}
+              <div style={{ fontSize: 10.5, color: '#94A3B8', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {kbActive ? `ID: ${knowledgeBaseId}` : 'Connect an EL Knowledge Base — the agent queries it during calls'}
               </div>
             </div>
-            {/* Toggle */}
+            {/* KB toggle — clicking disconnects if active */}
             <div
-              onClick={() => { if (kbActive) { setKnowledgeBaseId(''); setKnowledgeBaseName(''); } }}
-              style={{
-                width: 36, height: 20, borderRadius: 9999, position: 'relative', flexShrink: 0,
-                background: kbActive ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.07)',
-                border: `1px solid ${kbActive ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                transition: 'all 0.25s', boxShadow: kbActive ? '0 0 12px rgba(16,185,129,0.3)' : 'none',
-                cursor: kbActive ? 'pointer' : 'default',
-              }}
+              onClick={(e) => { e.stopPropagation(); if (kbActive) { setKnowledgeBaseId(''); setKnowledgeBaseName(''); setKbOpen(false); } else setKbOpen(true); }}
             >
-              <div style={{
-                position: 'absolute', top: 3, left: kbActive ? 17 : 3,
-                width: 12, height: 12, borderRadius: '50%',
-                background: kbActive ? '#10B981' : 'rgba(255,255,255,0.3)',
-                transition: 'left 0.25s, background 0.25s',
-                boxShadow: kbActive ? '0 0 6px #10B981' : 'none',
-              }} />
+              <ToggleSwitch active={kbActive} color="#10B981" />
+            </div>
+            <div style={{ color: '#94A3B8', padding: '2px' }}>
+              <Chevron open={kbOpen} />
             </div>
           </div>
 
-          {/* Connect form — always shown but styled differently when active */}
-          <div style={{
-            padding: '0 15px 16px',
-            borderTop: `1px solid ${kbActive ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.04)'}`,
-            paddingTop: 14,
-          }}>
+          <ExpandPanel open={kbOpen} color="rgba(16,185,129,0.03)">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
               <div>
                 <GLabel>Knowledge Base ID</GLabel>
@@ -1327,192 +1322,133 @@ function ToolsTab({
               </div>
               <div>
                 <GLabel hint="— display only">Name / label</GLabel>
-                <GInput
-                  value={knowledgeBaseName}
-                  onChange={(e) => setKnowledgeBaseName(e.target.value)}
-                  placeholder="Product Docs, FAQs, etc."
-                />
+                <GInput value={knowledgeBaseName} onChange={(e) => setKnowledgeBaseName(e.target.value)} placeholder="Product Docs, FAQs, etc." />
               </div>
             </div>
-
-            {/* Info row */}
-            <div style={{
-              background: 'rgba(16,185,129,0.04)', border: '1px solid rgba(16,185,129,0.12)',
-              borderRadius: 8, padding: '10px 12px',
-              display: 'flex', gap: 10, alignItems: 'flex-start',
-            }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.12)', borderRadius: 8, padding: '9px 11px' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
-              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.6, flex: 1 }}>
-                Create and upload documents (PDF, DOCX, TXT, web URLs) in your{' '}
-                <span style={{ color: '#10B981', fontWeight: 600 }}>ElevenLabs dashboard → Conversational AI → Knowledge Bases</span>.
-                Paste the KB ID here once created. Supported: product docs, FAQs, scripts, policies.
-              </div>
+              <span style={{ fontSize: 10.5, color: '#94A3B8', lineHeight: 1.6 }}>
+                Create KBs and upload documents (PDF, DOCX, TXT, URLs) in your <span style={{ color: '#10B981' }}>ElevenLabs dashboard → Conversational AI → Knowledge Bases</span>. Paste the KB ID above.
+              </span>
             </div>
-          </div>
+          </ExpandPanel>
         </div>
-      </SCard>
+      </div>
 
-      {/* ── Custom Tools ──────────────────────────────────────────────────────── */}
-      <SCard title="Custom Tools" accent="#F0B429">
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14,
-        }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
-            User-created webhook, client, or MCP tools. Automatically synced to ElevenLabs.
-          </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              padding: '8px 16px', borderRadius: 9,
-              border: '1px solid rgba(240,180,41,0.4)',
-              background: 'rgba(240,180,41,0.08)',
-              color: '#F0B429', fontSize: 12.5, fontWeight: 700,
-              cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
-              fontFamily: 'var(--font-ui), sans-serif',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(240,180,41,0.14)'; e.currentTarget.style.borderColor = 'rgba(240,180,41,0.6)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(240,180,41,0.08)'; e.currentTarget.style.borderColor = 'rgba(240,180,41,0.4)'; }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Create tool
-          </button>
-        </div>
+      {/* ── 5. Custom Tools & MCP ────────────────────────────────────────────── */}
+      <div>
+        <SectionLabel label="Custom Tools & MCP" accent="#F0B429" hint={`· ${customTools.length} created`} />
 
         {loadingCustom ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 0', color: 'var(--text-muted)', fontSize: 12 }}>
-            <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#F0B429', animation: 'ab-spin 0.7s linear infinite' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 0', color: '#94A3B8', fontSize: 12 }}>
+            <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid #E2E8F0', borderTopColor: '#F0B429', animation: 'ab-spin 0.7s linear infinite' }} />
             Loading custom tools…
           </div>
         ) : customTools.length === 0 ? (
           <div style={{
-            textAlign: 'center', padding: '28px 0',
-            border: '1px dashed rgba(240,180,41,0.15)', borderRadius: 11,
-            color: 'var(--text-muted)', fontSize: 12,
+            textAlign: 'center', padding: '24px 0',
+            border: '1px dashed rgba(240,180,41,0.12)', borderRadius: 10,
+            color: '#94A3B8', fontSize: 12,
           }}>
-            <div style={{ marginBottom: 8, fontSize: 22 }}>⚙️</div>
-            No custom tools yet — create webhook, client, or MCP tools above.
+            No custom tools yet. Create a webhook, client, or MCP tool to get started.
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {customTools.map((ct) => {
               const typeColor = ct.el_tool_type === 'webhook' ? '#22D3EE' : ct.el_tool_type === 'client' ? '#7C6EFA' : '#A89AF9';
+              const open = expandedCustom === ct.id;
               return (
                 <div key={ct.id} style={{
-                  background: 'rgba(6,15,26,0.8)',
-                  border: `1px solid ${ct.is_active ? `${typeColor}25` : 'rgba(255,255,255,0.05)'}`,
-                  borderLeft: `3px solid ${ct.is_active ? typeColor : 'rgba(255,255,255,0.08)'}`,
-                  borderRadius: 10, padding: '11px 14px',
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  opacity: ct.is_active ? 1 : 0.5,
+                  background: open ? `${typeColor}06` : '#FAFAFA',
+                  border: `1px solid ${open ? `${typeColor}22` : '#E2E8F0'}`,
+                  borderRadius: 10, overflow: 'hidden', opacity: ct.is_active ? 1 : 0.45,
                   transition: 'all 0.2s',
                 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {ct.name}
-                      </span>
-                      <span style={{
-                        fontSize: 8.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
-                        color: typeColor, background: `${typeColor}14`, padding: '2px 6px', borderRadius: 9999,
-                      }}>{ct.el_tool_type}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div
+                    onClick={() => setExpandedCustom(open ? null : ct.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: typeColor, background: `${typeColor}18`, padding: '2px 7px', borderRadius: 9999, flexShrink: 0 }}>
+                      {ct.el_tool_type}
+                    </span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: '#0F172A', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ct.name}
+                    </span>
+                    <span style={{ fontSize: 10.5, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200, flexShrink: 1 }}>
                       {ct.description}
+                    </span>
+                    <Chevron open={open} />
+                  </div>
+                  <ExpandPanel open={open} color={`${typeColor}04`}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, color: '#64748B', marginBottom: 8, lineHeight: 1.6 }}>{ct.description}</div>
+                        {ct.el_tool_type === 'webhook' && (ct.config as Record<string, string>)?.url && (
+                          <div style={{ fontSize: 10.5, color: '#64748B', fontFamily: 'var(--font-mono)', background: '#F8FAFC', padding: '4px 8px', borderRadius: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {(ct.config as Record<string, string>).method ?? 'POST'} {(ct.config as Record<string, string>).url}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button onClick={() => setEditingTool(ct)} style={{
+                          padding: '5px 12px', borderRadius: 7,
+                          border: `1px solid ${typeColor}30`, background: `${typeColor}08`, color: typeColor,
+                          fontSize: 11, cursor: 'pointer', fontWeight: 600, transition: 'all 0.15s',
+                        }}>Edit</button>
+                        <button onClick={() => handleDeleteTool(ct)} style={{
+                          padding: '5px 12px', borderRadius: 7,
+                          border: '1px solid rgba(255,77,109,0.22)', background: 'rgba(255,77,109,0.05)',
+                          color: '#FF4D6D', fontSize: 11, cursor: 'pointer', fontWeight: 600, transition: 'all 0.15s',
+                        }}>Delete</button>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    <button
-                      onClick={() => setEditingTool(ct)}
-                      style={{
-                        padding: '4px 10px', borderRadius: 7,
-                        border: `1px solid ${typeColor}30`,
-                        background: `${typeColor}08`, color: typeColor,
-                        fontSize: 11, cursor: 'pointer', fontWeight: 600,
-                        transition: 'all 0.15s',
-                      }}
-                    >Edit</button>
-                    <button
-                      onClick={() => handleDeleteTool(ct)}
-                      style={{
-                        padding: '4px 10px', borderRadius: 7,
-                        border: '1px solid rgba(255,77,109,0.25)',
-                        background: 'rgba(255,77,109,0.06)',
-                        color: '#FF4D6D', fontSize: 11, cursor: 'pointer', fontWeight: 600,
-                        transition: 'all 0.15s',
-                      }}
-                    >Delete</button>
-                  </div>
+                  </ExpandPanel>
                 </div>
               );
             })}
           </div>
         )}
-      </SCard>
+      </div>
 
-      {/* Create / Edit modal */}
-      {showCreateModal && (
-        <CreateToolModal
-          agentId={agentId}
-          onSave={handleCreateTool}
-          onClose={() => setShowCreateModal(false)}
-        />
-      )}
-      {editingTool && (
-        <CreateToolModal
-          agentId={agentId}
-          editTool={editingTool}
-          onSave={handleUpdateTool}
-          onClose={() => setEditingTool(null)}
-        />
-      )}
+      {showCreateModal && <CreateToolModal agentId={agentId} initialType={createToolType} onSave={handleCreateTool} onClose={() => setShowCreateModal(false)} />}
+      {editingTool && <CreateToolModal agentId={agentId} editTool={editingTool} onSave={handleUpdateTool} onClose={() => setEditingTool(null)} />}
     </div>
   );
 }
 
-function ToolCard({ tool, active, locked }: { tool: typeof BUILTIN_TOOLS[number]; active: boolean; locked?: boolean }) {
+function ToolConfigPanel({ tool, config, onChange }: {
+  tool: typeof BUILTIN_TOOLS[number]; config: Record<string, string>; onChange: (key: string, val: string) => void;
+}) {
   return (
-    <div style={{
-      background: 'rgba(6,15,26,0.8)',
-      border: `1px solid ${active ? `${tool.color}28` : 'rgba(255,255,255,0.06)'}`,
-      borderLeft: `3px solid ${active ? tool.color : 'rgba(255,255,255,0.06)'}`,
-      borderRadius: 10, padding: '10px 13px',
-      cursor: 'default',
-      boxShadow: active ? `0 0 10px ${tool.color}06` : 'none',
-      display: 'flex', alignItems: 'flex-start', gap: 9,
-    }}>
-      <div style={{
-        width: 6, height: 6, borderRadius: '50%', background: tool.color,
-        flexShrink: 0, marginTop: 5,
-        boxShadow: active ? `0 0 6px ${tool.color}` : 'none',
-        opacity: active ? 1 : 0.25,
-      }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 2 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {tool.name}
-          </div>
-          {locked && (
-            <span style={{
-              fontSize: 7.5, fontWeight: 800, color: tool.color,
-              background: `${tool.color}14`, padding: '2px 5px',
-              borderRadius: 9999, flexShrink: 0, letterSpacing: '0.07em', textTransform: 'uppercase',
-            }}>Core</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Description — pre-populated with default, user can override */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+          <GLabel hint="— shown to the LLM, edit to customise">Tool description</GLabel>
+          {config.description_override && config.description_override !== tool.desc && (
+            <button
+              onClick={() => onChange('description_override', '')}
+              style={{ fontSize: 10, color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}
+            >
+              Reset to default
+            </button>
           )}
         </div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.45 }}>{tool.desc}</div>
+        <GTextarea
+          value={config.description_override || tool.desc}
+          onChange={(e) => onChange('description_override', e.target.value)}
+          rows={2}
+          style={{ fontSize: 12 }}
+        />
+        <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 4, lineHeight: 1.5 }}>
+          {config.description_override && config.description_override !== tool.desc
+            ? 'Custom — agent uses your version above'
+            : 'Default — click to customise what the agent is told about this tool'}
+        </div>
       </div>
-    </div>
-  );
-}
 
-function ToolConfigPanel({ tool, config, onChange }: { tool: typeof BUILTIN_TOOLS[number]; config: Record<string, string>; onChange: (key: string, val: string) => void }) {
-  return (
-    <div>
       {tool.id === 'book_meeting' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
@@ -1533,15 +1469,17 @@ function ToolConfigPanel({ tool, config, onChange }: { tool: typeof BUILTIN_TOOL
           </div>
         </div>
       )}
+
       {tool.id === 'send_followup_sms' && (
         <div>
           <GLabel hint="— {{lead_first_name}}, {{company_name}}">Message template</GLabel>
           <GTextarea value={config.message_template ?? ''} onChange={(e) => onChange('message_template', e.target.value)} rows={3} placeholder="Hi {{lead_first_name}}, thanks for chatting!" />
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
             {(config.message_template ?? '').length}/160
           </div>
         </div>
       )}
+
       {(tool.id === 'check_crm_record' || tool.id === 'update_crm_record') && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
@@ -1555,14 +1493,12 @@ function ToolConfigPanel({ tool, config, onChange }: { tool: typeof BUILTIN_TOOL
             <GLabel>API key / token</GLabel>
             <GInput type="password" value={config.api_key ?? ''} onChange={(e) => onChange('api_key', e.target.value)} placeholder="pat-na1-xxxxxxxxxx" />
           </div>
-          <div style={{
-            gridColumn: '1/-1', fontSize: 11, color: 'var(--text-muted)', padding: '8px 12px',
-            background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)',
-          }}>
-            CRM Lookup and CRM Update share the same credentials.
+          <div style={{ gridColumn: '1/-1', fontSize: 11, color: 'var(--text-muted)', padding: '7px 10px', background: '#F8FAFC', borderRadius: 7, border: '1px solid #F1F5F9' }}>
+            CRM Lookup and CRM Update share credentials.
           </div>
         </div>
       )}
+
       {tool.id === 'transfer_to_human' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
@@ -1571,27 +1507,17 @@ function ToolConfigPanel({ tool, config, onChange }: { tool: typeof BUILTIN_TOOL
           </div>
           <div>
             <GLabel>Transfer mode</GLabel>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {(['warm', 'cold'] as const).map((m) => {
-                const isActive = (config.mode ?? 'warm') === m;
-                return (
-                  <button key={m} onClick={() => onChange('mode', m)} style={{
-                    flex: 1, padding: '8px 0', borderRadius: 8,
-                    border: `1px solid ${isActive ? 'rgba(0,208,130,0.45)' : 'rgba(255,255,255,0.08)'}`,
-                    background: isActive ? 'rgba(0,208,130,0.1)' : 'rgba(6,15,26,0.8)',
-                    color: isActive ? '#00D082' : 'var(--text-muted)',
-                    fontSize: 12.5, fontWeight: isActive ? 600 : 500, cursor: 'pointer',
-                    textTransform: 'capitalize', transition: 'all 0.15s',
-                  }}>{m}</button>
-                );
-              })}
-            </div>
+            <GSelect value={config.mode ?? 'warm'} onChange={(e) => onChange('mode', e.target.value)}>
+              <option value="warm">Warm — agent stays briefly</option>
+              <option value="cold">Cold — immediate handoff</option>
+            </GSelect>
           </div>
         </div>
       )}
+
       {tool.id === 'leave_voicemail' && (
         <div>
-          <GLabel>Default voicemail message</GLabel>
+          <GLabel hint="— {{company_name}}, {{lead_first_name}}">Voicemail message</GLabel>
           <GTextarea value={config.default_message ?? ''} onChange={(e) => onChange('default_message', e.target.value)} rows={3} placeholder="Hi, this is {{company_name}}. Sorry we missed you!" />
         </div>
       )}
@@ -1601,22 +1527,20 @@ function ToolConfigPanel({ tool, config, onChange }: { tool: typeof BUILTIN_TOOL
 
 // ─── Voice tab ────────────────────────────────────────────────────────────────
 const TTS_MODELS = [
-  { id: 'eleven_v3_conversational', label: 'Eleven v3 Conversational', badge: 'LATEST', desc: 'Most natural · Highest quality · Recommended for all calls',      color: '#00D082' },
+  { id: 'eleven_v3_conversational', label: 'Eleven v3 Conversational', badge: 'LATEST', desc: 'Most natural · Highest quality · Recommended for all calls',      color: '#10B981' },
   { id: 'eleven_flash_v2',          label: 'Flash v2',                 badge: 'FAST',   desc: 'Ultra-low latency (~75ms) · English only · Best for speed',       color: '#38BDF8' },
   { id: 'eleven_multilingual_v2',   label: 'Multilingual v2',          badge: 'MULTI',  desc: 'Best for non-English calls · Supports 29 languages',               color: '#A89AF9' },
 ];
 
 const STT_PROVIDERS = [
-  { id: 'elevenlabs',     label: 'ElevenLabs Native', badge: 'DEFAULT',  desc: 'Reliable · Battle-tested · Low latency',                    color: '#00D082' },
+  { id: 'elevenlabs',     label: 'ElevenLabs Native', badge: 'DEFAULT',  desc: 'Reliable · Battle-tested · Low latency',                    color: '#10B981' },
   { id: 'scribe_v2',     label: 'Scribe v2',          badge: 'ACCURATE', desc: 'Highest accuracy · Best for complex accents',               color: '#38BDF8' },
   { id: 'scribe_v2_turbo', label: 'Scribe v2 Turbo',  badge: 'FASTEST',  desc: 'Lowest latency · Slightly less accurate than Scribe v2',   color: '#F0B429' },
   { id: 'scribe_realtime', label: 'Scribe Realtime',   badge: 'STREAM',   desc: 'Real-time streaming · Good for long pauses & noisy lines', color: '#A89AF9' },
 ];
 
-function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStability, similarity, setSimilarity, ttsModel, setTtsModel, sttProvider, setSttProvider }: {
+function VoiceTab({ voices, selectedVoice, setSelectedVoice, ttsModel, setTtsModel, sttProvider, setSttProvider }: {
   voices: Array<{ voice_id: string; name: string }>; selectedVoice: number; setSelectedVoice: (i: number) => void;
-  stability: number | null; setStability: (v: number | null) => void;
-  similarity: number | null; setSimilarity: (v: number | null) => void;
   ttsModel: string; setTtsModel: (v: string) => void;
   sttProvider: string; setSttProvider: (v: string) => void;
 }) {
@@ -1647,9 +1571,9 @@ function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStabi
               <button key={g} onClick={() => setGenderFilter(g)} style={{
                 padding: '4px 12px', borderRadius: 9999, fontSize: 11.5, fontWeight: 600,
                 cursor: 'pointer', transition: 'all 0.15s', textTransform: 'capitalize',
-                border: `1px solid ${genderFilter === g ? 'rgba(0,208,130,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                border: `1px solid ${genderFilter === g ? '#10B981' : '#E2E8F0'}`,
                 background: genderFilter === g ? 'rgba(0,208,130,0.1)' : 'transparent',
-                color: genderFilter === g ? '#00D082' : 'var(--text-muted)',
+                color: genderFilter === g ? '#10B981' : 'var(--text-muted)',
               }}>
                 {g === 'all' ? 'All voices' : g === 'female' ? '♀ Female' : '♂ Male'}
               </button>
@@ -1657,7 +1581,7 @@ function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStabi
           </div>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
             {filtered.length} voices
-            {voices.length > 0 && <span style={{ color: '#00D082', marginLeft: 6 }}>· {voices.length} from your EL library</span>}
+            {voices.length > 0 && <span style={{ color: '#10B981', marginLeft: 6 }}>· {voices.length} from your EL library</span>}
           </span>
         </div>
 
@@ -1671,25 +1595,25 @@ function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStabi
                 key={v.voice_id}
                 onClick={() => setSelectedVoice(globalIdx)}
                 style={{
-                  background: active ? 'rgba(0,208,130,0.06)' : 'rgba(6,15,26,0.8)',
+                  background: active ? 'rgba(16,185,129,0.06)' : '#FAFAFA',
                   borderRadius: 10, padding: '11px 14px', cursor: 'pointer',
-                  border: `1px solid ${active ? 'rgba(0,208,130,0.40)' : 'rgba(255,255,255,0.06)'}`,
-                  boxShadow: active ? '0 0 16px rgba(0,208,130,0.12)' : 'none',
+                  border: `1px solid ${active ? '#10B981' : '#E2E8F0'}`,
+                  boxShadow: active ? '0 0 0 rgba(0,0,0,0)' : 'none',
                   display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.18s',
                 }}
               >
                 <div style={{
                   width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: active ? 'rgba(0,208,130,0.15)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${active ? 'rgba(0,208,130,0.35)' : 'rgba(255,255,255,0.07)'}`,
+                  background: active ? '#CBD5E1' : '#F8FAFC',
+                  border: `1px solid ${active ? '#10B981' : '#E2E8F0'}`,
                   transition: 'all 0.18s',
                 }}>
                   <div style={{ display: 'flex', gap: 1.5, alignItems: 'flex-end' }}>
                     {[3, 7, 11, 7, 3].map((h, j) => (
                       <div key={j} style={{
                         width: 2, height: h, borderRadius: 1,
-                        background: active ? '#00D082' : 'rgba(255,255,255,0.2)',
+                        background: active ? '#10B981' : '#CBD5E1',
                         transition: 'background 0.18s',
                         animation: active ? `ab-spin 0s` : 'none',
                       }} />
@@ -1715,7 +1639,7 @@ function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStabi
                     {v.gender ?? ''}{v.accent ? ` · ${v.accent}` : ''}
                   </div>
                 </div>
-                {active && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#00D082', boxShadow: '0 0 8px #00D082', flexShrink: 0 }} />}
+                {active && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #00D082', flexShrink: 0 }} />}
               </div>
             );
           })}
@@ -1747,8 +1671,8 @@ function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStabi
             disabled={!customId.trim()}
             style={{
               flexShrink: 0, padding: '9px 18px', borderRadius: 9, fontSize: 13, fontWeight: 600,
-              background: customId.trim() ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${customId.trim() ? 'rgba(56,189,248,0.4)' : 'rgba(255,255,255,0.08)'}`,
+              background: customId.trim() ? 'rgba(56,189,248,0.12)' : '#F8FAFC',
+              border: `1px solid ${customId.trim() ? '#38BDF8' : '#E2E8F0'}`,
               color: customId.trim() ? '#38BDF8' : 'var(--text-muted)',
               cursor: customId.trim() ? 'pointer' : 'not-allowed', transition: 'all 0.15s',
             }}
@@ -1769,19 +1693,19 @@ function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStabi
             return (
               <div key={m.id} onClick={() => setTtsModel(m.id)} style={{
                 display: 'flex', alignItems: 'center', gap: 12,
-                background: active ? 'rgba(0,208,130,0.06)' : 'rgba(6,15,26,0.8)',
-                border: `1px solid ${active ? 'rgba(0,208,130,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                background: active ? 'rgba(16,185,129,0.06)' : '#FAFAFA',
+                border: `1px solid ${active ? '#10B981' : '#E2E8F0'}`,
                 borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'all 0.18s',
               }}>
                 <div style={{
                   width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                  background: active ? m.color : 'rgba(255,255,255,0.15)',
+                  background: active ? m.color : '#CBD5E1',
                   boxShadow: active ? `0 0 8px ${m.color}` : 'none',
                   transition: 'all 0.18s',
                 }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: active ? '#F1F5F9' : 'var(--text-muted)' }}>{m.label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: active ? '#0F172A' : 'var(--text-muted)' }}>{m.label}</span>
                     <span style={{
                       fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 9999,
                       color: m.color, background: `${m.color}18`,
@@ -1807,19 +1731,19 @@ function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStabi
             return (
               <div key={s.id} onClick={() => setSttProvider(s.id)} style={{
                 display: 'flex', alignItems: 'center', gap: 12,
-                background: active ? 'rgba(56,189,248,0.06)' : 'rgba(6,15,26,0.8)',
-                border: `1px solid ${active ? 'rgba(56,189,248,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                background: active ? 'rgba(56,189,248,0.06)' : '#FAFAFA',
+                border: `1px solid ${active ? '#38BDF8' : '#E2E8F0'}`,
                 borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'all 0.18s',
               }}>
                 <div style={{
                   width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                  background: active ? s.color : 'rgba(255,255,255,0.15)',
+                  background: active ? s.color : '#CBD5E1',
                   boxShadow: active ? `0 0 8px ${s.color}` : 'none',
                   transition: 'all 0.18s',
                 }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: active ? '#F1F5F9' : 'var(--text-muted)' }}>{s.label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: active ? '#0F172A' : 'var(--text-muted)' }}>{s.label}</span>
                     <span style={{
                       fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 9999,
                       color: s.color, background: `${s.color}18`,
@@ -1834,50 +1758,17 @@ function VoiceTab({ voices, selectedVoice, setSelectedVoice, stability, setStabi
         </div>
       </SCard>
 
-      {/* Voice Tuning */}
-      <SCard title="Voice Tuning" accent="#A89AF9">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
-            Fine-tune the selected voice. Disable to use the voice&apos;s built-in ElevenLabs defaults.
-          </p>
-          <button
-            onClick={() => { setStability(stability === null ? 0.5 : null); setSimilarity(similarity === null ? 0.75 : null); }}
-            style={{
-              flexShrink: 0, marginLeft: 16, padding: '5px 14px', borderRadius: 9999, fontSize: 11, fontWeight: 700,
-              cursor: 'pointer', transition: 'all 0.18s',
-              background: stability !== null ? 'rgba(168,154,249,0.12)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${stability !== null ? 'rgba(168,154,249,0.4)' : 'rgba(255,255,255,0.1)'}`,
-              color: stability !== null ? '#A89AF9' : 'var(--text-muted)',
-            }}
-          >
-            {stability !== null ? 'Custom ✓' : 'Use Defaults'}
-          </button>
-        </div>
-        {stability !== null ? (
-          <>
-            <GSlider label="Stability" hint="Higher = more consistent, less expressive" value={stability} onChange={(v) => setStability(v)} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} color="#00D082" />
-            <GSlider label="Similarity Boost" hint="Higher = closer to the original voice" value={similarity ?? 0.75} onChange={(v) => setSimilarity(v)} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} color="#38BDF8" />
-          </>
-        ) : (
-          <div style={{
-            padding: '14px 16px', borderRadius: 10, fontSize: 12, color: 'var(--text-muted)',
-            background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', lineHeight: 1.6,
-          }}>
-            Using the voice&apos;s native ElevenLabs defaults — no overrides applied. Each voice is tuned by its creator for optimal sound.
-          </div>
-        )}
-      </SCard>
     </div>
   );
 }
 
 // ─── Script tab ───────────────────────────────────────────────────────────────
 const SCRIPT_SECTIONS = [
-  { key: 'opener',    label: 'Opener',            icon: '💬', placeholder: 'Initial greeting and purpose of the call…',        accent: '#00D082' },
+  { key: 'opener',    label: 'Opener',            icon: '💬', placeholder: 'Initial greeting and purpose of the call…',        accent: '#10B981' },
   { key: 'discovery', label: 'Discovery',          icon: '🔍', placeholder: "Questions to understand the prospect's needs…",   accent: '#38BDF8' },
   { key: 'pitch',     label: 'Pitch',              icon: '✨', placeholder: 'How to present your product or service…',          accent: '#A89AF9' },
   { key: 'objection', label: 'Objection Handling', icon: '🛡', placeholder: 'How to handle common objections…',                 accent: '#F0B429' },
-  { key: 'closing',   label: 'Closing',            icon: '🎯', placeholder: 'How to close or schedule next steps…',             accent: '#00C2B8' },
+  { key: 'closing',   label: 'Closing',            icon: '🎯', placeholder: 'How to close or schedule next steps…',             accent: '#06B6D4' },
   { key: 'faq',       label: 'FAQ',                icon: '❓', placeholder: 'Common questions and their answers…',              accent: '#FF4D6D' },
 ];
 
@@ -1898,7 +1789,7 @@ function ScriptTab({ opener, setOpener, discovery, setDiscovery, pitch, setPitch
         borderRadius: 10, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55,
       }}>
         Script sections inject context when the agent calls the{' '}
-        <code style={{ fontSize: 10.5, color: '#00D082', background: 'rgba(0,208,130,0.1)', padding: '1px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>
+        <code style={{ fontSize: 10.5, color: '#10B981', background: 'rgba(0,208,130,0.1)', padding: '1px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>
           get_call_script
         </code>{' '}
         tool. Leave blank to skip a section.
@@ -1910,8 +1801,8 @@ function ScriptTab({ opener, setOpener, discovery, setDiscovery, pitch, setPitch
           const hasContent = !!values[s.key];
           return (
             <div key={s.key} style={{
-              background: 'rgba(9,20,38,0.65)', backdropFilter: 'blur(20px)',
-              border: `1px solid ${hasContent ? `${s.accent}25` : 'rgba(255,255,255,0.06)'}`,
+              background: '#FFFFFF', backdropFilter: 'none',
+              border: `1px solid ${hasContent ? `${s.accent}25` : '#E2E8F0'}`,
               borderRadius: 12, overflow: 'hidden', transition: 'border-color 0.2s',
             }}>
               <button
@@ -1941,7 +1832,7 @@ function ScriptTab({ opener, setOpener, discovery, setDiscovery, pitch, setPitch
                 </svg>
               </button>
               {isOpen && (
-                <div style={{ padding: '0 16px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', animation: 'ab-fade-in 0.2s both' }}>
+                <div style={{ padding: '0 16px 16px', borderTop: '1px solid #F1F5F9', animation: 'ab-fade-in 0.2s both' }}>
                   <div style={{ paddingTop: 14 }}>
                     <GTextarea value={values[s.key]} onChange={(e) => setters[s.key](e.target.value)} rows={4} placeholder={s.placeholder} />
                   </div>
@@ -1994,9 +1885,9 @@ function AdvancedTab({ maxDuration, setMaxDuration, silenceTimeout, setSilenceTi
                 key={m.id}
                 onClick={() => setLlmModel(m.id)}
                 style={{
-                  background: active ? `rgba(${m.color === '#4285F4' ? '66,133,244' : m.color === '#10A37F' ? '16,163,127' : '230,116,42'},0.06)` : 'rgba(6,15,26,0.8)',
-                  border: `1px solid ${active ? `${m.color}45` : 'rgba(255,255,255,0.07)'}`,
-                  borderLeft: `3px solid ${active ? m.color : 'rgba(255,255,255,0.06)'}`,
+                  background: active ? `rgba(${m.color === '#4285F4' ? '66,133,244' : m.color === '#10A37F' ? '16,163,127' : '230,116,42'},0.06)` : '#FAFAFA',
+                  border: `1px solid ${active ? `${m.color}45` : '#E2E8F0'}`,
+                  borderLeft: `3px solid ${active ? m.color : '#E2E8F0'}`,
                   borderRadius: 11, padding: '13px 14px', cursor: 'pointer',
                   transition: 'all 0.18s',
                   boxShadow: active ? `0 0 16px ${m.color}15` : 'none',
@@ -2033,7 +1924,7 @@ function AdvancedTab({ maxDuration, setMaxDuration, silenceTimeout, setSilenceTi
         background: 'rgba(0,208,130,0.04)', border: '1px solid rgba(0,208,130,0.1)',
         borderRadius: 10, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.65,
       }}>
-        <strong style={{ color: '#00D082' }}>Tip:</strong> Settings are synced to ElevenLabs on every Save.
+        <strong style={{ color: '#10B981' }}>Tip:</strong> Settings are synced to ElevenLabs on every Save.
         Use <strong style={{ color: 'var(--text-secondary)' }}>Sync to EL</strong> only if a previous sync failed or the agent was modified externally.
         Active calls are never affected mid-session.
       </div>
@@ -2042,7 +1933,7 @@ function AdvancedTab({ maxDuration, setMaxDuration, silenceTimeout, setSilenceTi
 }
 
 // ─── Slider ───────────────────────────────────────────────────────────────────
-function GSlider({ label, hint, value, onChange, min, max, step, fmt, color = '#00D082' }: {
+function GSlider({ label, hint, value, onChange, min, max, step, fmt, color = '#10B981' }: {
   label: string; hint: string; value: number; onChange: (v: number) => void;
   min: number; max: number; step: number; fmt: (v: number) => string; color?: string;
 }) {
@@ -2058,7 +1949,7 @@ function GSlider({ label, hint, value, onChange, min, max, step, fmt, color = '#
           padding: '2px 10px', borderRadius: 8,
         }}>{fmt(value)}</span>
       </div>
-      <div style={{ position: 'relative', height: 5, background: 'rgba(255,255,255,0.07)', borderRadius: 9999, marginBottom: 6 }}>
+      <div style={{ position: 'relative', height: 5, background: '#F8FAFC', borderRadius: 9999, marginBottom: 6 }}>
         <div style={{
           position: 'absolute', left: 0, width: `${pct}%`, height: '100%',
           background: `linear-gradient(90deg, ${color}AA, ${color})`,
@@ -2071,7 +1962,7 @@ function GSlider({ label, hint, value, onChange, min, max, step, fmt, color = '#
           position: 'absolute', top: '50%', left: `${pct}%`, transform: 'translate(-50%, -50%)',
           width: 14, height: 14, borderRadius: '50%',
           background: color, boxShadow: `0 0 10px ${color}, 0 0 20px ${color}50`,
-          border: '2px solid rgba(6,15,26,0.8)',
+          border: '2px solid #FFFFFF',
           transition: 'left 0.1s',
           pointerEvents: 'none',
         }} />

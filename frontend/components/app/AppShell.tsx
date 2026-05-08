@@ -20,32 +20,36 @@ export function AppLogo() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{
-        width: 34, height: 34, borderRadius: 10,
-        background: 'linear-gradient(135deg, rgba(0,208,130,0.25) 0%, rgba(0,194,184,0.15) 100%)',
-        border: '1px solid rgba(0,208,130,0.35)',
+        width: 36, height: 36, borderRadius: 12,
+        background: 'linear-gradient(135deg, #F43F5E 0%, #F97316 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 0 20px rgba(0,208,130,0.18), inset 0 1px 0 rgba(255,255,255,0.08)',
+        boxShadow: '0 4px 12px rgba(244,63,94,0.30)',
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', gap: 2.5, alignItems: 'center' }}>
-          {[4, 8, 13, 8, 4].map((h, i) => (
+          {[3, 7, 12, 7, 3].map((h, i) => (
             <div key={i} style={{
               width: 2.5, height: h,
-              background: i === 2
-                ? 'linear-gradient(to top, #00D082, #00C2B8)'
-                : 'rgba(0,208,130,0.55)',
+              background: i === 2 ? '#fff' : 'rgba(255,255,255,0.65)',
               borderRadius: 2,
             }} />
           ))}
         </div>
       </div>
-      <span style={{
-        fontFamily: 'var(--font-syne), sans-serif',
-        fontWeight: 800, fontSize: 18,
-        color: '#DFF0FF', letterSpacing: '-0.02em',
-      }}>
-        voxara
-      </span>
+      <div>
+        <div style={{
+          fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 17,
+          color: '#0F172A', letterSpacing: '-0.03em', lineHeight: 1,
+        }}>
+          voxara
+        </div>
+        <div style={{
+          fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
+          color: '#94A3B8', textTransform: 'uppercase', marginTop: 1,
+        }}>
+          console
+        </div>
+      </div>
     </div>
   );
 }
@@ -68,7 +72,7 @@ export function AppShell({ activeView, onNav, children }: {
   activeView: string; onNav: (id: string) => void; children: React.ReactNode;
 }) {
   return (
-    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-base)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-page)', overflow: 'hidden' }}>
       <style>{`
         @keyframes nav-dot  { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.35;transform:scale(0.55)} }
         @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.3} }
@@ -76,58 +80,36 @@ export function AppShell({ activeView, onNav, children }: {
         @keyframes fade-in  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes spin-cw  { to{transform:rotate(360deg)} }
         @keyframes bar-wave { 0%,100%{transform:scaleY(0.4)} 50%{transform:scaleY(1)} }
-        @keyframes glow-pulse { 0%,100%{box-shadow:0 0 10px rgba(0,208,130,0.25)} 50%{box-shadow:0 0 22px rgba(0,208,130,0.50)} }
         @keyframes modal-in { from{opacity:0;transform:scale(0.96) translateY(6px)} to{opacity:1;transform:scale(1) translateY(0)} }
         @keyframes slide-in-right { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
         @keyframes scale-in { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
-        @keyframes orb-pulse{ 0%,100%{opacity:0.8;transform:scale(1)} 50%{opacity:1;transform:scale(1.1)} }
+        @keyframes live-ring { 0%{transform:scale(1);opacity:0.8} 100%{transform:scale(2.2);opacity:0} }
+        @keyframes glow-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0.4)} 50%{box-shadow:0 0 0 4px rgba(16,185,129,0)} }
       `}</style>
 
       {/* Sidebar */}
       <div style={{
-        width: 220,
-        background: 'linear-gradient(180deg, rgba(6,15,26,0.98) 0%, rgba(4,10,18,0.99) 100%)',
-        borderRight: '1px solid rgba(0,208,130,0.08)',
+        width: 228,
+        background: '#FFFFFF',
+        borderRight: '1px solid #E2E8F0',
         display: 'flex', flexDirection: 'column', flexShrink: 0,
-        position: 'relative', overflow: 'hidden',
+        position: 'relative',
       }}>
-        {/* Top green haze */}
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 200,
-          background: 'radial-gradient(ellipse 140% 120% at 50% -10%, rgba(0,208,130,0.08) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
-        {/* Bottom teal haze */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, height: 140,
-          background: 'radial-gradient(ellipse 100% 80% at 50% 120%, rgba(0,194,184,0.05) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
-        {/* Subtle grid lines */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          backgroundImage: 'radial-gradient(rgba(0,208,130,0.03) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-          pointerEvents: 'none',
-        }} />
-
         {/* Logo */}
         <div style={{
-          padding: '18px 16px 14px',
-          borderBottom: '1px solid rgba(0,208,130,0.07)',
-          position: 'relative',
+          padding: '20px 20px 16px',
+          borderBottom: '1px solid #F1F5F9',
         }}>
           <AppLogo />
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto', position: 'relative' }}>
+        <nav style={{ flex: 1, padding: '10px 10px', overflowY: 'auto' }}>
           {navItems.map((item) => (
             <div key={item.id}>
               {groupBreaks.has(item.id) && (
                 <div style={{
-                  height: 1,
-                  background: 'linear-gradient(90deg, transparent, rgba(0,208,130,0.08), transparent)',
+                  height: 1, background: '#F1F5F9',
                   margin: '8px 4px',
                 }} />
               )}
@@ -158,35 +140,30 @@ function NavButton({ item, active, onNav }: {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 9,
-        padding: '8px 10px 8px 11px', borderRadius: 8, border: 'none',
-        cursor: 'pointer', marginBottom: 1, position: 'relative',
-        background: active
-          ? 'linear-gradient(90deg, rgba(0,208,130,0.14) 0%, rgba(0,208,130,0.05) 100%)'
-          : hov ? 'rgba(255,255,255,0.04)' : 'transparent',
-        color: active ? '#00D082' : hov ? '#7BA5C8' : '#3D607A',
-        fontSize: 12.5, fontWeight: active ? 600 : 500,
-        textAlign: 'left', transition: 'all 0.18s var(--ease-out)',
-        borderLeft: `2px solid ${active ? '#00D082' : 'transparent'}`,
+        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+        padding: '9px 12px', borderRadius: 10, border: 'none',
+        cursor: 'pointer', marginBottom: 2, position: 'relative',
+        background: active ? '#F1F5F9' : hov ? '#F8FAFC' : 'transparent',
+        color: active ? '#0F172A' : hov ? '#334155' : '#64748B',
+        fontSize: 13.5, fontWeight: active ? 600 : 500,
+        textAlign: 'left', transition: 'all 0.15s ease',
         fontFamily: 'var(--font-ui)',
       }}
     >
       <span style={{
-        display: 'flex', alignItems: 'center', transition: 'filter 0.2s',
-        filter: active
-          ? 'drop-shadow(0 0 5px rgba(0,208,130,0.8))'
-          : hov ? 'drop-shadow(0 0 3px rgba(0,208,130,0.3))' : 'none',
+        display: 'flex', alignItems: 'center', transition: 'color 0.15s',
+        color: active ? '#0F172A' : hov ? '#475569' : '#94A3B8',
       }}>
-        <Icon d={item.icon} size={14} color="currentColor" />
+        <Icon d={item.icon} size={15} color="currentColor" strokeWidth={active ? 2 : 1.75} />
       </span>
 
       <span style={{ flex: 1 }}>{item.label}</span>
 
       {active && (
         <span style={{
-          width: 5, height: 5, borderRadius: '50%', background: '#00D082',
-          boxShadow: '0 0 8px rgba(0,208,130,0.9), 0 0 16px rgba(0,208,130,0.4)',
-          animation: 'nav-dot 2.4s ease-in-out infinite', flexShrink: 0,
+          width: 6, height: 6, borderRadius: '50%',
+          background: '#10B981',
+          flexShrink: 0,
         }} />
       )}
     </button>
@@ -202,37 +179,41 @@ function UserBadge({ onNav }: { onNav: (id: string) => void }) {
     ? user.subscription_tier.charAt(0).toUpperCase() + user.subscription_tier.slice(1) + ' Plan'
     : 'Free Plan';
 
+  const [hov, setHov] = useState(false);
+
   return (
     <div
       onClick={() => onNav('settings')}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
       style={{
-        padding: '11px 13px',
-        borderTop: '1px solid rgba(0,208,130,0.07)',
-        cursor: 'pointer', transition: 'background 0.15s', position: 'relative',
+        padding: '12px 14px',
+        borderTop: '1px solid #F1F5F9',
+        cursor: 'pointer',
+        background: hov ? '#F8FAFC' : 'transparent',
+        transition: 'background 0.15s',
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,208,130,0.04)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
-          width: 30, height: 30, borderRadius: '50%',
-          background: 'linear-gradient(135deg, #00D082, #00C2B8)',
+          width: 34, height: 34, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #F43F5E 0%, #F97316 100%)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 10.5, fontWeight: 800, color: '#020A14', flexShrink: 0,
-          boxShadow: '0 0 12px rgba(0,208,130,0.35)',
+          fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
+          boxShadow: '0 2px 8px rgba(244,63,94,0.25)',
         }}>
           {initials}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: 11.5, fontWeight: 600, color: '#7BA5C8',
+            fontSize: 12.5, fontWeight: 600, color: '#0F172A',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
             {user?.full_name ?? 'Loading…'}
           </div>
-          <div style={{ fontSize: 9.5, color: '#2D4A60', marginTop: 1 }}>{tier}</div>
+          <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>{tier}</div>
         </div>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2D4A60" strokeWidth="2" strokeLinecap="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="2" strokeLinecap="round">
           <path d="M9 18l6-6-6-6" />
         </svg>
       </div>
