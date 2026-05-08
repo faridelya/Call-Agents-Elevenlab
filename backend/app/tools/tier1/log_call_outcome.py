@@ -95,7 +95,11 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
 
     # Flag lead as DNC immediately — this one cannot wait for post-call
     if outcome == "do_not_call":
-        lead_id = await redis.hget(f"call:{ctx.call_sid}", "lead_id")
+        lead_id = await redis.hget(f"call:{ctx.call_record_id}", "lead_id")
+        if not lead_id and ctx.call_sid:
+            lead_id = await redis.hget(f"call:{ctx.call_sid}", "lead_id")
+        if not lead_id and call and call.lead_id:
+            lead_id = call.lead_id
         if lead_id:
             lead_result = await db.execute(select(Lead).where(Lead.id == lead_id))
             lead = lead_result.scalar_one_or_none()
@@ -104,6 +108,8 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
                 lead.do_not_call_reason = notes or "Requested during call"
 
     await db.commit()
-    await redis.hset(f"call:{ctx.call_sid}", "outcome", outcome)
+    await redis.hset(f"call:{ctx.call_record_id}", "outcome", outcome)
+    if ctx.call_sid and ctx.call_sid != ctx.call_record_id:
+        await redis.hset(f"call:{ctx.call_sid}", "outcome", outcome)
 
     return f"Outcome logged: {outcome}"

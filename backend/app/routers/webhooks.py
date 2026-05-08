@@ -131,12 +131,31 @@ def xml_response(content: str) -> Response:
     return Response(content=content, media_type="application/xml")
 
 
-def _verify_twilio_signature(request: Request, form_data: dict) -> None:
-    if not settings.is_production or not settings.twilio_auth_token:
+async def _twilio_auth_token_for_user(user_id: str | None, db: AsyncSession) -> str:
+    if not user_id:
+        return settings.twilio_auth_token
+    try:
+        from app.models.user import User as UserModel
+        from app.utils.crypto import decrypt
+        result = await db.execute(select(UserModel).where(UserModel.id == user_id))
+        user = result.scalar_one_or_none()
+        if user and user.twilio_auth_token:
+            try:
+                return decrypt(user.twilio_auth_token)
+            except Exception:
+                return user.twilio_auth_token
+    except Exception as exc:
+        log.warning("twilio_token_lookup_failed", user_id=user_id, error=str(exc))
+    return settings.twilio_auth_token
+
+
+def _verify_twilio_signature(request: Request, form_data: dict, auth_token: str | None = None) -> None:
+    token = auth_token or settings.twilio_auth_token
+    if not settings.is_production or not token:
         return
     try:
         from twilio.request_validator import RequestValidator
-        validator = RequestValidator(settings.twilio_auth_token)
+        validator = RequestValidator(token)
         if not validator.validate(str(request.url), form_data, request.headers.get("X-Twilio-Signature", "")):
             from fastapi import HTTPException
             raise HTTPException(status_code=403, detail="Invalid Twilio signature")
@@ -237,6 +256,13 @@ async def _register_and_respond(
         log.info("native_conv_mapped",
                  call_id=call.id, conversation_id=conversation_id)
 
+    # Store agent → active call mapping as fallback for tool webhooks.
+    # EL's native Twilio integration does not send conversation_id in webhook
+    # tool call bodies, so we need a secondary lookup keyed by agent_id.
+    if agent_id:
+        await redis.set(f"agent:{agent_id}:active_call_id", call.id, ex=_CTX_TTL)
+        log.info("native_agent_call_mapped", call_id=call.id, agent_id=agent_id)
+
     # Persist conversation_id to DB
     if conversation_id:
         call.elevenlabs_conversation_id = conversation_id
@@ -293,7 +319,6 @@ async def inbound_call(
     """Twilio calls this when someone dials one of our phone numbers."""
     form = await request.form()
     form_dict = dict(form)
-    _verify_twilio_signature(request, form_dict)
 
     call_sid    = form.get("CallSid", "")
     from_number = form.get("From", "")
@@ -312,6 +337,9 @@ async def inbound_call(
         )
     )
     phone_number = result.scalar_one_or_none()
+    auth_token = await _twilio_auth_token_for_user(phone_number.user_id if phone_number else None, db)
+    _verify_twilio_signature(request, form_dict, auth_token)
+
     if not phone_number:
         log.warning("inbound_call_no_phone_record",
                     to_number=to_number,
@@ -407,7 +435,6 @@ async def outbound_twiml(
 ):
     """Twilio calls this when an outbound call is answered. Returns EL TwiML."""
     form = await request.form()
-    _verify_twilio_signature(request, dict(form))
 
     call_sid      = form.get("CallSid", "")
     call_status   = form.get("CallStatus", "")
@@ -426,6 +453,9 @@ async def outbound_twiml(
 
     result = await db.execute(select(Call).where(Call.id == call_record_id))
     call = result.scalar_one_or_none()
+    auth_token = await _twilio_auth_token_for_user(call.user_id if call else None, db)
+    _verify_twilio_signature(request, dict(form), auth_token)
+
     if not call:
         log.error("native_twiml_call_not_found",
                   call_record_id=call_record_id,
@@ -469,7 +499,6 @@ async def call_status_callback(
 ):
     """Twilio status callbacks — initiated / ringing / answered / completed / failed."""
     form = await request.form()
-    _verify_twilio_signature(request, dict(form))
 
     call_sid    = form.get("CallSid", "")
     call_status = form.get("CallStatus", "")
@@ -486,6 +515,9 @@ async def call_status_callback(
 
     result = await db.execute(select(Call).where(Call.twilio_call_sid == call_sid))
     call = result.scalar_one_or_none()
+    auth_token = await _twilio_auth_token_for_user(call.user_id if call else None, db)
+    _verify_twilio_signature(request, dict(form), auth_token)
+
     if not call:
         # This can happen for transfer-leg calls (different SID) or orphaned records.
         log.warning("twilio_status_no_call_record",
@@ -505,16 +537,20 @@ async def call_status_callback(
              duration_s=duration,
              campaign_id=call.campaign_id or "none")
 
-    if call_status in ("completed", "failed", "busy", "no-answer", "canceled"):
+    final_statuses = ("completed", "failed", "busy", "no-answer", "canceled")
+    if call_status in final_statuses:
+        already_finalized = bool(call.ended_at and call.status in final_statuses)
         log.info("twilio_status_finalizing",
                  call_id=call.id,
                  twilio_status=call_status,
-                 duration_s=duration)
+                 duration_s=duration,
+                 already_finalized=already_finalized)
         call.status = call_status
         if duration:
             call.duration_seconds = int(duration)
-        call.ended_at = datetime.now(timezone.utc).isoformat()
-        if call.status not in ("finalized",):
+        if not call.ended_at:
+            call.ended_at = datetime.now(timezone.utc).isoformat()
+        if not already_finalized:
             await _finalize_call(call, redis, db)
     else:
         # For any other status (initiated, ringing, in-progress): update status,
@@ -642,12 +678,14 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
         fallback_status  = transfer_info["fallback_status"]
         transferred_at   = transfer_info["transferred_at"] or datetime.now(timezone.utc).isoformat()
 
-        if fallback_status in ("", "answered"):
+        if fallback_status in ("", "answered", "completed"):
             outcome_note = "Call successfully transferred to human agent."
         elif fallback_status == "busy":
             outcome_note = "Transfer attempted — human agent was busy."
         elif fallback_status == "no-answer":
             outcome_note = "Transfer attempted — human agent did not answer."
+        elif fallback_status in ("redirect_failed", "redirect_timeout", "redirect_error"):
+            outcome_note = "Transfer could not be started."
         else:
             outcome_note = f"Transfer attempted — outcome: {fallback_status}."
 
@@ -701,7 +739,10 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
             f"call:{call.id}",
             f"call:{call.id}:stages",
             f"call:{call.twilio_call_sid or ''}",
+            f"call:{call.twilio_call_sid or ''}:stages",
+            f"call:{call.twilio_call_sid or ''}:transcript",
             f"conv:{call.elevenlabs_conversation_id or ''}",
+            f"agent:{call.agent_id or ''}:active_call_id",
         )
     except Exception:
         pass
@@ -740,6 +781,12 @@ async def transfer_fallback(
     # Query-string params were appended by transfer_to_human.py when building the URL
     call_record_id = request.query_params.get("call_record_id", "")
     transfer_to    = request.query_params.get("transfer_to", "")
+    call = None
+    if call_record_id:
+        result = await db.execute(select(Call).where(Call.id == call_record_id))
+        call = result.scalar_one_or_none()
+    auth_token = await _twilio_auth_token_for_user(call.user_id if call else None, db)
+    _verify_twilio_signature(request, dict(form), auth_token)
 
     log.info(
         "transfer_fallback_received",
@@ -756,8 +803,8 @@ async def transfer_fallback(
             dial_status,
         )
 
-    # ── Answered: call completed normally — just hang up gracefully ────────────
-    if dial_status == "answered":
+    # ── Answered/completed: call completed normally — just hang up gracefully ──
+    if dial_status in ("answered", "completed"):
         return xml_response(
             '<?xml version="1.0" encoding="UTF-8"?>'
             "<Response><Hangup/></Response>"
@@ -847,10 +894,14 @@ async def recording_callback(
         result = await db.execute(select(Call).where(Call.twilio_call_sid == call_sid))
         call = result.scalar_one_or_none()
 
+    auth_token = await _twilio_auth_token_for_user(call.user_id if call else None, db)
+    _verify_twilio_signature(request, dict(form), auth_token)
+
     if call:
-        call.recording_url = recording_url
-        call.recording_sid = recording_sid
-        await db.commit()
+        if not is_transfer:
+            call.recording_url = recording_url
+            call.recording_sid = recording_sid
+            await db.commit()
 
         if is_transfer and recording_sid:
             await _enqueue_transcribe_human_leg(call.id, recording_sid)
@@ -887,6 +938,7 @@ async def _seed_redis_context(redis, call: Call, agent_id: str, db: AsyncSession
         "call_sid":        call.twilio_call_sid or "",
         "agent_id":        agent.id,
         "user_id":         agent.user_id,
+        "lead_id":         call.lead_id or "",
         "direction":       call.direction,
         "enabled_tools":   json.dumps(agent.enabled_tools),
         "tool_configs":    json.dumps(agent.tool_configs),
@@ -922,6 +974,7 @@ async def _seed_redis_context(redis, call: Call, agent_id: str, db: AsyncSession
 async def elevenlabs_post_call(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
 ):
     """
     Receives ElevenLabs post_call_transcription event.
@@ -987,6 +1040,17 @@ async def elevenlabs_post_call(
         log.warning("el_webhook_call_not_found", conversation_id=conversation_id)
         return Response(status_code=200)  # 200 so EL doesn't retry for a missing record
 
+    # ── Check if call was transferred ─────────────────────────────────────────
+    # EL ends its AI conversation immediately upon transfer, but Twilio <Dial> may
+    # still be active for the human-agent leg. The transfer_to_human tool stamps
+    # Redis with transferred=1 before redirecting. Redis is cleaned up by
+    # _finalize_call (from Twilio status callback) which fires AFTER this webhook.
+    is_transferred = (await redis.hget(f"call:{call.id}", "transferred")) == "1"
+    if is_transferred:
+        log.info("el_webhook_transferred_call", call_id=call.id,
+                 note="AI leg ended; human leg may still be active — saving transcript only, "
+                      "deferring finalization to Twilio status callback")
+
     # ── Parse transcript from EL webhook payload ──────────────────────────────
     # EL delivers the same format as GET /convai/conversations/{id}
     raw_transcript = data.get("transcript", [])
@@ -1014,11 +1078,11 @@ async def elevenlabs_post_call(
             })
 
         if transcript:
-            # Preserve system/human_agent entries (transfer annotation, Whisper transcription)
-            # that EL does not know about — same logic as post_call_processing ARQ task.
+            # Preserve system/human_agent/customer entries that EL doesn't know about.
+            # 'customer' is used for diarized customer speech in the human-agent leg.
             extras = [
                 e for e in (call.transcript or [])
-                if e.get("role") in ("system", "human_agent")
+                if e.get("role") in ("system", "human_agent", "customer")
             ]
             call.transcript = transcript + extras
             log.info("el_webhook_transcript_saved",
@@ -1036,6 +1100,17 @@ async def elevenlabs_post_call(
     meta = data.get("metadata", {})
     if meta.get("call_duration_secs") and not call.duration_seconds:
         call.duration_seconds = int(meta["call_duration_secs"])
+
+    # ── Transferred calls: save EL data, then defer the rest ─────────────────
+    # For transferred calls the human-agent leg is still active. We save the EL
+    # transcript + metadata now, then let the Twilio status callback (which fires
+    # after the human leg completes) run _finalize_call, enqueue post_call_processing,
+    # and emit call_ended / call_processed with the full assembled transcript.
+    if is_transferred:
+        await db.commit()
+        log.info("el_webhook_transferred_deferred",
+                 call_id=call.id, transcript_len=len(call.transcript or []))
+        return Response(status_code=200)
 
     call.status = "completed"
     if not call.ended_at:
@@ -1087,6 +1162,19 @@ async def elevenlabs_post_call(
             log.warning("el_webhook_llm_error", call_id=call.id, error=str(exc))
 
     await db.commit()
+
+    try:
+        from app.tasks.post_call_tasks import _update_lead_stats
+        await _update_lead_stats(call, db)
+    except Exception as exc:
+        log.warning("el_webhook_lead_stats_error", call_id=call.id, error=str(exc))
+
+    if call.campaign_id:
+        try:
+            from app.tasks.post_call_tasks import _update_campaign_counters
+            await _update_campaign_counters(call, db)
+        except Exception as exc:
+            log.warning("el_webhook_campaign_counter_error", call_id=call.id, error=str(exc))
 
     # ── Notify frontend with full processed data ──────────────────────────────
     # Only emit for single test calls — campaign calls are shown as cards on the

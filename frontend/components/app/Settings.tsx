@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type CSSProperties } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useUsage } from '@/lib/hooks/useAnalytics';
-import { settings as settingsApi, type CredentialsData, type ElevenLabsCostData } from '@/lib/api';
+import { settings as settingsApi, type CredentialsData, type ElevenLabsCostData, type TwilioCostData } from '@/lib/api';
 
 // ─── Shared inputs ────────────────────────────────────────────────────────────
 function CredInput({ value, onChange, placeholder, disabled, accent, type = 'text' }: {
@@ -36,22 +36,25 @@ function SecretInput({ value, onChange, placeholder, disabled, accent }: {
 }) {
   const [show, setShow] = useState(false);
   const [foc, setFoc] = useState(false);
+  const inputStyle: CSSProperties & { WebkitTextSecurity?: 'disc' | 'none' } = {
+    width: '100%', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.03)',
+    border: `1px solid ${foc ? accent + '55' : 'rgba(255,255,255,0.09)'}`,
+    borderRadius: 10, padding: '10px 42px 10px 14px',
+    fontSize: 13, fontFamily: 'var(--font-mono)',
+    color: 'var(--text-primary)', outline: 'none', letterSpacing: show ? '0.02em' : '0.08em',
+    boxShadow: foc ? `0 0 0 3px ${accent}18` : 'none',
+    transition: 'border-color 0.2s, box-shadow 0.2s', opacity: disabled ? 0.5 : 1,
+    WebkitTextSecurity: show ? 'none' : 'disc',
+  };
   return (
     <div style={{ position: 'relative' }}>
       <input
-        type={show ? 'text' : 'password'}
+        type="text"
         value={value} onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder} disabled={disabled} autoComplete="new-password" spellCheck={false}
-        style={{
-          width: '100%', boxSizing: 'border-box',
-          background: 'rgba(255,255,255,0.03)',
-          border: `1px solid ${foc ? accent + '55' : 'rgba(255,255,255,0.09)'}`,
-          borderRadius: 10, padding: '10px 42px 10px 14px',
-          fontSize: 13, fontFamily: 'var(--font-mono)',
-          color: 'var(--text-primary)', outline: 'none', letterSpacing: '0.04em',
-          boxShadow: foc ? `0 0 0 3px ${accent}18` : 'none',
-          transition: 'border-color 0.2s, box-shadow 0.2s', opacity: disabled ? 0.5 : 1,
-        }}
+        placeholder={placeholder} disabled={disabled} autoComplete="off" autoCorrect="off"
+        autoCapitalize="none" spellCheck={false} data-lpignore="true" data-1p-ignore="true"
+        style={inputStyle}
         onFocus={() => setFoc(true)} onBlur={() => setFoc(false)}
       />
       <button
@@ -381,6 +384,14 @@ function ElevenLabsWebhookSection({ webhookBaseUrl, secretMasked, configured }: 
   const [showSec, setShowSec] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const secretStyle: CSSProperties & { WebkitTextSecurity?: 'disc' | 'none' } = {
+    width: '100%', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)',
+    borderRadius: 9, padding: '9px 36px 9px 12px',
+    fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', outline: 'none',
+    letterSpacing: showSec ? '0.02em' : '0.08em',
+    WebkitTextSecurity: showSec ? 'none' : 'disc',
+  };
 
   async function handleSaveSecret() {
     if (!secret.trim()) return;
@@ -431,15 +442,12 @@ function ElevenLabsWebhookSection({ webhookBaseUrl, secretMasked, configured }: 
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1, position: 'relative' }}>
               <input
-                type={showSec ? 'text' : 'password'}
+                type="text"
                 value={secret} onChange={(e) => setSecret(e.target.value)}
                 placeholder={secretMasked ? 'Enter new secret to replace…' : 'Paste signing secret from ElevenLabs…'}
-                style={{
-                  width: '100%', boxSizing: 'border-box',
-                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)',
-                  borderRadius: 9, padding: '9px 36px 9px 12px',
-                  fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', outline: 'none',
-                }}
+                autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false}
+                data-lpignore="true" data-1p-ignore="true"
+                style={secretStyle}
               />
               <button onClick={() => setShowSec((v) => !v)} style={{
                 position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
@@ -514,7 +522,7 @@ function CredentialsTab() {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 20 }}>
         <CredCard title="ElevenLabs" accent="#00D082" connected={Boolean(creds?.elevenlabs_connected)}
           initValues={{ api_key: creds?.elevenlabs_api_key_masked ?? '' }} delay={0}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00D082" strokeWidth="2" strokeLinecap="round"><path d="M12 2a2 2 0 0 1 2 2v4a2 2 0 0 1-4 0V4a2 2 0 0 1 2-2z"/><path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>}
@@ -543,7 +551,7 @@ function CredentialsTab() {
       </div>
 
       {creds && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
           <WebhookSection webhookBaseUrl={creds.webhook_base_url} />
           <ElevenLabsWebhookSection
             webhookBaseUrl={creds.webhook_base_url}
@@ -559,35 +567,51 @@ function CredentialsTab() {
 // ─── Cost monitoring tab ─────────────────────────────────────────────────────
 function CostMonitoringTab() {
   const [cost, setCost] = useState<ElevenLabsCostData | null>(null);
+  const [twilioCost, setTwilioCost] = useState<TwilioCostData | null>(null);
+  const [creds, setCreds] = useState<CredentialsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function refresh() {
     setLoading(true);
-    setError(null);
-    try {
-      setCost(await settingsApi.getElevenLabsCost());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load ElevenLabs usage');
-    } finally {
-      setLoading(false);
-    }
+    setErrors({});
+    const nextErrors: Record<string, string> = {};
+    const [elevenLabsResult, twilioResult, credsResult] = await Promise.allSettled([
+      settingsApi.getElevenLabsCost(),
+      settingsApi.getTwilioCost(),
+      settingsApi.getCredentials(),
+    ]);
+
+    if (elevenLabsResult.status === 'fulfilled') setCost(elevenLabsResult.value);
+    else nextErrors.elevenlabs = elevenLabsResult.reason instanceof Error ? elevenLabsResult.reason.message : 'Unable to load ElevenLabs usage';
+
+    if (twilioResult.status === 'fulfilled') setTwilioCost(twilioResult.value);
+    else nextErrors.twilio = twilioResult.reason instanceof Error ? twilioResult.reason.message : 'Unable to load Twilio balance';
+
+    if (credsResult.status === 'fulfilled') setCreds(credsResult.value);
+    else nextErrors.credentials = credsResult.reason instanceof Error ? credsResult.reason.message : 'Unable to load provider credentials';
+
+    setErrors(nextErrors);
+    setLoading(false);
   }
 
   useEffect(() => { refresh(); }, []);
 
-  const level = cost?.warning_level ?? 'ok';
-  const accent =
-    level === 'error' || level === 'critical' ? '#FF4D6D'
+  function levelAccent(level?: string) {
+    return level === 'error' || level === 'critical' ? '#FF4D6D'
       : level === 'warning' ? '#F0B429'
       : '#00D082';
-  const usage = Math.min(Math.max(cost?.character_usage_percent ?? 0, 0), 100);
-  const remaining = cost?.character_remaining ?? 0;
-  const limit = cost?.character_limit ?? 0;
-  const used = cost?.character_count ?? 0;
-  const resetDate = cost?.next_character_count_reset_unix
-    ? new Date(cost.next_character_count_reset_unix * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : 'Not provided';
+  }
+
+  function moneyValue(value?: number | null, currency?: string | null) {
+    if (value == null) return '—';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: (currency || 'usd').toUpperCase(),
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
 
   function money(cents?: number | null, currency?: string | null) {
     if (cents == null) return '—';
@@ -601,24 +625,102 @@ function CostMonitoringTab() {
     return value ? value.replaceAll('_', ' ') : '—';
   }
 
-  if (loading) {
+  function ProviderCard({ name, accent, status, headline, detail, rows, cached }: {
+    name: string;
+    accent: string;
+    status: 'ok' | 'warning' | 'critical' | 'error';
+    headline: string;
+    detail: string;
+    rows?: Array<[string, string]>;
+    cached?: boolean;
+  }) {
+    const statusAccent = levelAccent(status);
     return (
-      <div style={{ maxWidth: 900, padding: 24, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, background: 'rgba(9,20,38,0.60)', color: 'var(--text-muted)' }}>
-        Loading ElevenLabs cost and quota data…
+      <div style={{
+        background: 'rgba(9,20,38,0.60)',
+        border: `1px solid ${statusAccent}24`,
+        borderRadius: 16,
+        padding: '18px 20px',
+        position: 'relative',
+        overflow: 'hidden',
+        minWidth: 0,
+      }}>
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+          background: `linear-gradient(90deg, ${accent}00, ${accent}80, ${accent}00)`,
+        }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+          <div>
+            <div style={{ fontSize: 10, color: accent, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+              {name}
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', lineHeight: 1.15 }}>
+              {headline}
+            </div>
+          </div>
+          <div style={{
+            flexShrink: 0,
+            padding: '4px 8px',
+            borderRadius: 999,
+            border: `1px solid ${statusAccent}30`,
+            background: `${statusAccent}12`,
+            color: statusAccent,
+            fontSize: 10,
+            fontWeight: 800,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+          }}>
+            {status}
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, minHeight: 38 }}>
+          {detail}
+        </div>
+        {cached && (
+          <div style={{ marginTop: 8, fontSize: 10.5, color: 'var(--text-muted)' }}>
+            Cached for up to 5 minutes.
+          </div>
+        )}
+        {rows && rows.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            {rows.map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700, textAlign: 'right', overflowWrap: 'anywhere' }}>{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
 
-  if (error) {
+  const level = cost?.warning_level ?? 'ok';
+  const accent = levelAccent(level);
+  const usage = Math.min(Math.max(cost?.character_usage_percent ?? 0, 0), 100);
+  const remaining = cost?.character_remaining ?? 0;
+  const limit = cost?.character_limit ?? 0;
+  const used = cost?.character_count ?? 0;
+  const resetDate = cost?.next_character_count_reset_unix
+    ? new Date(cost.next_character_count_reset_unix * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Not provided';
+
+  const llmProviders = [
+    { name: 'OpenAI', configured: Boolean(creds?.openai_api_key_masked), accent: '#10A37F' },
+    { name: 'Gemini', configured: Boolean(creds?.google_api_key_masked), accent: '#8B5CF6' },
+    { name: 'Anthropic', configured: Boolean(creds?.anthropic_api_key_masked), accent: '#F0B429' },
+  ];
+
+  if (loading) {
     return (
-      <div style={{ maxWidth: 900, padding: 24, border: '1px solid rgba(255,77,109,0.22)', borderRadius: 16, background: 'rgba(255,77,109,0.05)', color: '#FFB4C2' }}>
-        {error}
+      <div style={{ maxWidth: 980, padding: 24, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, background: 'rgba(9,20,38,0.60)', color: 'var(--text-muted)' }}>
+        Loading provider balances and quota data…
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 980, animation: 'fade-in 0.4s both' }}>
+    <div style={{ maxWidth: 1120, animation: 'fade-in 0.4s both' }}>
       <div style={{
         background: 'rgba(9,20,38,0.66)',
         border: `1px solid ${accent}30`,
@@ -641,9 +743,9 @@ function CostMonitoringTab() {
             </svg>
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 6, flexWrap: 'wrap' }}>
               <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-syne)' }}>
-                ElevenLabs Cost Monitoring
+                Cost Monitoring
               </h3>
               <button
                 onClick={refresh}
@@ -657,26 +759,57 @@ function CostMonitoringTab() {
               </button>
             </div>
             <p style={{ margin: 0, color: accent, fontSize: 12.5, lineHeight: 1.6 }}>
-              {cost?.warning_message || 'ElevenLabs usage is within the normal range.'}
+              Twilio balance and ElevenLabs quota are checked live. LLM providers are shown with their billing API availability so missing balance data is explicit.
             </p>
-            {cost?.cached && (
-              <div style={{ marginTop: 6, fontSize: 10.5, color: 'var(--text-muted)' }}>
-                Showing cached data, refreshed every 5 minutes.
+            {Object.values(errors).length > 0 && (
+              <div style={{ marginTop: 8, fontSize: 11, color: '#FFB4C2', lineHeight: 1.5 }}>
+                {Object.values(errors).join(' · ')}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginBottom: 16 }}>
+        <ProviderCard
+          name="Twilio"
+          accent="#38BDF8"
+          status={(twilioCost?.warning_level ?? 'error') as 'ok' | 'warning' | 'critical' | 'error'}
+          headline={twilioCost?.configured ? moneyValue(twilioCost.balance, twilioCost.currency) : 'Not set'}
+          detail={twilioCost?.warning_message || 'Twilio credentials are not configured.'}
+          cached={twilioCost?.cached}
+          rows={[
+            ['Currency', twilioCost?.currency?.toUpperCase() ?? '—'],
+            ['Account', twilioCost?.account_sid ?? '—'],
+          ]}
+        />
+        {llmProviders.map((provider) => (
+          <ProviderCard
+            key={provider.name}
+            name={provider.name}
+            accent={provider.accent}
+            status={provider.configured ? 'warning' : 'error'}
+            headline={provider.configured ? 'Configured' : 'Not set'}
+            detail={provider.configured
+              ? `${provider.name} standard API keys do not expose wallet balance in this app. Use the provider billing console for live spend limits.`
+              : `Add the ${provider.name} key in Credentials before enabling this provider.`}
+            rows={[
+              ['Live balance API', 'Not available'],
+              ['Action', provider.configured ? 'Check billing console' : 'Add API key'],
+            ]}
+          />
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 16 }}>
         <div style={{
           background: 'rgba(9,20,38,0.60)', border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: 16, padding: '22px 24px',
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14, gap: 12 }}>
             <div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5 }}>
-                Character Quota
+                ElevenLabs Character Quota
               </div>
               <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
                 {remaining.toLocaleString()}
@@ -695,7 +828,7 @@ function CostMonitoringTab() {
             <div style={{ width: `${usage}%`, height: '100%', background: `linear-gradient(90deg, ${accent}, ${accent}AA)`, borderRadius: 999, transition: 'width 0.3s' }} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10, marginTop: 18 }}>
             {[
               ['Used', used.toLocaleString()],
               ['Remaining', remaining.toLocaleString()],
@@ -714,7 +847,7 @@ function CostMonitoringTab() {
           borderRadius: 16, padding: '22px 24px',
         }}>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>
-            Subscription
+            ElevenLabs Subscription
           </div>
           {[
             ['Plan', cost?.tier ?? 'unknown'],
@@ -732,13 +865,13 @@ function CostMonitoringTab() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
         <div style={{
           background: 'rgba(9,20,38,0.60)', border: `1px solid ${cost?.has_open_invoices ? 'rgba(240,180,41,0.24)' : 'rgba(255,255,255,0.08)'}`,
           borderRadius: 16, padding: '20px 22px',
         }}>
           <div style={{ fontSize: 10, color: '#F0B429', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>
-            Billing Signals
+            ElevenLabs Billing Signals
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Open invoices</span>
@@ -768,7 +901,7 @@ function CostMonitoringTab() {
             Why This Matters
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
-            ElevenLabs may reject or terminate conversations when quota is exhausted, billing is inactive, or invoices require attention. This panel gives an early warning before test calls or campaigns start dropping without an obvious frontend error.
+            Twilio can reject calls when the account has no balance, and ElevenLabs may reject or terminate conversations when quota is exhausted or billing needs attention. This screen makes those provider-side limits visible before test calls or campaigns fail.
           </div>
         </div>
       </div>
@@ -804,29 +937,32 @@ function AccountTab() {
   ];
 
   return (
-    <div style={{ maxWidth: 700, animation: 'fade-in 0.4s both' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 20 }}>
+    <div style={{ maxWidth: 1040, animation: 'fade-in 0.4s both' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginBottom: 20 }}>
         {sections.map(({ label, accent, rows }) => (
           <div key={label} style={{
             background: 'rgba(9,20,38,0.60)', backdropFilter: 'blur(20px)',
             border: `1px solid rgba(255,255,255,0.08)`, borderRadius: 16, overflow: 'hidden',
-            position: 'relative',
+            position: 'relative', minWidth: 0,
           }}>
             <div style={{
               position: 'absolute', top: 0, left: 0, right: 0, height: 2,
               background: `linear-gradient(90deg, ${accent}00, ${accent}70, ${accent}00)`,
             }} />
-            <div style={{ padding: '16px 18px 12px' }}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: accent, marginBottom: 12 }}>
+            <div style={{ padding: '20px 22px 16px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: accent, marginBottom: 14 }}>
                 {label}
               </div>
               {rows.map(([k, v]) => (
                 <div key={k} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
+                  display: 'grid', gridTemplateColumns: 'minmax(92px, 0.42fr) minmax(0, 1fr)', gap: 14,
+                  alignItems: 'start', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
                 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{k}</span>
-                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', maxWidth: '55%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>{k}</span>
+                  <span style={{
+                    fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)',
+                    textAlign: 'right', lineHeight: 1.45, overflowWrap: 'anywhere', minWidth: 0,
+                  }}>{v}</span>
                 </div>
               ))}
             </div>

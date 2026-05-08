@@ -35,11 +35,30 @@ log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/el/tools", tags=["el-tools"])
 
 
-async def _build_context(conversation_id: str, redis) -> CallContext | None:
-    """Resolve EL conversation_id → call_record_id → full CallContext from Redis."""
-    call_record_id = await redis.get(f"conv:{conversation_id}")
+async def _build_context(
+    conversation_id: str, agent_id: str, redis
+) -> CallContext | None:
+    """Resolve call context from Redis.
+
+    Primary lookup: conv:{conversation_id} → call_record_id  (works when EL sends conv_id)
+    Fallback lookup: agent:{agent_id}:active_call_id         (works for EL native Twilio
+    integration which does not include conversation_id in webhook tool call bodies)
+    """
+    call_record_id = ""
+
+    if conversation_id:
+        call_record_id = await redis.get(f"conv:{conversation_id}") or ""
+
+    if not call_record_id and agent_id:
+        call_record_id = await redis.get(f"agent:{agent_id}:active_call_id") or ""
+        if call_record_id:
+            log.info("el_tool_context_via_agent_id",
+                     agent_id=agent_id, call_record_id=call_record_id,
+                     note="conv_id was empty; resolved via agent active-call mapping")
+
     if not call_record_id:
-        log.warning("el_tool_context_miss", conversation_id=conversation_id)
+        log.warning("el_tool_context_miss",
+                    conversation_id=conversation_id, agent_id=agent_id)
         return None
 
     raw = await redis.hgetall(f"call:{call_record_id}")
@@ -92,7 +111,8 @@ async def execute_el_tool(
              tool=tool_name,
              agent_id=x_agent_id,
              conv_id=conversation_id,
-             tool_call_id=tool_call_id)
+             tool_call_id=tool_call_id,
+             body_keys=list(body.keys()))
 
     # 2. Verify agent signing secret
     if not await _verify_agent_secret(x_agent_id, x_voxara_secret):
@@ -105,9 +125,9 @@ async def execute_el_tool(
         log.warning("el_tool_not_found", tool=tool_name)
         return {"result": f"Tool '{tool_name}' is not registered", "is_error": True}
 
-    # 4. Build call context from Redis via conversation_id
+    # 4. Build call context from Redis via conversation_id (or agent_id fallback)
     redis = await get_redis_pool()
-    ctx = await _build_context(conversation_id, redis)
+    ctx = await _build_context(conversation_id, x_agent_id, redis)
     if not ctx:
         log.error("el_tool_no_context", tool=tool_name, conv_id=conversation_id)
         return {"result": "Call context not found — conversation may have already ended", "is_error": True}

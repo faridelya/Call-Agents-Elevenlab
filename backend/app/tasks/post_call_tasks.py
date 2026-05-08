@@ -13,7 +13,9 @@ Flow
 3. Sentiment score (keyword heuristic, no LLM cost)
 4. Lead status + campaign counters updated
 """
+import io
 import json
+import wave as _wave
 import structlog
 from datetime import datetime, timezone
 from sqlalchemy import select
@@ -94,10 +96,11 @@ async def post_call_processing(
 
             fresh = conv["transcript"]
             if fresh and len(fresh) >= len(call.transcript or []):
-                # Preserve system/human_agent entries that EL doesn't track
+                # Preserve system/human_agent/customer entries that EL doesn't track.
+                # 'customer' is used for diarized customer speech in the human leg.
                 extras = [
                     e for e in (call.transcript or [])
-                    if e.get("role") in ("system", "human_agent")
+                    if e.get("role") in ("system", "human_agent", "customer")
                 ]
                 call.transcript = fresh + extras
                 log.info("post_call_el_transcript_saved",
@@ -113,20 +116,28 @@ async def post_call_processing(
 
         # Stage timeline
         if not call.stage_timeline:
-            raw_stages = await redis.lrange(f"{call_key}:stages", 0, -1)
+            raw_stages = await redis.lrange(f"call:{call.id}:stages", 0, -1)
+            if not raw_stages:
+                raw_stages = await redis.lrange(f"{call_key}:stages", 0, -1)
             if raw_stages:
                 call.stage_timeline = [json.loads(s) for s in raw_stages]
 
         # ── 2. LLM: classify outcome + generate summary ───────────────────────
         # Skip if the EL webhook already ran classification — no duplicate LLM cost.
-        # The webhook sets both auto_summary and outcome when it succeeds.
-        already_classified = bool(call.auto_summary and call.outcome)
+        # Exception: if a human_agent entry exists (from transcribe_human_leg) we
+        # force re-classification so the full conversation informs the outcome.
+        has_human_leg = any(e.get("role") == "human_agent" for e in (call.transcript or []))
+        already_classified = bool(call.auto_summary and call.outcome) and not has_human_leg
         if already_classified:
             log.info("post_call_llm_skipped",
                      call_id=call_id,
                      reason="el_webhook_already_classified",
                      outcome=call.outcome)
         else:
+            if has_human_leg and call.auto_summary and call.outcome:
+                log.info("post_call_llm_reclassify",
+                         call_id=call_id,
+                         note="Human leg transcript present — re-classifying with full conversation")
             hint = call.outcome  # set by log_call_outcome tool during the live call
             analysis = await _llm_analyze_call(
                 call.transcript,
@@ -154,15 +165,7 @@ async def post_call_processing(
         call.talk_ratio      = _compute_talk_ratio(call.transcript)
 
         # ── 4. Lead stats ──────────────────────────────────────────────────────
-        if call.lead_id:
-            from app.models.lead import Lead
-            lead_result = await db.execute(select(Lead).where(Lead.id == call.lead_id))
-            lead = lead_result.scalar_one_or_none()
-            if lead:
-                lead.total_calls += 1
-                lead.last_called_at = datetime.now(timezone.utc).isoformat()
-                if call.outcome:
-                    lead.lead_status = _outcome_to_status(call.outcome)
+        await _update_lead_stats(call, db)
 
         await db.commit()
 
@@ -382,96 +385,457 @@ def _outcome_to_status(outcome: str) -> str:
     return "contacted"
 
 
+async def _update_lead_stats(call, db) -> None:
+    """Update lead rollups from call rows so retries do not double-count."""
+    if not call.lead_id:
+        return
+
+    from app.models.lead import Lead
+    from sqlalchemy import func
+
+    lead_result = await db.execute(select(Lead).where(Lead.id == call.lead_id))
+    lead = lead_result.scalar_one_or_none()
+    if not lead:
+        return
+
+    CallModel = type(call)
+    total_calls = await db.execute(
+        select(func.count())
+        .select_from(CallModel)
+        .where(CallModel.lead_id == lead.id)
+    )
+    last_called = await db.execute(
+        select(func.max(CallModel.started_at))
+        .where(CallModel.lead_id == lead.id)
+    )
+
+    lead.total_calls = total_calls.scalar_one()
+    lead.last_called_at = last_called.scalar()
+    if call.outcome:
+        lead.lead_status = _outcome_to_status(call.outcome)
+
+
+def _split_stereo_wav(wav_bytes: bytes) -> tuple[bytes | None, bytes | None]:
+    """Split a Twilio dual-channel PCM WAV into (customer, human_agent) mono WAVs.
+
+    Twilio dual-channel convention for <Dial recordingChannels="dual">:
+      channel 0 (left)  = original inbound caller  → customer
+      channel 1 (right) = the number we dialed     → human agent
+
+    Uses only Python stdlib (wave module) — no extra dependencies.
+    Returns (None, None) if the file is mono, µ-law encoded, or otherwise
+    cannot be split (the caller falls back to diarization in that case).
+    """
+    try:
+        buf = io.BytesIO(wav_bytes)
+        with _wave.open(buf, "rb") as w:
+            if w.getnchannels() != 2 or w.getcomptype() != "NONE":
+                return None, None
+            sampwidth = w.getsampwidth()
+            framerate = w.getframerate()
+            raw = w.readframes(w.getnframes())
+
+        frame_size = sampwidth * 2  # bytes per stereo frame
+        left = bytearray()
+        right = bytearray()
+        for i in range(0, len(raw), frame_size):
+            chunk = raw[i : i + frame_size]
+            if len(chunk) == frame_size:
+                left.extend(chunk[:sampwidth])   # left  channel = customer
+                right.extend(chunk[sampwidth:])  # right channel = human agent
+
+        def _to_mono_wav(samples: bytes) -> bytes:
+            out = io.BytesIO()
+            with _wave.open(out, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(sampwidth)
+                w.setframerate(framerate)
+                w.writeframes(samples)
+            return out.getvalue()
+
+        return _to_mono_wav(bytes(left)), _to_mono_wav(bytes(right))
+    except Exception:
+        return None, None
+
+
+def _words_to_utterances(
+    words: list[dict], role: str, gap_sec: float = 0.8
+) -> list[tuple[float, str, str]]:
+    """Group EL STT words into utterances using silence gaps.
+
+    Returns [(start_sec, role, text)] sorted by start time.
+    gap_sec: pause longer than this starts a new utterance (0.8 s is natural speech cadence).
+    """
+    utterances: list[tuple[float, str, str]] = []
+    current: list[str] = []
+    current_start: float | None = None
+    last_end: float | None = None
+
+    for word in words:
+        text = (word.get("text") or "").strip()
+        if not text:
+            continue
+        start = float(word.get("start") or 0.0)
+        end = float(word.get("end") or start)
+
+        if last_end is not None and (start - last_end) > gap_sec:
+            if current and current_start is not None:
+                utterances.append((current_start, role, " ".join(current)))
+            current = []
+            current_start = None
+
+        if current_start is None:
+            current_start = start
+        current.append(text)
+        last_end = end
+
+    if current and current_start is not None:
+        utterances.append((current_start, role, " ".join(current)))
+
+    return utterances
+
+
+async def _gather(*coros):
+    """Run multiple coroutines concurrently and return their results in order."""
+    import asyncio
+    return await asyncio.gather(*coros)
+
+
+def _assign_roles_by_content(words: list[dict], now_iso: str) -> list[dict]:
+    """Label diarized speakers as customer/human_agent based on conversation content.
+
+    Used only as a fallback when dual-channel split is unavailable.
+    Groups words by speaker_id, then identifies the human agent speaker by looking
+    for professional greeting phrases typically used by support agents. The other
+    speaker is labeled customer. If content-based detection is inconclusive, falls
+    back to labeling the first speaker as customer per Twilio call ordering.
+    """
+    AGENT_PHRASES = {
+        "thank you for holding", "thank you for your patience",
+        "this is ", "my name is ", "how can i help", "how may i help",
+        "how can i assist", "welcome to", "speaking", "team member",
+        "support", "customer service", "let me check", "one moment",
+        "i apologize", "i understand your concern",
+    }
+
+    # Group words per speaker
+    speaker_texts: dict[str, list[str]] = {}
+    speaker_first_seen: dict[str, float] = {}
+    for word in words:
+        sid = word.get("speaker_id")
+        if sid is None:
+            continue
+        sid = str(sid)
+        text = (word.get("text") or "").strip().lower()
+        if not text:
+            continue
+        speaker_texts.setdefault(sid, []).append(text)
+        if sid not in speaker_first_seen:
+            speaker_first_seen[sid] = float(word.get("start") or 0.0)
+
+    if not speaker_texts:
+        return []
+
+    # Score each speaker: how many agent-phrase tokens appear in their text?
+    agent_speaker: str | None = None
+    best_score = 0
+    for sid, tokens in speaker_texts.items():
+        full = " ".join(tokens)
+        score = sum(1 for phrase in AGENT_PHRASES if phrase in full)
+        if score > best_score:
+            best_score = score
+            agent_speaker = sid
+
+    # If no phrase matched, treat the speaker who appeared LATER as the human agent
+    # (the customer was already on the call; the agent picks up after the Dial connects)
+    if agent_speaker is None and speaker_first_seen:
+        agent_speaker = max(speaker_first_seen, key=lambda s: speaker_first_seen[s])
+
+    # Build utterances with the same grouping logic as _words_to_utterances
+    utterances: list[tuple[float, str, str]] = []
+    current: list[str] = []
+    current_start: float | None = None
+    current_sid: str | None = None
+    last_end: float | None = None
+    GAP = 0.8
+
+    for word in words:
+        sid = str(word.get("speaker_id")) if word.get("speaker_id") is not None else "_unknown"
+        text = (word.get("text") or "").strip()
+        if not text:
+            continue
+        start = float(word.get("start") or 0.0)
+        end = float(word.get("end") or start)
+
+        speaker_changed = (sid != current_sid)
+        long_pause = last_end is not None and (start - last_end) > GAP
+
+        if (speaker_changed or long_pause) and current and current_sid is not None:
+            role = "human_agent" if current_sid == agent_speaker else "customer"
+            utterances.append((current_start or 0.0, role, " ".join(current)))
+            current = []
+            current_start = None
+
+        if current_start is None:
+            current_start = start
+        current_sid = sid
+        current.append(text)
+        last_end = end
+
+    if current and current_sid is not None:
+        role = "human_agent" if current_sid == agent_speaker else "customer"
+        utterances.append((current_start or 0.0, role, " ".join(current)))
+
+    return [
+        {"role": role, "text": text.strip(), "timestamp": now_iso}
+        for _, role, text in utterances
+        if text.strip()
+    ]
+
+
 async def transcribe_human_leg(ctx: dict, call_id: str, recording_sid: str) -> None:
     """ARQ task — download Twilio recording for a transferred call and transcribe via ElevenLabs STT.
 
-    Uses the agent's configured stt_provider as the EL STT model ID.
-    Old legacy value 'elevenlabs' maps to 'scribe_v1'.
+    Primary path (dual-channel recording):
+      Twilio records with recordingChannels="dual" so ch0=customer, ch1=human_agent
+      by protocol. We split the stereo WAV with stdlib wave, transcribe each mono
+      channel separately, then interleave utterances by word start-time. No guessing.
+
+    Fallback path (mono recording or WAV parse failure):
+      Send recording to EL STT with diarize=true. Speaker role assignment falls back
+      to a content-based heuristic — less reliable than the dual-channel path.
+
+    Safe-by-design: even on total failure a placeholder entry is appended so the
+    record shows the transfer happened. Original AI conversation is never modified.
     """
     from app.config import settings
     import httpx
 
-    if not settings.twilio_account_sid or not settings.twilio_auth_token:
-        log.warning("transcribe_human_leg_no_twilio_creds", call_id=call_id)
-        return
-
-    if not settings.elevenlabs_api_key:
-        log.warning("transcribe_human_leg_no_el_key", call_id=call_id)
-        return
-
-    # ── 1. Fetch call + agent to get the configured STT model ─────────────────
+    # ── 1. Resolve credentials + phone numbers for logging ───────────────────
     db_factory = ctx["db_factory"]
-    stt_model_id = "scribe_v1"
+    redis = ctx["redis"]
+    stt_model_id = "scribe_v2"
+    twilio_account_sid = settings.twilio_account_sid
+    twilio_auth_token = settings.twilio_auth_token
+    elevenlabs_api_key = settings.elevenlabs_api_key
+    credential_source = "platform" if twilio_account_sid and twilio_auth_token else "missing"
+    # Phone numbers help verify channel assignment (customer=ch0, agent=ch1)
+    customer_number: str = ""
+    agent_number: str = ""
+
     async with db_factory() as db:
         from app.models.call import Call
-        from app.models.agent import Agent as AgentModel
+        from app.models.user import User as UserModel
+        from app.utils.crypto import decrypt
         call_result = await db.execute(select(Call).where(Call.id == call_id))
         call_obj = call_result.scalar_one_or_none()
-        if call_obj and call_obj.agent_id:
-            agent_result = await db.execute(select(AgentModel).where(AgentModel.id == call_obj.agent_id))
-            agent_obj = agent_result.scalar_one_or_none()
-            if agent_obj and agent_obj.stt_provider:
-                # 'elevenlabs' is the old DB default before specific scribe models were added
-                stt_model_id = (
-                    "scribe_v1"
-                    if agent_obj.stt_provider == "elevenlabs"
-                    else agent_obj.stt_provider
-                )
+        if call_obj:
+            customer_number = getattr(call_obj, "from_number", "") or ""
+            # transferred_to is stamped in Redis when the transfer tool fires
+            raw_to = await redis.hget(f"call:{call_id}", "transferred_to")
+            agent_number = (raw_to if isinstance(raw_to, str) else (raw_to.decode() if raw_to else "")) or ""
+        if call_obj and call_obj.user_id:
+            user_result = await db.execute(select(UserModel).where(UserModel.id == call_obj.user_id))
+            user_obj = user_result.scalar_one_or_none()
+            if user_obj:
+                if user_obj.twilio_account_sid and user_obj.twilio_auth_token:
+                    twilio_account_sid = user_obj.twilio_account_sid
+                    try:
+                        twilio_auth_token = decrypt(user_obj.twilio_auth_token)
+                    except Exception:
+                        twilio_auth_token = user_obj.twilio_auth_token
+                    credential_source = "user"
+                if user_obj.elevenlabs_api_key:
+                    try:
+                        elevenlabs_api_key = decrypt(user_obj.elevenlabs_api_key)
+                    except Exception:
+                        elevenlabs_api_key = user_obj.elevenlabs_api_key
 
-    log.info("transcribe_human_leg_stt_model", call_id=call_id, stt_model=stt_model_id)
+    # ── 2. Download + transcribe ───────────────────────────────────────────────
+    failure_reason: str | None = None
+    wav_bytes:  bytes | None = None   # stereo WAV (dual-channel) preferred
+    mp3_bytes:  bytes | None = None   # fallback if WAV unavailable
+    diarized_entries: list[dict] = []
+    fallback_text: str | None = None
 
-    # ── 2. Download recording from Twilio ─────────────────────────────────────
-    recording_url = (
-        f"https://api.twilio.com/2010-04-01/Accounts/"
-        f"{settings.twilio_account_sid}/Recordings/{recording_sid}.mp3"
-    )
-    try:
-        async with httpx.AsyncClient(
-            auth=(settings.twilio_account_sid, settings.twilio_auth_token),
-            timeout=120.0,
-            follow_redirects=True,
-        ) as client:
-            r = await client.get(recording_url)
+    if not twilio_account_sid or not twilio_auth_token:
+        failure_reason = "Twilio credentials not configured"
+        log.warning("transcribe_human_leg_no_twilio_creds", call_id=call_id)
+    elif not elevenlabs_api_key:
+        failure_reason = "ElevenLabs API key not configured"
+        log.warning("transcribe_human_leg_no_el_key", call_id=call_id)
+    else:
+        log.info("transcribe_human_leg_start", call_id=call_id,
+                 stt_model=stt_model_id, twilio_credential_source=credential_source)
 
-        if r.status_code != 200:
-            log.error("transcribe_human_leg_download_failed",
-                      call_id=call_id, recording_sid=recording_sid,
-                      http_status=r.status_code)
-            return
-
-        audio_bytes = r.content
-        log.info("transcribe_human_leg_downloaded", call_id=call_id, bytes=len(audio_bytes))
-    except Exception as exc:
-        log.error("transcribe_human_leg_download_error", call_id=call_id, error=str(exc))
-        return
-
-    # ── 3. Transcribe with ElevenLabs STT ─────────────────────────────────────
-    transcribed_text = ""
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            r = await client.post(
-                "https://api.elevenlabs.io/v1/speech-to-text",
-                headers={"xi-api-key": settings.elevenlabs_api_key},
-                files={"file": ("recording.mp3", audio_bytes, "audio/mpeg")},
-                data={"model_id": stt_model_id},
+        # Download WAV first — needed for dual-channel stereo splitting.
+        # Fall back to MP3 if WAV download fails.
+        for ext in (".wav", ".mp3"):
+            url = (
+                f"https://api.twilio.com/2010-04-01/Accounts/"
+                f"{twilio_account_sid}/Recordings/{recording_sid}{ext}"
             )
-        if r.status_code == 200:
-            transcribed_text = (r.json().get("text") or "").strip()
-            log.info("transcribe_human_leg_el_done",
-                     call_id=call_id, model=stt_model_id, chars=len(transcribed_text))
-        else:
-            log.error("transcribe_human_leg_el_failed",
-                      call_id=call_id, model=stt_model_id,
-                      http_status=r.status_code, body=r.text[:200])
-            transcribed_text = "[Transcription failed — ElevenLabs STT returned an error.]"
-    except Exception as exc:
-        log.error("transcribe_human_leg_el_error", call_id=call_id, error=str(exc))
-        return
+            try:
+                async with httpx.AsyncClient(
+                    auth=(twilio_account_sid, twilio_auth_token),
+                    timeout=120.0,
+                    follow_redirects=True,
+                ) as client:
+                    r = await client.get(url)
 
-    if not transcribed_text:
-        return
+                if r.status_code == 200:
+                    if ext == ".wav":
+                        wav_bytes = r.content
+                    else:
+                        mp3_bytes = r.content
+                    log.info("transcribe_human_leg_downloaded",
+                             call_id=call_id, format=ext, bytes=len(r.content))
+                    break
+                else:
+                    log.warning("transcribe_human_leg_download_failed",
+                                call_id=call_id, format=ext, http_status=r.status_code)
+            except Exception as exc:
+                log.warning("transcribe_human_leg_download_error",
+                            call_id=call_id, format=ext, error=str(exc))
 
-    # ── 4. Append to call.transcript in DB ───────────────────────────────────
+        if not wav_bytes and not mp3_bytes:
+            failure_reason = "Could not download recording in any format"
+            log.error("transcribe_human_leg_no_audio", call_id=call_id,
+                      recording_sid=recording_sid)
+
+        # ── Dual-channel path (preferred) ──────────────────────────────────
+        wav_was_stereo = False
+        if wav_bytes:
+            customer_wav, agent_wav = _split_stereo_wav(wav_bytes)
+            if customer_wav and agent_wav:
+                wav_was_stereo = True
+                log.info("transcribe_human_leg_dual_channel",
+                         call_id=call_id, model=stt_model_id,
+                         ch0_customer=customer_number or "unknown",
+                         ch1_human_agent=agent_number or "unknown",
+                         note="Twilio dual-channel: ch0=A-leg(customer), ch1=B-leg(human_agent)")
+                try:
+                    async with httpx.AsyncClient(timeout=120.0) as client:
+                        cust_resp, agent_resp = await _gather(
+                            client.post(
+                                "https://api.elevenlabs.io/v1/speech-to-text",
+                                headers={"xi-api-key": elevenlabs_api_key},
+                                files={"file": ("customer.wav", customer_wav, "audio/wav")},
+                                data={"model_id": stt_model_id},
+                            ),
+                            client.post(
+                                "https://api.elevenlabs.io/v1/speech-to-text",
+                                headers={"xi-api-key": elevenlabs_api_key},
+                                files={"file": ("agent.wav", agent_wav, "audio/wav")},
+                                data={"model_id": stt_model_id},
+                            ),
+                        )
+
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    cust_words  = cust_resp.json().get("words", [])  if cust_resp.status_code  == 200 else []
+                    agent_words = agent_resp.json().get("words", []) if agent_resp.status_code == 200 else []
+
+                    cust_utterances  = _words_to_utterances(cust_words,  "customer")
+                    agent_utterances = _words_to_utterances(agent_words, "human_agent")
+                    merged = sorted(cust_utterances + agent_utterances, key=lambda t: t[0])
+
+                    diarized_entries = [
+                        {"role": role, "text": text.strip(), "timestamp": now_iso}
+                        for _, role, text in merged
+                        if text.strip()
+                    ]
+                    n_cust  = sum(1 for e in diarized_entries if e["role"] == "customer")
+                    n_agent = sum(1 for e in diarized_entries if e["role"] == "human_agent")
+                    log.info("transcribe_human_leg_dual_ok",
+                             call_id=call_id, utterances=len(diarized_entries),
+                             customer_turns=n_cust, human_agent_turns=n_agent)
+                except Exception as exc:
+                    failure_reason = f"Dual-channel transcription error: {exc}"
+                    log.error("transcribe_human_leg_dual_error",
+                              call_id=call_id, error=str(exc))
+            else:
+                log.info("transcribe_human_leg_mono_wav",
+                         call_id=call_id, note="WAV is mono — falling back to diarization")
+
+        # ── Diarization fallback (mono recording or dual-channel failed) ────
+        if not diarized_entries and (mp3_bytes or (wav_bytes and not wav_was_stereo)):
+            audio = mp3_bytes or wav_bytes
+            fname = "recording.mp3" if mp3_bytes else "recording.wav"
+            ctype = "audio/mpeg"    if mp3_bytes else "audio/wav"
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    r = await client.post(
+                        "https://api.elevenlabs.io/v1/speech-to-text",
+                        headers={"xi-api-key": elevenlabs_api_key},
+                        files={"file": (fname, audio, ctype)},
+                        data={"model_id": stt_model_id, "diarize": "true"},
+                    )
+                if r.status_code == 200:
+                    stt_data = r.json()
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    words = stt_data.get("words", [])
+                    speakers = {w.get("speaker_id") for w in words if "speaker_id" in w}
+
+                    if len(speakers) >= 2:
+                        # Two distinct speakers detected — use LLM to label roles
+                        # by examining each speaker's text content, then assign.
+                        diarized_entries = _assign_roles_by_content(words, now_iso)
+                        log.info("transcribe_human_leg_diarized_content_labeled",
+                                 call_id=call_id, utterances=len(diarized_entries))
+                    elif words:
+                        # Single speaker — mark everything as part of conversation
+                        raw_text = (stt_data.get("text") or "").strip()
+                        if raw_text:
+                            fallback_text = raw_text
+                    else:
+                        raw_text = (stt_data.get("text") or "").strip()
+                        if raw_text:
+                            fallback_text = raw_text
+                        else:
+                            failure_reason = "STT returned empty transcript"
+                            log.warning("transcribe_human_leg_el_empty",
+                                        call_id=call_id, model=stt_model_id)
+                else:
+                    failure_reason = f"ElevenLabs STT returned HTTP {r.status_code}"
+                    log.error("transcribe_human_leg_el_failed",
+                              call_id=call_id, model=stt_model_id,
+                              http_status=r.status_code, body=r.text[:200])
+            except Exception as exc:
+                failure_reason = f"ElevenLabs STT error: {exc}"
+                log.error("transcribe_human_leg_el_error", call_id=call_id, error=str(exc))
+
+    # ── 3. Build new_entries — always non-empty ───────────────────────────────
+    now_iso = datetime.now(timezone.utc).isoformat()
+    audio_bytes = wav_bytes or mp3_bytes
+    if diarized_entries:
+        new_entries = diarized_entries
+    elif fallback_text:
+        new_entries = [{
+            "role": "human_agent",
+            "text": f"[Human Agent Conversation]\n{fallback_text}",
+            "timestamp": now_iso,
+        }]
+    elif audio_bytes:
+        new_entries = [{
+            "role": "human_agent",
+            "text": (
+                f"[Human Agent Conversation — recording retrieved "
+                f"({len(audio_bytes):,} bytes, SID: {recording_sid}) "
+                f"but transcription failed: {failure_reason}]"
+            ),
+            "timestamp": now_iso,
+        }]
+    else:
+        new_entries = [{
+            "role": "human_agent",
+            "text": (
+                f"[Human Agent Conversation — recording could not be retrieved "
+                f"(SID: {recording_sid}). Reason: {failure_reason}]"
+            ),
+            "timestamp": now_iso,
+        }]
+
+    # ── 4. Append to call transcript ─────────────────────────────────────────
     async with db_factory() as db:
         from app.models.call import Call
         result = await db.execute(select(Call).where(Call.id == call_id))
@@ -480,17 +844,13 @@ async def transcribe_human_leg(ctx: dict, call_id: str, recording_sid: str) -> N
             log.warning("transcribe_human_leg_call_not_found", call_id=call_id)
             return
 
-        entry = {
-            "role": "human_agent",
-            "text": f"[Human Agent Conversation — ElevenLabs {stt_model_id} transcription]\n{transcribed_text}",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        current = list(call.transcript or [])
-        current.append(entry)
-        call.transcript = current
+        call.transcript = list(call.transcript or []) + new_entries
         await db.commit()
 
-        log.info("transcribe_human_leg_saved", call_id=call_id, entry_chars=len(transcribed_text))
+        log.info("transcribe_human_leg_saved",
+                 call_id=call_id,
+                 entries_added=len(new_entries),
+                 method="dual_channel" if (diarized_entries and wav_bytes) else "diarization")
 
 
 async def _update_campaign_counters(call, db) -> None:
@@ -502,20 +862,86 @@ async def _update_campaign_counters(call, db) -> None:
     if not campaign:
         return
 
-    campaign.contacts_answered += 1
-    if call.status == "completed":
-        campaign.contacts_completed += 1
-    elif call.status in ("failed", "busy", "no-answer"):
-        campaign.contacts_failed += 1
+    CallModel = type(call)
+    final_failed_statuses = ("failed", "busy", "no-answer", "canceled")
+    active_statuses = ("initiated", "ringing", "in-progress")
+
+    # Recompute counters from call rows instead of incrementing here. Both the
+    # ElevenLabs webhook and the ARQ safety-net can process the same call, so
+    # incremental updates are not idempotent.
+    answered_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(CallModel)
+            .where(
+                CallModel.campaign_id == campaign.id,
+                CallModel.answered_at.isnot(None),
+            )
+        )
+    ).scalar_one()
+    completed_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(CallModel)
+            .where(
+                CallModel.campaign_id == campaign.id,
+                CallModel.status == "completed",
+            )
+        )
+    ).scalar_one()
+    failed_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(CallModel)
+            .where(
+                CallModel.campaign_id == campaign.id,
+                CallModel.status.in_(final_failed_statuses),
+            )
+        )
+    ).scalar_one()
+    active_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(CallModel)
+            .where(
+                CallModel.campaign_id == campaign.id,
+                CallModel.status.in_(active_statuses),
+            )
+        )
+    ).scalar_one()
+
+    campaign.contacts_answered = answered_count
+    campaign.contacts_completed = completed_count
+    campaign.contacts_failed = failed_count
 
     # Conversion rate: any positive outcome counts, not just "interested"
     if campaign.contacts_completed > 0:
         positive = await db.execute(
-            select(func.count()).select_from(type(call)).where(
-                type(call).campaign_id == campaign.id,
-                type(call).outcome.in_(list(POSITIVE_OUTCOMES)),
+            select(func.count()).select_from(CallModel).where(
+                CallModel.campaign_id == campaign.id,
+                CallModel.outcome.in_(list(POSITIVE_OUTCOMES)),
             )
         )
         campaign.conversion_rate = round(positive.scalar() / campaign.contacts_completed * 100, 1)
+    else:
+        campaign.conversion_rate = 0.0
+
+    avg_duration = await db.execute(
+        select(func.avg(CallModel.duration_seconds))
+        .where(
+            CallModel.campaign_id == campaign.id,
+            CallModel.duration_seconds.isnot(None),
+        )
+    )
+    avg_duration_value = avg_duration.scalar()
+    campaign.avg_call_duration = round(float(avg_duration_value), 1) if avg_duration_value else 0.0
+
+    if (
+        campaign.status == "running"
+        and campaign.contacts_called >= len(campaign.contacts)
+        and active_count == 0
+    ):
+        campaign.status = "completed"
+        campaign.completed_at = datetime.now(timezone.utc).isoformat()
 
     await db.commit()

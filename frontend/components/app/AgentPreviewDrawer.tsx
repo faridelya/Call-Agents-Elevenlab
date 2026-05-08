@@ -344,7 +344,7 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
 
               {/* Name */}
               <h2 style={{
-                fontFamily: 'Syne, var(--font-syne), sans-serif',
+                fontFamily: 'var(--font-syne), sans-serif',
                 fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em',
                 color: '#F8FAFC', margin: 0, marginBottom: 5,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',

@@ -20,13 +20,13 @@ async def cleanup_stale_calls(ctx: dict) -> None:
     redis = ctx.get("redis") or await get_redis_pool()
 
     async with db_factory() as db:
-        # Find all in-progress calls that started more than 2 minutes ago
+        # Find all live calls that started more than 2 minutes ago
         cutoff_recent = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
         cutoff_stale  = (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat()
 
         result = await db.execute(
             select(Call).where(
-                Call.status == "in-progress",
+                Call.status.in_(("initiated", "ringing", "in-progress")),
                 Call.started_at < cutoff_recent,
             )
         )
@@ -37,6 +37,8 @@ async def cleanup_stale_calls(ctx: dict) -> None:
             if call.started_at and call.started_at < cutoff_stale:
                 call.status = "failed"
                 call.ended_at = datetime.now(timezone.utc).isoformat()
+                from app.routers.webhooks import _finalize_call
+                await _finalize_call(call, redis, db)
                 log.warning("stale_call_force_failed", call_id=call.id)
                 continue
 

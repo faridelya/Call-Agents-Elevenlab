@@ -128,11 +128,13 @@ async def initiate_outbound_call(
 
     # Check for DNC if phone provided in lead_data
     phone = (body.lead_data or {}).get("phone") or body.to_number
+    existing_lead = None
     if phone:
-        dnc_result = await db.execute(
-            select(Lead).where(Lead.user_id == current_user.id, Lead.phone == phone, Lead.do_not_call == True)
+        lead_result = await db.execute(
+            select(Lead).where(Lead.user_id == current_user.id, Lead.phone == phone)
         )
-        if dnc_result.scalar_one_or_none():
+        existing_lead = lead_result.scalar_one_or_none()
+        if existing_lead and existing_lead.do_not_call:
             log.warning("outbound_call_blocked_dnc", to_number=phone)
             raise ValidationError("This number is on the Do Not Call list")
 
@@ -171,6 +173,7 @@ async def initiate_outbound_call(
         id=new_uuid(),
         user_id=current_user.id,
         agent_id=agent.id,
+        lead_id=existing_lead.id if existing_lead else None,
         from_number=from_number,
         to_number=body.to_number,
         direction="outbound",
@@ -187,6 +190,7 @@ async def initiate_outbound_call(
         "call_record_id": call.id,
         "agent_id": agent.id,
         "user_id": current_user.id,
+        "lead_id": existing_lead.id if existing_lead else "",
         "direction": "outbound",
         "enabled_tools": json.dumps(agent.enabled_tools),
         "tool_configs": json.dumps(agent.tool_configs),
@@ -337,6 +341,18 @@ async def end_call(
     """Terminate an in-progress call via Twilio, fetch transcript from EL, and emit call_ended."""
     from app.routers.webhooks import _finalize_call
     call = await get_call_or_404(call_id, current_user.id, db)
+
+    # If the call was transferred, the Twilio <Dial> is still executing —
+    # ringing or connected to the human agent. Terminating the call SID here
+    # would cut that leg (causing a missed call). Let it complete naturally
+    # through the <Dial action> → transfer-fallback → Twilio status callback.
+    is_transferred = (await redis.hget(f"call:{call_id}", "transferred")) == "1"
+    if is_transferred:
+        log.info("end_call_skip_transferred", call_id=call_id,
+                 note="Transferred call — skipping Twilio termination, "
+                      "human leg will complete via Twilio <Dial>")
+        return MessageResponse(message="Call transferred to human agent")
+
     if call.twilio_call_sid:
         twilio = get_twilio_service(current_user)
         try:
@@ -349,4 +365,3 @@ async def end_call(
         await _finalize_call(call, redis, db)
         await db.commit()
     return MessageResponse(message="Call ended")
-

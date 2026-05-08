@@ -500,6 +500,17 @@ export interface ElevenLabsCostData {
   error: string | null;
 }
 
+export interface TwilioCostData {
+  configured: boolean;
+  account_sid: string | null;
+  balance: number | null;
+  currency: string | null;
+  warning_level: 'ok' | 'warning' | 'critical' | 'error';
+  warning_message: string;
+  cached: boolean;
+  error: string | null;
+}
+
 export const settings = {
   usage: () => apiFetch<{ total_calls: number; total_minutes: number }>('/api/v1/settings/usage'),
   billing: () =>
@@ -518,6 +529,8 @@ export const settings = {
     apiFetch<{ tier: string; is_enterprise: boolean }>('/api/v1/settings/el-plan'),
   getElevenLabsCost: () =>
     apiFetch<ElevenLabsCostData>('/api/v1/settings/elevenlabs/cost'),
+  getTwilioCost: () =>
+    apiFetch<TwilioCostData>('/api/v1/settings/twilio/cost'),
 };
 
 // ── Phone Numbers ─────────────────────────────────────────────────────────────

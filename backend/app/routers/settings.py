@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 import json
 
@@ -90,6 +91,17 @@ class ElevenLabsCostResponse(BaseModel):
     error: str | None = None
 
 
+class TwilioCostResponse(BaseModel):
+    configured: bool
+    account_sid: str | None = None
+    balance: float | None = None
+    currency: str | None = None
+    warning_level: str = "ok"
+    warning_message: str = ""
+    cached: bool = False
+    error: str | None = None
+
+
 def _resolve_user_el_key(current_user: User) -> tuple[str, bool]:
     api_key = ""
     if current_user.elevenlabs_api_key:
@@ -100,6 +112,19 @@ def _resolve_user_el_key(current_user: User) -> tuple[str, bool]:
     if api_key:
         return api_key, True
     return settings.elevenlabs_api_key, False
+
+
+def _resolve_user_twilio_credentials(current_user: User) -> tuple[str, str, bool]:
+    account_sid = current_user.twilio_account_sid or ""
+    auth_token = ""
+    if current_user.twilio_auth_token:
+        try:
+            auth_token = decrypt(current_user.twilio_auth_token)
+        except Exception:
+            auth_token = current_user.twilio_auth_token
+    if account_sid and auth_token:
+        return account_sid, auth_token, True
+    return settings.twilio_account_sid, settings.twilio_auth_token, False
 
 
 def _invoice(data: dict | None, currency: str | None) -> ElevenLabsInvoice | None:
@@ -182,6 +207,54 @@ def _normalize_el_cost(data: dict, *, configured: bool, cached: bool = False) ->
     )
 
 
+def _normalize_twilio_cost(
+    data: dict,
+    *,
+    configured: bool,
+    account_sid: str | None,
+    cached: bool = False,
+) -> TwilioCostResponse:
+    if data.get("error"):
+        return TwilioCostResponse(
+            configured=configured,
+            account_sid=account_sid,
+            warning_level="error",
+            warning_message="Unable to fetch Twilio balance. Verify the Account SID and Auth Token.",
+            cached=cached,
+            error=str(data.get("error")),
+        )
+
+    raw_balance = data.get("balance")
+    balance_decimal: Decimal | None = None
+    try:
+        if raw_balance is not None:
+            balance_decimal = Decimal(str(raw_balance))
+    except (InvalidOperation, ValueError):
+        balance_decimal = None
+
+    warning_level = "ok"
+    warning_message = "Twilio balance is available for outbound calls."
+    if balance_decimal is None:
+        warning_level = "warning"
+        warning_message = "Twilio did not return a readable balance. Check the Twilio console before campaigns."
+    elif balance_decimal <= 0:
+        warning_level = "critical"
+        warning_message = "Twilio balance is empty. Outbound calls can fail until you add funds."
+    elif balance_decimal < Decimal("5"):
+        warning_level = "warning"
+        warning_message = "Twilio balance is low. Add funds before running larger campaigns."
+
+    return TwilioCostResponse(
+        configured=configured,
+        account_sid=account_sid,
+        balance=float(balance_decimal) if balance_decimal is not None else None,
+        currency=data.get("currency"),
+        warning_level=warning_level,
+        warning_message=warning_message,
+        cached=cached,
+    )
+
+
 @router.get("/credentials", response_model=CredentialsResponse)
 async def get_credentials(current_user: User = Depends(get_current_user)):
     """Return masked credential values and connection status."""
@@ -231,6 +304,8 @@ async def save_credentials(
     await db.commit()
     if body.elevenlabs_api_key is not None:
         await redis.delete(f"el_plan:{current_user.id}", f"el_cost:{current_user.id}")
+    if body.twilio_account_sid is not None or body.twilio_auth_token is not None:
+        await redis.delete(f"twilio_cost:{current_user.id}")
     return MessageResponse(message="Credentials saved")
 
 
@@ -332,6 +407,48 @@ async def get_elevenlabs_cost(
     data = await elevenlabs_service.get_subscription_usage(api_key)
     await redis.set(cache_key, json.dumps(data), ex=300)
     return _normalize_el_cost(data, configured=user_configured or bool(settings.elevenlabs_api_key), cached=False)
+
+
+@router.get("/twilio/cost", response_model=TwilioCostResponse)
+async def get_twilio_cost(
+    current_user: User = Depends(get_current_user),
+    redis=Depends(get_redis),
+):
+    """Return Twilio balance and warning information for the active credentials."""
+    from app.services.twilio_service import TwilioService
+
+    account_sid, auth_token, user_configured = _resolve_user_twilio_credentials(current_user)
+    configured = bool(account_sid and auth_token)
+    if not configured:
+        return TwilioCostResponse(
+            configured=False,
+            warning_level="error",
+            warning_message="Twilio credentials are not configured.",
+            error="missing_credentials",
+        )
+
+    cache_key = f"twilio_cost:{current_user.id}"
+    cached = await redis.get(cache_key)
+    if cached:
+        raw = cached if isinstance(cached, str) else cached.decode()
+        return _normalize_twilio_cost(
+            json.loads(raw),
+            configured=configured,
+            account_sid=account_sid,
+            cached=True,
+        )
+
+    try:
+        data = await TwilioService(account_sid=account_sid, auth_token=auth_token).get_balance()
+    except Exception as exc:
+        data = {"error": str(exc)}
+    await redis.set(cache_key, json.dumps(data), ex=300)
+    return _normalize_twilio_cost(
+        data,
+        configured=user_configured or bool(settings.twilio_account_sid and settings.twilio_auth_token),
+        account_sid=account_sid,
+        cached=False,
+    )
 
 
 @router.get("/integrations")

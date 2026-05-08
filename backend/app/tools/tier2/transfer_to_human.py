@@ -23,13 +23,17 @@ Why server-side webhook (not "client"):
 """
 import re
 from datetime import datetime, timezone
+from html import escape
+from urllib.parse import urlencode
 
-import httpx
 import structlog
+from sqlalchemy import select
 
 from app.tools.registry import register_tool
 from app.tools.schemas import CallContext
 from app.config import settings
+from app.models.user import User
+from app.utils.crypto import decrypt
 
 log = structlog.get_logger(__name__)
 
@@ -70,6 +74,31 @@ def _readable_number(e164: str) -> str:
         return f"{digits[1:4]} {digits[4:7]} {digits[7:]}"
     # Generic: split into chunks of 3
     return " ".join(digits[i : i + 3] for i in range(0, len(digits), 3))
+
+
+async def _resolve_twilio_credentials(ctx: CallContext, db) -> tuple[str, str, str]:
+    """Return account SID/auth token for the Twilio account that owns this call."""
+    account_sid = ""
+    auth_token = ""
+    credential_source = "missing"
+
+    if ctx.user_id:
+        result = await db.execute(select(User).where(User.id == ctx.user_id))
+        user = result.scalar_one_or_none()
+        if user and user.twilio_account_sid and user.twilio_auth_token:
+            account_sid = user.twilio_account_sid
+            try:
+                auth_token = decrypt(user.twilio_auth_token)
+            except Exception:
+                auth_token = user.twilio_auth_token
+            credential_source = "user"
+
+    if not account_sid or not auth_token:
+        account_sid = settings.twilio_account_sid
+        auth_token = settings.twilio_auth_token
+        credential_source = "platform" if account_sid and auth_token else "missing"
+
+    return account_sid, auth_token, credential_source
 
 
 @register_tool(
@@ -121,6 +150,8 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
     transfer_type = (
         params.get("transfer_type") or cfg.get("mode") or "cold"
     ).lower()
+    if transfer_type not in {"warm", "cold"}:
+        transfer_type = "cold"
     reason = (params.get("reason") or "").strip()
 
     # ── 3. Resolve Twilio call SID ────────────────────────────────────────────
@@ -137,8 +168,13 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
             f"You can reach our team directly at {_readable_number(transfer_to)}."
         )
 
-    if not settings.twilio_account_sid or not settings.twilio_auth_token:
-        log.error("transfer_twilio_creds_missing", call_record_id=ctx.call_record_id)
+    account_sid, auth_token, credential_source = await _resolve_twilio_credentials(ctx, db)
+    if not account_sid or not auth_token:
+        log.error(
+            "transfer_twilio_creds_missing",
+            call_record_id=ctx.call_record_id,
+            user_id=ctx.user_id,
+        )
         return (
             f"The transfer could not be completed — Twilio is not configured. "
             f"Please reach us at {_readable_number(transfer_to)}."
@@ -162,79 +198,76 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
         call_sid=call_sid,
         transfer_to=transfer_to,
         transfer_type=transfer_type,
+        credential_source=credential_source,
         reason=reason or "(none)",
     )
 
     # ── 5. Build redirect TwiML ───────────────────────────────────────────────
     base = settings.public_url
-    fallback_url = (
-        f"{base}/api/v1/webhooks/twilio/transfer-fallback"
-        f"?call_record_id={ctx.call_record_id}&transfer_to={transfer_to}"
-    )
-    recording_cb = (
-        f"{base}/api/v1/webhooks/twilio/recording"
-        f"?call_record_id={ctx.call_record_id}&is_transfer=1"
-    )
-    status_cb = f"{base}/api/v1/webhooks/twilio/status"
+    fallback_qs = urlencode({"call_record_id": ctx.call_record_id, "transfer_to": transfer_to})
+    recording_qs = urlencode({"call_record_id": ctx.call_record_id, "is_transfer": "1"})
+    fallback_url = f"{base}/api/v1/webhooks/twilio/transfer-fallback?{fallback_qs}"
+    recording_cb = f"{base}/api/v1/webhooks/twilio/recording?{recording_qs}"
 
     # <Dial action> fires when the dialed leg ends (answered, busy, no-answer, failed).
-    # record="record-from-answer" captures the human-agent leg for QA.
-    # timeout="30" gives the human agent 30 seconds to pick up.
+    # recordingChannels="dual" separates customer (ch0) and human agent (ch1) into
+    # distinct stereo tracks so transcription needs no speaker-guessing heuristic.
+    fallback_attr = escape(fallback_url, quote=True)
+    recording_attr = escape(recording_cb, quote=True)
     twiml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response>"
-        f'<Dial action="{fallback_url}" method="POST" timeout="30" '
-        f'record="record-from-answer" recordingStatusCallback="{recording_cb}">'
-        f'<Number statusCallbackEvent="initiated ringing answered completed" '
-        f'statusCallback="{status_cb}">{transfer_to}</Number>'
+        f'<Dial action="{fallback_attr}" method="POST" timeout="30" '
+        f'record="record-from-answer" recordingChannels="dual" '
+        f'recordingStatusCallback="{recording_attr}">'
+        f"<Number>{transfer_to}</Number>"
         "</Dial>"
         "</Response>"
     )
 
-    # ── 6. Redirect the live Twilio call via REST API ─────────────────────────
-    twilio_url = (
-        f"https://api.twilio.com/2010-04-01/Accounts/"
-        f"{settings.twilio_account_sid}/Calls/{call_sid}.json"
+    # ── 6. Redirect the live Twilio call via REST API (with auto-retry) ──────────
+    from app.services.twilio_service import TwilioService
+    from app.core.exceptions import ExternalServiceError
+
+    twilio_service = TwilioService(account_sid=account_sid, auth_token=auth_token)
+    log.info(
+        "transfer_redirect_attempt",
+        call_record_id=ctx.call_record_id,
+        call_sid=call_sid,
+        transfer_to=transfer_to,
+        transfer_type=transfer_type,
+        credential_source=credential_source,
+        account_sid_prefix=account_sid[:8] if account_sid else "MISSING",
     )
     try:
-        async with httpx.AsyncClient(
-            auth=(settings.twilio_account_sid, settings.twilio_auth_token),
-            timeout=10.0,
-        ) as client:
-            r = await client.post(twilio_url, data={"Twiml": twiml})
-
-        if r.status_code not in (200, 201):
-            log.error(
-                "transfer_twilio_update_failed",
-                call_sid=call_sid,
-                http_status=r.status_code,
-                body=r.text[:300],
-            )
-            return (
-                f"I was unable to complete the transfer at this time. "
-                f"You can reach our team directly at {_readable_number(transfer_to)}. "
-                f"I apologize for the inconvenience."
-            )
-
+        await twilio_service.redirect_call(call_sid, twiml)
         log.info(
             "transfer_redirect_ok",
             call_record_id=ctx.call_record_id,
             call_sid=call_sid,
             transfer_to=transfer_to,
             transfer_type=transfer_type,
+            credential_source=credential_source,
         )
 
-    except httpx.TimeoutException:
-        log.error("transfer_twilio_timeout", call_sid=call_sid)
-        return (
-            f"The transfer timed out. Please try again or contact us directly "
-            f"at {_readable_number(transfer_to)}."
+    except ExternalServiceError as exc:
+        error_msg = str(exc)
+        log.error(
+            "transfer_redirect_failed",
+            call_sid=call_sid,
+            credential_source=credential_source,
+            account_sid_prefix=account_sid[:8] if account_sid else "MISSING",
+            error=error_msg,
         )
-    except httpx.RequestError as exc:
-        log.error("transfer_twilio_request_error", call_sid=call_sid, error=str(exc))
+        await redis.hset(
+            f"call:{ctx.call_record_id}",
+            "transfer_fallback_status",
+            "redirect_failed",
+        )
         return (
-            f"The transfer couldn't be completed due to a network issue. "
-            f"You can reach our team at {_readable_number(transfer_to)}."
+            f"I was unable to complete the transfer at this time. "
+            f"You can reach our team directly at {_readable_number(transfer_to)}. "
+            f"I apologize for the inconvenience."
         )
 
     return "Connecting you now — please hold while we transfer your call."

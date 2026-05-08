@@ -1,11 +1,9 @@
-# syntax=docker/dockerfile:1.7
 # ── Stage 1: install dependencies ────────────────────────────────
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # npm cache persists across builds so `npm ci` is a cache-hit when lockfile unchanged
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+RUN npm ci
 
 # ── Stage 2: build Next.js app ───────────────────────────────────
 FROM node:20-alpine AS builder
