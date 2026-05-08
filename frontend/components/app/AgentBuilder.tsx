@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAgent, useCreateAgent, useUpdateAgent, useSyncAgent, useVoices } from '@/lib/hooks/useAgents';
-import { settings as apiSettings } from '@/lib/api';
-import type { AgentCreate } from '@/lib/api';
+import { settings as apiSettings, tools as toolsApi } from '@/lib/api';
+import type { AgentCreate, CustomTool, CustomToolCreate } from '@/lib/api';
+import { CreateToolModal } from './CreateToolModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -294,8 +295,10 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
   const [sttProvider,    setSttProvider]    = useState('elevenlabs');
   const [stability,      setStability]      = useState<number | null>(null);
   const [similarity,     setSimilarity]     = useState<number | null>(null);
-  const [twilioPhone,    setTwilioPhone]    = useState('');
-  const [inboundPhone,   setInboundPhone]   = useState('');
+  const [twilioPhone,       setTwilioPhone]       = useState('');
+  const [inboundPhone,      setInboundPhone]      = useState('');
+  const [knowledgeBaseId,   setKnowledgeBaseId]   = useState('');
+  const [knowledgeBaseName, setKnowledgeBaseName] = useState('');
   const [isSaving,  setIsSaving]  = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -326,6 +329,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
     setProductName(existing.product_name ?? '');
     setTwilioPhone(existing.twilio_phone_number ?? '');
     setInboundPhone(existing.inbound_phone_number ?? '');
+    setKnowledgeBaseId(existing.knowledge_base_id ?? '');
+    setKnowledgeBaseName(existing.knowledge_base_name ?? '');
     const tools = existing.enabled_tools ?? [];
     setEnabledTools([...new Set([...TIER1_IDS, ...tools])]);
     const savedCfg = (existing.tool_configs as Record<string, Record<string, string>>) ?? {};
@@ -379,6 +384,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
       tts_model: ttsModel, stt_provider: sttProvider,
       voice_stability: stability ?? undefined, voice_similarity: similarity ?? undefined,
       enabled_tools: enabledTools, tool_configs: relevantConfigs as Record<string, unknown>,
+      knowledge_base_id: knowledgeBaseId || null,
+      knowledge_base_name: knowledgeBaseName || null,
       call_script: {
         opener: scriptOpener || undefined, discovery: scriptDiscovery || undefined,
         pitch: scriptPitch || undefined, objection_handling: scriptObjection || undefined,
@@ -705,7 +712,20 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
             twilioCxn={twilioCxn}
           />
         )}
-        {tab === 'tools'    && <ToolsTab enabledTools={enabledTools} setEnabledTools={setEnabledTools} toolConfigs={toolConfigs} setToolConfigs={setToolConfigs} />}
+        {tab === 'tools'    && (
+          <ToolsTab
+            agentId={agentId ?? ''}
+            enabledTools={enabledTools}
+            setEnabledTools={setEnabledTools}
+            toolConfigs={toolConfigs}
+            setToolConfigs={setToolConfigs}
+            knowledgeBaseId={knowledgeBaseId}
+            setKnowledgeBaseId={setKnowledgeBaseId}
+            knowledgeBaseName={knowledgeBaseName}
+            setKnowledgeBaseName={setKnowledgeBaseName}
+            onShowToast={showToast}
+          />
+        )}
         {tab === 'voice'    && <VoiceTab voices={voices} selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice} stability={stability} setStability={setStability} similarity={similarity} setSimilarity={setSimilarity} ttsModel={ttsModel} setTtsModel={setTtsModel} sttProvider={sttProvider} setSttProvider={setSttProvider} />}
         {tab === 'script'   && <ScriptTab opener={scriptOpener} setOpener={setScriptOpener} discovery={scriptDiscovery} setDiscovery={setScriptDiscovery} pitch={scriptPitch} setPitch={setScriptPitch} objection={scriptObjection} setObjection={setScriptObjection} closing={scriptClosing} setClosing={setScriptClosing} faq={scriptFaq} setFaq={setScriptFaq} />}
         {tab === 'advanced' && <AdvancedTab maxDuration={maxDuration} setMaxDuration={setMaxDuration} silenceTimeout={silenceTimeout} setSilenceTimeout={setSilenceTimeout} llmModel={llmModel} setLlmModel={setLlmModel} temperature={temperature} setTemperature={setTemperature} />}
@@ -877,14 +897,81 @@ function ConfigTab({
   );
 }
 
+// ─── EL System tool catalog (static — matches backend system_catalog.py) ─────
+
+const EL_SYSTEM_TOOLS: Array<{
+  key: string; label: string; subtitle: string; desc: string; color: string; icon: string;
+  configFields: Array<{ key: string; label: string; type: string }>;
+}> = [
+  {
+    key: 'el_transfer_to_number',
+    label: 'Transfer to Number',
+    subtitle: 'ElevenLabs Native',
+    desc: 'Built-in call transfer via SIP REFER or cold/warm dial — no backend required.',
+    color: '#7C6EFA',
+    icon: 'M16 3h5v5M4 20L21 3M21 3l-5 18-4-7-7-4',
+    configFields: [{ key: 'transfers', label: 'Transfer Destinations', type: 'transfer_list' }],
+  },
+  {
+    key: 'el_end_conversation',
+    label: 'End Conversation',
+    subtitle: 'ElevenLabs Native',
+    desc: 'Lets the agent cleanly hang up without additional backend logic.',
+    color: '#EF4444',
+    icon: 'M3 5a2 2 0 0 1 2-2h3l2 4.5-2.5 1.5a11 11 0 0 0 5 5l1.5-2.5L20 13v3a2 2 0 0 1-2 2 16 16 0 0 1-15-15',
+    configFields: [],
+  },
+  {
+    key: 'el_language_detection',
+    label: 'Language Detection',
+    subtitle: 'ElevenLabs Native',
+    desc: 'Detects caller language and switches agent response automatically.',
+    color: '#22D3EE',
+    icon: 'M2 12a10 10 0 1 0 20 0A10 10 0 0 0 2 12zM12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z',
+    configFields: [],
+  },
+];
+
 // ─── Tools tab ────────────────────────────────────────────────────────────────
-function ToolsTab({ enabledTools, setEnabledTools, toolConfigs, setToolConfigs }: {
+function ToolsTab({
+  agentId, enabledTools, setEnabledTools, toolConfigs, setToolConfigs,
+  knowledgeBaseId, setKnowledgeBaseId, knowledgeBaseName, setKnowledgeBaseName,
+  onShowToast,
+}: {
+  agentId: string;
   enabledTools: string[]; setEnabledTools: (t: string[]) => void;
   toolConfigs: Record<string, Record<string, string>>; setToolConfigs: (c: Record<string, Record<string, string>>) => void;
+  knowledgeBaseId: string; setKnowledgeBaseId: (v: string) => void;
+  knowledgeBaseName: string; setKnowledgeBaseName: (v: string) => void;
+  onShowToast: (msg: string, type: 'success' | 'error') => void;
 }) {
+  const [customTools,     setCustomTools]     = useState<CustomTool[]>([]);
+  const [loadingCustom,   setLoadingCustom]   = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingTool,     setEditingTool]     = useState<CustomTool | null>(null);
+  const [expandedSys,     setExpandedSys]     = useState<string | null>(null);
+  const [expandedT2,      setExpandedT2]      = useState<string | null>(null);
+  const [_kbFocused,      _setKbFocused]      = useState(false); // reserved for future focus ring
+
+  // Load custom tools for this agent
+  useEffect(() => {
+    if (!agentId) return;
+    setLoadingCustom(true);
+    toolsApi.listCustom(agentId)
+      .then((r) => setCustomTools(r.items))
+      .catch(() => {})
+      .finally(() => setLoadingCustom(false));
+  }, [agentId]);
+
   const toggle = (id: string) => {
     if (TIER1_IDS.has(id)) return;
-    setEnabledTools(enabledTools.includes(id) ? enabledTools.filter((t) => t !== id) : [...enabledTools, id]);
+    const next = enabledTools.includes(id) ? enabledTools.filter((t) => t !== id) : [...enabledTools, id];
+    setEnabledTools(next);
+    // Auto-expand config when enabling a configurable tool
+    if (!enabledTools.includes(id)) {
+      if (EL_SYSTEM_TOOLS.find((s) => s.key === id)) setExpandedSys(id);
+      else setExpandedT2(id);
+    }
   };
 
   const updateConfig = (toolId: string, key: string, value: string) => {
@@ -896,116 +983,528 @@ function ToolsTab({ enabledTools, setEnabledTools, toolConfigs, setToolConfigs }
     setToolConfigs(updated);
   };
 
+  const updateSysConfig = (toolKey: string, subKey: string, value: unknown) => {
+    const existing = (toolConfigs[toolKey] ?? {}) as Record<string, unknown>;
+    setToolConfigs({ ...toolConfigs, [toolKey]: { ...existing, [subKey]: value } } as Record<string, Record<string, string>>);
+  };
+
+  const handleCreateTool = async (data: CustomToolCreate) => {
+    const created = await toolsApi.createCustom(data);
+    setCustomTools((prev) => [created, ...prev]);
+    setShowCreateModal(false);
+    onShowToast('Tool created!', 'success');
+  };
+
+  const handleUpdateTool = async (data: CustomToolCreate) => {
+    if (!editingTool) return;
+    const updated = await toolsApi.updateCustom(editingTool.id, data);
+    setCustomTools((prev) => prev.map((t) => t.id === updated.id ? updated : t));
+    setEditingTool(null);
+    onShowToast('Tool updated!', 'success');
+  };
+
+  const handleDeleteTool = async (tool: CustomTool) => {
+    await toolsApi.deleteCustom(tool.id);
+    setCustomTools((prev) => prev.filter((t) => t.id !== tool.id));
+    onShowToast('Tool deleted', 'success');
+  };
+
   const tier1 = BUILTIN_TOOLS.filter((t) => t.tier === 1);
   const tier2 = BUILTIN_TOOLS.filter((t) => t.tier === 2);
-  const enabledTier2 = tier2.filter((t) => enabledTools.includes(t.id) && t.configurable).filter((t) => {
-    if (t.id === 'update_crm_record' && enabledTools.includes('check_crm_record')) return false;
-    return true;
-  });
+
+  const kbActive = !!knowledgeBaseId.trim();
 
   return (
-    <div style={{ maxWidth: 820 }}>
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px',
-        background: 'rgba(0,208,130,0.04)', border: '1px solid rgba(0,208,130,0.12)',
-        borderRadius: 10, marginBottom: 24, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55,
-      }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00D082" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        <span>
-          <strong style={{ color: '#00D082' }}>Tier 1 tools</strong> run inside the bridge — zero latency, always active.{' '}
-          <strong style={{ color: '#00C2B8' }}>Tier 2 tools</strong> are optional and may require API credentials.
-        </span>
-      </div>
+    <div style={{ maxWidth: 860 }}>
 
-      <SCard title="Tier 1 — Always Active">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-          {tier1.map((tool) => <ToolCard key={tool.id} tool={tool} active={true} locked={true} onToggle={() => {}} />)}
+      {/* ── Core Platform Tools ─────────────────────────────────────────────── */}
+      <SCard title="Core Platform Tools">
+        <div style={{
+          fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.55,
+          display: 'flex', gap: 8, alignItems: 'flex-start',
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00D082" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Always active on every call — no configuration needed.
         </div>
-      </SCard>
-
-      <SCard title="Tier 2 — Optional Tools" accent="#38BDF8">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {tier2.map((tool) => (
-            <ToolCard key={tool.id} tool={tool} active={enabledTools.includes(tool.id)} locked={false} onToggle={() => toggle(tool.id)} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 7 }}>
+          {tier1.map((tool) => (
+            <ToolCard key={tool.id} tool={tool} active locked />
           ))}
         </div>
       </SCard>
 
-      {enabledTier2.length > 0 && (
-        <SCard title="Tool Configuration" accent="#F0B429">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {enabledTier2.map((tool) => (
-              <ToolConfigPanel key={tool.id} tool={tool} config={toolConfigs[tool.id] ?? {}} onChange={(key, val) => updateConfig(tool.id, key, val)} />
-            ))}
+      {/* ── ElevenLabs Native Tools ──────────────────────────────────────────── */}
+      <SCard title="ElevenLabs Native Tools" accent="#7C6EFA">
+        <div style={{
+          fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.55,
+          display: 'flex', gap: 8, alignItems: 'flex-start',
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7C6EFA" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/>
+          </svg>
+          Built-in ElevenLabs capabilities — handled natively without backend callbacks.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {EL_SYSTEM_TOOLS.map((sys) => {
+            const active = enabledTools.includes(sys.key);
+            const expanded = expandedSys === sys.key && active;
+            const cfg = (toolConfigs[sys.key] ?? {}) as Record<string, string>;
+            return (
+              <div key={sys.key} style={{
+                background: 'rgba(6,15,26,0.8)',
+                border: `1px solid ${active ? `${sys.color}30` : 'rgba(255,255,255,0.06)'}`,
+                borderLeft: `3px solid ${active ? sys.color : 'rgba(255,255,255,0.08)'}`,
+                borderRadius: 11, overflow: 'hidden', transition: 'border-color 0.2s',
+              }}>
+                <div
+                  style={{
+                    padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => toggle(sys.key)}
+                >
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                    background: active ? `${sys.color}15` : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${active ? `${sys.color}35` : 'rgba(255,255,255,0.07)'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.2s',
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={active ? sys.color : 'rgba(255,255,255,0.3)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d={sys.icon}/>
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: active ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                        {sys.label}
+                      </span>
+                      <span style={{
+                        fontSize: 8.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+                        color: sys.color, background: `${sys.color}14`, padding: '2px 6px', borderRadius: 9999,
+                      }}>{sys.subtitle}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>{sys.desc}</div>
+                  </div>
+                  {/* Toggle */}
+                  <div style={{
+                    width: 36, height: 20, borderRadius: 9999, position: 'relative', flexShrink: 0,
+                    background: active ? `${sys.color}25` : 'rgba(255,255,255,0.07)',
+                    border: `1px solid ${active ? `${sys.color}50` : 'rgba(255,255,255,0.1)'}`,
+                    transition: 'all 0.25s', boxShadow: active ? `0 0 12px ${sys.color}30` : 'none',
+                  }}>
+                    <div style={{
+                      position: 'absolute', top: 3, left: active ? 17 : 3,
+                      width: 12, height: 12, borderRadius: '50%',
+                      background: active ? sys.color : 'rgba(255,255,255,0.3)',
+                      transition: 'left 0.25s, background 0.25s',
+                      boxShadow: active ? `0 0 6px ${sys.color}` : 'none',
+                    }} />
+                  </div>
+                  {/* Expand chevron */}
+                  {active && sys.configFields.length > 0 && (
+                    <div
+                      onClick={(e) => { e.stopPropagation(); setExpandedSys(expanded ? null : sys.key); }}
+                      style={{ color: 'var(--text-muted)', padding: 4, cursor: 'pointer' }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                {/* Config panel for transfer_to_number */}
+                {expanded && sys.key === 'el_transfer_to_number' && (
+                  <div style={{
+                    padding: '14px 18px 16px', borderTop: `1px solid ${sys.color}18`,
+                    background: `${sys.color}05`,
+                    animation: 'ab-fade-in 0.18s both',
+                  }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
+                      Configure transfer destinations. The agent will use the first matching condition.
+                    </div>
+                    {/* Transfers array — simplified to first entry */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <GLabel>Transfer-to number (E.164)</GLabel>
+                        <GInput
+                          value={cfg.phone_number ?? ''}
+                          onChange={(e) => updateSysConfig(sys.key, 'phone_number', e.target.value)}
+                          placeholder="+15551234567"
+                        />
+                      </div>
+                      <div>
+                        <GLabel>Transfer type</GLabel>
+                        <GSelect
+                          value={cfg.transfer_type ?? 'cold'}
+                          onChange={(e) => updateSysConfig(sys.key, 'transfer_type', e.target.value)}
+                        >
+                          <option value="cold">Cold transfer</option>
+                          <option value="warm">Warm transfer</option>
+                          <option value="sip_refer">SIP REFER</option>
+                        </GSelect>
+                      </div>
+                      <div style={{ gridColumn: '1/-1' }}>
+                        <GLabel hint="— optional">Transfer condition</GLabel>
+                        <GInput
+                          value={cfg.condition ?? ''}
+                          onChange={(e) => updateSysConfig(sys.key, 'condition', e.target.value)}
+                          placeholder="e.g. when user requests to speak with a human"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </SCard>
+
+      {/* ── Platform Extension Tools (Tier 2) ──────────────────────────────── */}
+      <SCard title="Platform Extension Tools" accent="#38BDF8">
+        <div style={{
+          fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.55,
+          display: 'flex', gap: 8, alignItems: 'flex-start',
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          Optional tools with server-side execution. Some require API credentials.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {tier2.map((tool) => {
+            const active = enabledTools.includes(tool.id);
+            const expanded = expandedT2 === tool.id && active && tool.configurable;
+            const cfg = toolConfigs[tool.id] ?? {};
+            return (
+              <div key={tool.id} style={{
+                background: 'rgba(6,15,26,0.8)',
+                border: `1px solid ${active ? `${tool.color}28` : 'rgba(255,255,255,0.05)'}`,
+                borderLeft: `3px solid ${active ? tool.color : 'rgba(255,255,255,0.07)'}`,
+                borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.2s',
+              }}>
+                <div
+                  style={{
+                    padding: '10px 13px', display: 'flex', alignItems: 'center', gap: 10,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => toggle(tool.id)}
+                >
+                  <div style={{
+                    width: 7, height: 7, borderRadius: '50%', background: tool.color, flexShrink: 0,
+                    opacity: active ? 1 : 0.25, boxShadow: active ? `0 0 6px ${tool.color}` : 'none', transition: 'all 0.2s',
+                  }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: active ? 'var(--text-primary)' : 'var(--text-muted)', marginBottom: 1 }}>
+                      {tool.name}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{tool.desc}</div>
+                  </div>
+                  {/* Toggle */}
+                  <div style={{
+                    width: 32, height: 17, borderRadius: 9999, position: 'relative', flexShrink: 0,
+                    background: active ? 'rgba(0,208,130,0.2)' : 'rgba(255,255,255,0.07)',
+                    border: `1px solid ${active ? 'rgba(0,208,130,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                    transition: 'all 0.25s', boxShadow: active ? '0 0 10px rgba(0,208,130,0.3)' : 'none',
+                  }}>
+                    <div style={{
+                      position: 'absolute', top: 2.5, left: active ? 15 : 2.5,
+                      width: 10, height: 10, borderRadius: '50%',
+                      background: active ? '#00D082' : 'rgba(255,255,255,0.3)',
+                      transition: 'left 0.25s, background 0.25s',
+                      boxShadow: active ? '0 0 6px #00D082' : 'none',
+                    }} />
+                  </div>
+                  {/* Config expand */}
+                  {active && tool.configurable && (
+                    <div
+                      onClick={(e) => { e.stopPropagation(); setExpandedT2(expanded ? null : tool.id); }}
+                      style={{ color: 'var(--text-muted)', padding: 4, cursor: 'pointer' }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                {/* Inline config panel */}
+                {expanded && (
+                  <div style={{
+                    padding: '14px 16px 16px',
+                    borderTop: `1px solid ${tool.color}15`,
+                    background: `${tool.color}04`,
+                    animation: 'ab-fade-in 0.18s both',
+                  }}>
+                    <ToolConfigPanel tool={tool} config={cfg} onChange={(key, val) => updateConfig(tool.id, key, val)} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </SCard>
+
+      {/* ── Knowledge Base ───────────────────────────────────────────────────── */}
+      <SCard title="ElevenLabs Knowledge Base" accent="#10B981">
+        <div style={{
+          background: 'rgba(6,15,26,0.8)',
+          border: `1px solid ${kbActive ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.06)'}`,
+          borderLeft: `3px solid ${kbActive ? '#10B981' : 'rgba(255,255,255,0.08)'}`,
+          borderRadius: 11, overflow: 'hidden', transition: 'border-color 0.2s',
+        }}>
+          {/* Header row — always visible */}
+          <div style={{ padding: '13px 15px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'default' }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: kbActive ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${kbActive ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.07)'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s',
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={kbActive ? '#10B981' : 'rgba(255,255,255,0.3)'} strokeWidth="2" strokeLinecap="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: kbActive ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                  {kbActive ? (knowledgeBaseName || 'Knowledge Base Connected') : 'Knowledge Base'}
+                </span>
+                {kbActive && (
+                  <span style={{
+                    fontSize: 8.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+                    color: '#10B981', background: 'rgba(16,185,129,0.12)', padding: '2px 6px', borderRadius: 9999,
+                  }}>Connected</span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                {kbActive
+                  ? `ID: ${knowledgeBaseId}`
+                  : 'Connect an ElevenLabs KB so the agent can query your docs during calls'}
+              </div>
+            </div>
+            {/* Toggle */}
+            <div
+              onClick={() => { if (kbActive) { setKnowledgeBaseId(''); setKnowledgeBaseName(''); } }}
+              style={{
+                width: 36, height: 20, borderRadius: 9999, position: 'relative', flexShrink: 0,
+                background: kbActive ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.07)',
+                border: `1px solid ${kbActive ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                transition: 'all 0.25s', boxShadow: kbActive ? '0 0 12px rgba(16,185,129,0.3)' : 'none',
+                cursor: kbActive ? 'pointer' : 'default',
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: 3, left: kbActive ? 17 : 3,
+                width: 12, height: 12, borderRadius: '50%',
+                background: kbActive ? '#10B981' : 'rgba(255,255,255,0.3)',
+                transition: 'left 0.25s, background 0.25s',
+                boxShadow: kbActive ? '0 0 6px #10B981' : 'none',
+              }} />
+            </div>
           </div>
-        </SCard>
+
+          {/* Connect form — always shown but styled differently when active */}
+          <div style={{
+            padding: '0 15px 16px',
+            borderTop: `1px solid ${kbActive ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.04)'}`,
+            paddingTop: 14,
+          }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div>
+                <GLabel>Knowledge Base ID</GLabel>
+                <GInput
+                  value={knowledgeBaseId}
+                  onChange={(e) => setKnowledgeBaseId(e.target.value)}
+                  placeholder="kb_xxxxxxxxxxxxxxxx"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}
+                />
+              </div>
+              <div>
+                <GLabel hint="— display only">Name / label</GLabel>
+                <GInput
+                  value={knowledgeBaseName}
+                  onChange={(e) => setKnowledgeBaseName(e.target.value)}
+                  placeholder="Product Docs, FAQs, etc."
+                />
+              </div>
+            </div>
+
+            {/* Info row */}
+            <div style={{
+              background: 'rgba(16,185,129,0.04)', border: '1px solid rgba(16,185,129,0.12)',
+              borderRadius: 8, padding: '10px 12px',
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+            }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.6, flex: 1 }}>
+                Create and upload documents (PDF, DOCX, TXT, web URLs) in your{' '}
+                <span style={{ color: '#10B981', fontWeight: 600 }}>ElevenLabs dashboard → Conversational AI → Knowledge Bases</span>.
+                Paste the KB ID here once created. Supported: product docs, FAQs, scripts, policies.
+              </div>
+            </div>
+          </div>
+        </div>
+      </SCard>
+
+      {/* ── Custom Tools ──────────────────────────────────────────────────────── */}
+      <SCard title="Custom Tools" accent="#F0B429">
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14,
+        }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+            User-created webhook, client, or MCP tools. Automatically synced to ElevenLabs.
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '8px 16px', borderRadius: 9,
+              border: '1px solid rgba(240,180,41,0.4)',
+              background: 'rgba(240,180,41,0.08)',
+              color: '#F0B429', fontSize: 12.5, fontWeight: 700,
+              cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
+              fontFamily: 'var(--font-ui), sans-serif',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(240,180,41,0.14)'; e.currentTarget.style.borderColor = 'rgba(240,180,41,0.6)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(240,180,41,0.08)'; e.currentTarget.style.borderColor = 'rgba(240,180,41,0.4)'; }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Create tool
+          </button>
+        </div>
+
+        {loadingCustom ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 0', color: 'var(--text-muted)', fontSize: 12 }}>
+            <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#F0B429', animation: 'ab-spin 0.7s linear infinite' }} />
+            Loading custom tools…
+          </div>
+        ) : customTools.length === 0 ? (
+          <div style={{
+            textAlign: 'center', padding: '28px 0',
+            border: '1px dashed rgba(240,180,41,0.15)', borderRadius: 11,
+            color: 'var(--text-muted)', fontSize: 12,
+          }}>
+            <div style={{ marginBottom: 8, fontSize: 22 }}>⚙️</div>
+            No custom tools yet — create webhook, client, or MCP tools above.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {customTools.map((ct) => {
+              const typeColor = ct.el_tool_type === 'webhook' ? '#22D3EE' : ct.el_tool_type === 'client' ? '#7C6EFA' : '#A89AF9';
+              return (
+                <div key={ct.id} style={{
+                  background: 'rgba(6,15,26,0.8)',
+                  border: `1px solid ${ct.is_active ? `${typeColor}25` : 'rgba(255,255,255,0.05)'}`,
+                  borderLeft: `3px solid ${ct.is_active ? typeColor : 'rgba(255,255,255,0.08)'}`,
+                  borderRadius: 10, padding: '11px 14px',
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  opacity: ct.is_active ? 1 : 0.5,
+                  transition: 'all 0.2s',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {ct.name}
+                      </span>
+                      <span style={{
+                        fontSize: 8.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+                        color: typeColor, background: `${typeColor}14`, padding: '2px 6px', borderRadius: 9999,
+                      }}>{ct.el_tool_type}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ct.description}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={() => setEditingTool(ct)}
+                      style={{
+                        padding: '4px 10px', borderRadius: 7,
+                        border: `1px solid ${typeColor}30`,
+                        background: `${typeColor}08`, color: typeColor,
+                        fontSize: 11, cursor: 'pointer', fontWeight: 600,
+                        transition: 'all 0.15s',
+                      }}
+                    >Edit</button>
+                    <button
+                      onClick={() => handleDeleteTool(ct)}
+                      style={{
+                        padding: '4px 10px', borderRadius: 7,
+                        border: '1px solid rgba(255,77,109,0.25)',
+                        background: 'rgba(255,77,109,0.06)',
+                        color: '#FF4D6D', fontSize: 11, cursor: 'pointer', fontWeight: 600,
+                        transition: 'all 0.15s',
+                      }}
+                    >Delete</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SCard>
+
+      {/* Create / Edit modal */}
+      {showCreateModal && (
+        <CreateToolModal
+          agentId={agentId}
+          onSave={handleCreateTool}
+          onClose={() => setShowCreateModal(false)}
+        />
+      )}
+      {editingTool && (
+        <CreateToolModal
+          agentId={agentId}
+          editTool={editingTool}
+          onSave={handleUpdateTool}
+          onClose={() => setEditingTool(null)}
+        />
       )}
     </div>
   );
 }
 
-function ToolCard({ tool, active, locked, onToggle }: { tool: typeof BUILTIN_TOOLS[number]; active: boolean; locked: boolean; onToggle: () => void }) {
-  const [hov, setHov] = useState(false);
+function ToolCard({ tool, active, locked }: { tool: typeof BUILTIN_TOOLS[number]; active: boolean; locked?: boolean }) {
   return (
-    <div
-      onClick={onToggle}
-      onMouseEnter={() => !locked && setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        background: 'rgba(6,15,26,0.8)',
-        border: `1px solid ${active ? `${tool.color}30` : 'rgba(255,255,255,0.06)'}`,
-        borderLeft: `3px solid ${active ? tool.color : 'rgba(255,255,255,0.06)'}`,
-        borderRadius: 11, padding: '11px 14px',
-        cursor: locked ? 'default' : 'pointer', transition: 'all 0.2s',
-        boxShadow: hov && !locked ? `0 0 20px ${tool.color}15` : active ? `0 0 10px ${tool.color}08` : 'none',
-        display: 'flex', alignItems: 'flex-start', gap: 10,
-        transform: hov && !locked ? 'translateY(-1px)' : 'none',
-      }}
-    >
+    <div style={{
+      background: 'rgba(6,15,26,0.8)',
+      border: `1px solid ${active ? `${tool.color}28` : 'rgba(255,255,255,0.06)'}`,
+      borderLeft: `3px solid ${active ? tool.color : 'rgba(255,255,255,0.06)'}`,
+      borderRadius: 10, padding: '10px 13px',
+      cursor: 'default',
+      boxShadow: active ? `0 0 10px ${tool.color}06` : 'none',
+      display: 'flex', alignItems: 'flex-start', gap: 9,
+    }}>
       <div style={{
-        width: 7, height: 7, borderRadius: '50%', background: tool.color,
-        flexShrink: 0, marginTop: 5, opacity: active ? 1 : 0.25,
+        width: 6, height: 6, borderRadius: '50%', background: tool.color,
+        flexShrink: 0, marginTop: 5,
         boxShadow: active ? `0 0 6px ${tool.color}` : 'none',
-        transition: 'opacity 0.2s, box-shadow 0.2s',
+        opacity: active ? 1 : 0.25,
       }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 3 }}>
-          <div style={{
-            fontSize: 12, fontWeight: 600,
-            color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            transition: 'color 0.2s',
-          }}>{tool.name}</div>
-          {locked ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 2 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {tool.name}
+          </div>
+          {locked && (
             <span style={{
-              fontSize: 8, fontWeight: 800, color: tool.color,
-              background: `${tool.color}14`, padding: '2px 6px',
-              borderRadius: 9999, flexShrink: 0, letterSpacing: '0.06em', textTransform: 'uppercase',
+              fontSize: 7.5, fontWeight: 800, color: tool.color,
+              background: `${tool.color}14`, padding: '2px 5px',
+              borderRadius: 9999, flexShrink: 0, letterSpacing: '0.07em', textTransform: 'uppercase',
             }}>Core</span>
-          ) : (
-            <div style={{
-              width: 30, height: 16, borderRadius: 9999, flexShrink: 0, position: 'relative',
-              background: active ? `rgba(0,208,130,0.2)` : 'rgba(255,255,255,0.07)',
-              border: `1px solid ${active ? 'rgba(0,208,130,0.4)' : 'rgba(255,255,255,0.1)'}`,
-              transition: 'all 0.25s',
-              boxShadow: active ? '0 0 12px rgba(0,208,130,0.3)' : 'none',
-            }}>
-              <div style={{
-                position: 'absolute', top: 2, left: active ? 14 : 2.5,
-                width: 10, height: 10, borderRadius: '50%',
-                background: active ? '#00D082' : 'rgba(255,255,255,0.3)',
-                transition: 'left 0.25s, background 0.25s',
-                boxShadow: active ? '0 0 6px #00D082' : 'none',
-              }} />
-            </div>
           )}
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.45 }}>{tool.desc}</div>
-        {!locked && tool.configurable && active && (
-          <div style={{ fontSize: 9, color: '#00D082', marginTop: 4, fontWeight: 600, letterSpacing: '0.04em' }}>Configure below ↓</div>
-        )}
       </div>
     </div>
   );
@@ -1013,17 +1512,7 @@ function ToolCard({ tool, active, locked, onToggle }: { tool: typeof BUILTIN_TOO
 
 function ToolConfigPanel({ tool, config, onChange }: { tool: typeof BUILTIN_TOOLS[number]; config: Record<string, string>; onChange: (key: string, val: string) => void }) {
   return (
-    <div style={{
-      background: 'rgba(6,15,26,0.8)',
-      border: `1px solid ${tool.color}20`,
-      borderLeft: `3px solid ${tool.color}`,
-      borderRadius: 11, padding: '16px 18px',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        <div style={{ width: 7, height: 7, borderRadius: '50%', background: tool.color, boxShadow: `0 0 8px ${tool.color}` }} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{tool.name}</span>
-      </div>
-
+    <div>
       {tool.id === 'book_meeting' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
@@ -1084,14 +1573,14 @@ function ToolConfigPanel({ tool, config, onChange }: { tool: typeof BUILTIN_TOOL
             <GLabel>Transfer mode</GLabel>
             <div style={{ display: 'flex', gap: 8 }}>
               {(['warm', 'cold'] as const).map((m) => {
-                const active = (config.mode ?? 'warm') === m;
+                const isActive = (config.mode ?? 'warm') === m;
                 return (
                   <button key={m} onClick={() => onChange('mode', m)} style={{
-                    flex: 1, padding: '9px 0', borderRadius: 9,
-                    border: `1px solid ${active ? 'rgba(0,208,130,0.45)' : 'rgba(255,255,255,0.08)'}`,
-                    background: active ? 'rgba(0,208,130,0.1)' : 'rgba(6,15,26,0.8)',
-                    color: active ? '#00D082' : 'var(--text-muted)',
-                    fontSize: 13, fontWeight: active ? 600 : 500, cursor: 'pointer',
+                    flex: 1, padding: '8px 0', borderRadius: 8,
+                    border: `1px solid ${isActive ? 'rgba(0,208,130,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                    background: isActive ? 'rgba(0,208,130,0.1)' : 'rgba(6,15,26,0.8)',
+                    color: isActive ? '#00D082' : 'var(--text-muted)',
+                    fontSize: 12.5, fontWeight: isActive ? 600 : 500, cursor: 'pointer',
                     textTransform: 'capitalize', transition: 'all 0.15s',
                   }}>{m}</button>
                 );

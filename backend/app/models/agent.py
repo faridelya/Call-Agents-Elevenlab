@@ -52,6 +52,10 @@ class Agent(Base, TimestampMixin):
     el_config_snapshot: Mapped[dict | None] = mapped_column(JSON)
     el_last_synced_at: Mapped[str | None] = mapped_column(String(50))
 
+    # ElevenLabs Knowledge Base attachment
+    knowledge_base_id: Mapped[str | None] = mapped_column(String(255))
+    knowledge_base_name: Mapped[str | None] = mapped_column(String(255))
+
     # Telephony — the Twilio number used for calls with this agent (E.164 format)
     twilio_phone_number: Mapped[str | None] = mapped_column(String(50))
 

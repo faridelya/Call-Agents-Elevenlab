@@ -68,7 +68,22 @@ async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
     tools_result = await db.execute(
         select(Tool).where(Tool.agent_id == agent.id, Tool.is_active == True)
     )
-    custom_tools = [{"id": t.id, "name": t.name, "description": t.description, "parameters_schema": t.parameters_schema} for t in tools_result.scalars().all()]
+    custom_tools = [
+        {
+            "id": t.id,
+            "name": t.name,
+            "description": t.description,
+            "el_tool_type": t.el_tool_type,
+            "parameters_schema": t.parameters_schema,
+            "tool_parameters": t.tool_parameters,
+            "expects_response": t.expects_response,
+            "response_timeout_secs": t.response_timeout_secs,
+            "disable_interruptions": t.disable_interruptions,
+            "execution_mode": t.execution_mode,
+            "pre_tool_speech": t.pre_tool_speech,
+        }
+        for t in tools_result.scalars().all()
+    ]
 
     config = elevenlabs_service.build_agent_config(agent, custom_tools)
 

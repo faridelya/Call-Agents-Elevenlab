@@ -169,6 +169,8 @@ export interface Agent {
   tool_configs: Record<string, unknown>;
   product_catalog: object[];
   qualification_criteria: Record<string, string>;
+  knowledge_base_id?: string | null;
+  knowledge_base_name?: string | null;
   el_last_synced_at?: string;
   is_active: boolean;
   created_at: string;
@@ -208,6 +210,8 @@ export interface AgentCreate {
   tool_configs?: Record<string, unknown>;
   product_catalog?: object[];
   qualification_criteria?: Record<string, string>;
+  knowledge_base_id?: string | null;
+  knowledge_base_name?: string | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -548,4 +552,105 @@ export interface PhoneNumber {
 export const phoneNumbers = {
   list: (page = 1) =>
     apiFetch<PaginatedResponse<PhoneNumber>>(`/api/v1/phone-numbers?page=${page}&page_size=50`),
+};
+
+// ── Custom Tools ──────────────────────────────────────────────────────────────
+
+export interface CustomTool {
+  id: string;
+  agent_id: string;
+  tool_type: string;
+  el_tool_type: 'webhook' | 'client' | 'mcp';
+  name: string;
+  description: string;
+  parameters_schema: Record<string, unknown>;
+  tool_parameters: ToolParameter[];
+  config: Record<string, unknown>;
+  disable_interruptions: boolean;
+  execution_mode: string;
+  pre_tool_speech: string;
+  expects_response: boolean;
+  response_timeout_secs: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolParameter {
+  id: string;
+  type: 'string' | 'number' | 'boolean' | 'object';
+  description: string;
+  required: boolean;
+  value_type: 'llm_prompt' | 'constant';
+  constant_value?: string;
+  enum_values?: string[];
+  dynamic_variable?: string;
+}
+
+export interface HeaderPair { key: string; value: string }
+export interface QueryParam { name: string; type: string; description: string; required: boolean }
+
+export interface WebhookConfig {
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  headers: HeaderPair[];
+  query_params: QueryParam[];
+  body_params: QueryParam[];
+  auth: { type: 'none' | 'bearer' | 'api_key' | 'basic'; token?: string; header?: string; username?: string; password?: string };
+  assignments: { value_path: string; dynamic_variable: string }[];
+}
+
+export interface ClientConfig {
+  expects_response: boolean;
+  response_timeout_secs: number;
+  response_mocks: { parameter_conditions: unknown[]; mock_result: string }[];
+}
+
+export interface McpConfig {
+  server_url: string;
+  auth_type: 'none' | 'bearer';
+  auth_token?: string;
+}
+
+export interface CustomToolCreate {
+  agent_id: string;
+  el_tool_type: 'webhook' | 'client' | 'mcp';
+  tool_type?: string;
+  name: string;
+  description: string;
+  parameters_schema?: Record<string, unknown>;
+  tool_parameters?: ToolParameter[];
+  config?: WebhookConfig | ClientConfig | McpConfig | Record<string, unknown>;
+  disable_interruptions?: boolean;
+  execution_mode?: string;
+  pre_tool_speech?: string;
+  expects_response?: boolean;
+  response_timeout_secs?: number;
+}
+
+export const tools = {
+  catalog: () =>
+    apiFetch<Array<{ name: string; tier: number; execution: string; description: string; parameters: object }>>(
+      '/api/v1/tools/catalog',
+    ),
+
+  systemCatalog: () =>
+    apiFetch<Array<{
+      key: string; label: string; subtitle: string; description: string;
+      icon: string; color: string; el_type: string; system_tool_type: string;
+      default_config: Record<string, unknown>;
+      config_fields: Array<{ key: string; label: string; type: string; description: string }>;
+    }>>('/api/v1/tools/system-catalog'),
+
+  listCustom: (agent_id: string) =>
+    apiFetch<PaginatedResponse<CustomTool>>(`/api/v1/tools/custom?agent_id=${agent_id}&page_size=50`),
+
+  createCustom: (body: CustomToolCreate) =>
+    apiFetch<CustomTool>('/api/v1/tools/custom', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateCustom: (id: string, body: Partial<CustomToolCreate>) =>
+    apiFetch<CustomTool>(`/api/v1/tools/custom/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  deleteCustom: (id: string) =>
+    apiFetch<void>(`/api/v1/tools/custom/${id}`, { method: 'DELETE' }),
 };

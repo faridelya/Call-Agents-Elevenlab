@@ -348,8 +348,6 @@ class ElevenLabsService:
         stt_provider = getattr(agent, "stt_provider", "elevenlabs")              or "elevenlabs"
         max_call_dur = getattr(agent, "max_call_duration_seconds", 1800)         or 1800
 
-        # TTS — stability/similarity are flat fields at the tts level (not nested in voice_settings).
-        # When None the agent uses the voice's own ElevenLabs defaults.
         tts_config: dict = {
             "voice_id": agent.voice_id,
             "model_id": tts_model,
@@ -360,17 +358,24 @@ class ElevenLabsService:
         if agent.voice_similarity is not None:
             tts_config["similarity_boost"] = agent.voice_similarity
 
+        prompt_block: dict = {
+            "prompt": agent.system_prompt,
+            "llm": llm_model,
+            "temperature": temperature,
+            "max_tokens": 2000,
+            "tools": tool_definitions,
+        }
+
+        # Attach EL Knowledge Base when configured
+        kb_id = getattr(agent, "knowledge_base_id", None)
+        if kb_id:
+            prompt_block["knowledge_base"] = [{"type": "file", "id": kb_id}]
+
         return {
             "name": f"Voxara: {agent.name}",
             "conversation_config": {
                 "agent": {
-                    "prompt": {
-                        "prompt": agent.system_prompt,
-                        "llm": llm_model,
-                        "temperature": temperature,
-                        "max_tokens": 2000,
-                        "tools": tool_definitions,
-                    },
+                    "prompt": prompt_block,
                     "first_message": agent.first_message or "",
                     "language": agent.language,
                 },
@@ -394,12 +399,13 @@ class ElevenLabsService:
     def _build_tool_definitions(self, agent, custom_tools: list[dict]) -> list[dict]:
         from app.tools.registry import get_tool
         from app.config import settings as _settings
+        from app.tools.system_catalog import EL_SYSTEM_TOOLS, build_system_tool_def
 
         base_url = _settings.public_url
+        tool_configs = getattr(agent, "tool_configs", None) or {}
         defs = []
 
-        # ── Tier 1 tools — webhook callbacks (EL native integration) ─────────
-        # EL will POST to these URLs when the agent calls a tier 1 tool.
+        # ── Tier 1: always-on platform webhook tools ──────────────────────────
         tier1_names = [
             "save_lead", "get_contact_info", "end_call",
             "log_call_outcome", "get_call_script", "update_call_stage",
@@ -422,16 +428,12 @@ class ElevenLabsService:
                     },
                 })
 
-        # ── Tier 2 client tools (leave_voicemail only — transfer_to_human ──────
-        # is now a webhook so the EL tool callback actually hits our endpoint.
-        # In the native Twilio integration there is no JS client, so "client"
-        # type tools are silently dropped by EL; transfer MUST be a webhook.
+        # ── Tier 2: optional platform tools enabled per-agent ─────────────────
         tier2_client = {"leave_voicemail"}
         tier2_server = {
             "book_meeting", "send_followup_sms", "lookup_product_info",
             "check_crm_record", "update_crm_record", "qualify_lead",
         }
-
         tier2_descriptions = {
             "book_meeting":       "Book a meeting or appointment for the contact via the configured calendar integration.",
             "send_followup_sms":  "Send a follow-up SMS message to the contact after the call.",
@@ -440,65 +442,46 @@ class ElevenLabsService:
             "update_crm_record":  "Push call outcome and notes to the contact's CRM record.",
             "qualify_lead":       "Score and qualify the lead based on the agent's criteria.",
         }
-
         tier2_parameters = {
-            "book_meeting": {
-                "type": "object",
-                "properties": {
-                    "contact_name":   {"type": "string", "description": "Full name of the contact"},
-                    "preferred_date": {"type": "string", "description": "Preferred date/time, e.g. 'Tuesday afternoon'"},
-                    "meeting_type":   {"type": "string", "description": "Type of meeting: demo, discovery call, follow-up"},
-                },
-                "required": ["contact_name", "preferred_date"],
-            },
-            "send_followup_sms": {
-                "type": "object",
-                "properties": {
-                    "phone_number":    {"type": "string", "description": "Recipient phone number in E.164 format"},
-                    "message_template":{"type": "string", "description": "Optional custom message; uses default template if omitted"},
-                },
-                "required": ["phone_number"],
-            },
-            "lookup_product_info": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Product name, feature, or pricing question"},
-                },
-                "required": ["query"],
-            },
-            "check_crm_record": {
-                "type": "object",
-                "properties": {
-                    "phone_number": {"type": "string", "description": "Phone number to look up"},
-                },
-                "required": ["phone_number"],
-            },
-            "update_crm_record": {
-                "type": "object",
-                "properties": {
-                    "crm_id":    {"type": "string", "description": "CRM record ID"},
-                    "properties":{"type": "object", "description": "Key-value pairs to update"},
-                    "note":      {"type": "string", "description": "Note to add about this call"},
-                },
-                "required": ["crm_id"],
-            },
-            "qualify_lead": {
-                "type": "object",
-                "properties": {
-                    "answers": {"type": "object", "description": "Qualification criteria and contact's answers"},
-                },
-                "required": ["answers"],
-            },
+            "book_meeting": {"type": "object", "properties": {
+                "contact_name":   {"type": "string", "description": "Full name of the contact"},
+                "preferred_date": {"type": "string", "description": "Preferred date/time, e.g. 'Tuesday afternoon'"},
+                "meeting_type":   {"type": "string", "description": "Type of meeting: demo, discovery call, follow-up"},
+            }, "required": ["contact_name", "preferred_date"]},
+            "send_followup_sms": {"type": "object", "properties": {
+                "phone_number":     {"type": "string", "description": "Recipient phone number in E.164 format"},
+                "message_template": {"type": "string", "description": "Optional custom message; uses default template if omitted"},
+            }, "required": ["phone_number"]},
+            "lookup_product_info": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "Product name, feature, or pricing question"},
+            }, "required": ["query"]},
+            "check_crm_record": {"type": "object", "properties": {
+                "phone_number": {"type": "string", "description": "Phone number to look up"},
+            }, "required": ["phone_number"]},
+            "update_crm_record": {"type": "object", "properties": {
+                "crm_id":    {"type": "string", "description": "CRM record ID"},
+                "properties":{"type": "object", "description": "Key-value pairs to update"},
+                "note":      {"type": "string", "description": "Note to add about this call"},
+            }, "required": ["crm_id"]},
+            "qualify_lead": {"type": "object", "properties": {
+                "answers": {"type": "object", "description": "Qualification criteria and contact's answers"},
+            }, "required": ["answers"]},
         }
 
         for tool_name in agent.enabled_tools:
+            # ── EL native system tools (keys start with "el_") ─────────────────
+            if tool_name.startswith("el_") and tool_name in EL_SYSTEM_TOOLS:
+                cfg = tool_configs.get(tool_name, {})
+                sys_def = build_system_tool_def(tool_name, cfg)
+                if sys_def:
+                    defs.append(sys_def)
+                continue
+
+            # ── Our custom transfer_to_human (Twilio webhook) ──────────────────
             if tool_name == "transfer_to_human":
-                # Webhook tool — EL calls our endpoint which performs the real Twilio redirect.
-                # We enrich the description with the configured number so EL understands
-                # it does not need to supply one; it just calls the tool.
                 tool = get_tool(tool_name)
                 if tool:
-                    cfg = (getattr(agent, "tool_configs", None) or {}).get("transfer_to_human", {})
+                    cfg = tool_configs.get("transfer_to_human", {})
                     configured_number = (cfg.get("transfer_to") or "").strip()
                     number_note = (
                         f" The transfer number {configured_number} is pre-configured — "
@@ -545,22 +528,39 @@ class ElevenLabsService:
                     },
                 })
 
-        # ── Tier 3 custom tools ────────────────────────────────────────────────
+        # ── Custom user-created tools (webhook | client | mcp) ────────────────
         for ct in custom_tools:
-            defs.append({
-                "type": "webhook",
-                "name": ct["name"],
-                "description": ct["description"],
-                "api_schema": {
-                    "url": f"{base_url}/api/v1/tools/custom/{ct['id']}",
-                    "method": "POST",
-                    "request_headers": {
-                        "X-Voxara-Secret": agent.signing_secret,
-                        "X-Agent-Id": agent.id,
+            el_type = ct.get("el_tool_type", "webhook")
+            if el_type == "client":
+                defs.append({
+                    "type": "client",
+                    "name": ct["name"],
+                    "description": ct["description"],
+                    "parameters": ct.get("tool_parameters", []),
+                    "expects_response": ct.get("expects_response", False),
+                    "response_timeout_secs": ct.get("response_timeout_secs", 20),
+                    "disable_interruptions": ct.get("disable_interruptions", False),
+                    "execution_mode": ct.get("execution_mode", "immediate"),
+                    "pre_tool_speech": ct.get("pre_tool_speech", "auto"),
+                })
+            else:
+                # webhook and mcp both call back to our proxy
+                defs.append({
+                    "type": "webhook",
+                    "name": ct["name"],
+                    "description": ct["description"],
+                    "api_schema": {
+                        "url": f"{base_url}/api/v1/tools/custom/{ct['id']}",
+                        "method": "POST",
+                        "request_headers": {
+                            "X-Voxara-Secret": agent.signing_secret,
+                            "X-Agent-Id": agent.id,
+                        },
+                        "request_body_schema": ct["parameters_schema"],
                     },
-                    "request_body_schema": ct["parameters_schema"],
-                },
-            })
+                    "response_timeout_secs": ct.get("response_timeout_secs", 20),
+                    "disable_interruptions": ct.get("disable_interruptions", False),
+                })
 
         return defs
 
