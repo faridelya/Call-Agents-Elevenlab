@@ -314,7 +314,7 @@ export function HeroSection({ onCTA }: { onCTA: () => void }) {
       {/* Dot grid */}
       <div style={{
         position: 'absolute', inset: 0,
-        backgroundImage: 'radial-gradient(rgba(0,208,130,0.04) 1px, transparent 1px)',
+        backgroundImage: 'radial-gradient(rgba(0,208,130,0.18) 1px, transparent 1px)',
         backgroundSize: '32px 32px',
         pointerEvents: 'none',
       }} />
@@ -323,21 +323,21 @@ export function HeroSection({ onCTA }: { onCTA: () => void }) {
       <div style={{
         position: 'absolute', top: '-5%', left: '28%',
         width: 1000, height: 800,
-        background: 'radial-gradient(ellipse at 40% 40%, rgba(0,208,130,0.09) 0%, rgba(0,194,184,0.05) 35%, transparent 65%)',
+        background: 'radial-gradient(ellipse at 40% 40%, rgba(0,208,130,0.14) 0%, rgba(0,194,184,0.08) 35%, transparent 65%)',
         pointerEvents: 'none',
       }} />
       {/* Teal accent — bottom right */}
       <div style={{
         position: 'absolute', bottom: '5%', right: '5%',
         width: 600, height: 500,
-        background: 'radial-gradient(ellipse, rgba(56,189,248,0.06) 0%, transparent 65%)',
+        background: 'radial-gradient(ellipse, rgba(56,189,248,0.10) 0%, transparent 65%)',
         pointerEvents: 'none',
       }} />
-      {/* Subtle blue — top left */}
+      {/* Subtle green — top left */}
       <div style={{
         position: 'absolute', top: '15%', left: '-5%',
         width: 400, height: 400,
-        background: 'radial-gradient(ellipse, rgba(0,208,130,0.04) 0%, transparent 70%)',
+        background: 'radial-gradient(ellipse, rgba(0,208,130,0.08) 0%, transparent 70%)',
         pointerEvents: 'none',
       }} />
       {/* Horizontal glow stripe */}
@@ -389,7 +389,7 @@ export function HeroSection({ onCTA }: { onCTA: () => void }) {
             fontFamily: 'var(--font-syne), sans-serif',
             fontSize: 70, fontWeight: 800,
             lineHeight: 1.0, letterSpacing: '-0.04em',
-            color: '#F1F5F9', marginBottom: 24,
+            color: '#0F172A', marginBottom: 24,
             animation: 'fade-in 0.6s 0.1s both',
           }}>
             Voice agents
@@ -404,7 +404,7 @@ export function HeroSection({ onCTA }: { onCTA: () => void }) {
 
           {/* Body */}
           <p style={{
-            fontSize: 18, lineHeight: 1.72, color: '#4A6080',
+            fontSize: 18, lineHeight: 1.72, color: '#64748B',
             marginBottom: 38, maxWidth: 450,
             fontFamily: 'var(--font-inter), sans-serif', fontWeight: 400,
             animation: 'fade-in 0.6s 0.2s both',
@@ -436,7 +436,7 @@ export function HeroSection({ onCTA }: { onCTA: () => void }) {
               <div key={l} style={{
                 paddingRight: idx < stats.length - 1 ? 32 : 0,
                 marginRight: idx < stats.length - 1 ? 32 : 0,
-                borderRight: idx < stats.length - 1 ? '1px solid rgba(0,208,130,0.1)' : 'none',
+                borderRight: idx < stats.length - 1 ? '1px solid #E2E8F0' : 'none',
               }}>
                 <div style={{
                   fontFamily: 'var(--font-jetbrains-mono), monospace',
@@ -446,7 +446,7 @@ export function HeroSection({ onCTA }: { onCTA: () => void }) {
                   {n}
                 </div>
                 <div style={{
-                  fontSize: 12, color: '#334155', marginTop: 5,
+                  fontSize: 12, color: '#64748B', marginTop: 5,
                   fontFamily: 'var(--font-inter), sans-serif',
                 }}>
                   {l}

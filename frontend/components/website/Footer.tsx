@@ -12,8 +12,8 @@ export function SiteFooter() {
   return (
     <footer
       style={{
-        background: 'rgba(6,9,16,0.95)',
-        borderTop: '1px solid rgba(0,208,130,0.1)',
+        background: '#F1F5F9',
+        borderTop: '1px solid #E2E8F0',
         padding: '64px 80px 40px',
       }}
     >
@@ -32,7 +32,7 @@ export function SiteFooter() {
               style={{
                 marginTop: 14,
                 fontSize: 13,
-                color: '#334155',
+                color: '#64748B',
                 lineHeight: 1.7,
                 maxWidth: 240,
                 fontFamily: 'var(--font-inter), sans-serif',
@@ -61,10 +61,10 @@ export function SiteFooter() {
                 <div
                   key={l}
                   onMouseEnter={(e) => ((e.target as HTMLElement).style.color = '#00D082')}
-                  onMouseLeave={(e) => ((e.target as HTMLElement).style.color = '#334155')}
+                  onMouseLeave={(e) => ((e.target as HTMLElement).style.color = '#64748B')}
                   style={{
                     fontSize: 13,
-                    color: '#334155',
+                    color: '#64748B',
                     marginBottom: 10,
                     cursor: 'pointer',
                     transition: 'color 0.2s',
@@ -79,15 +79,15 @@ export function SiteFooter() {
         </div>
         <div
           style={{
-            borderTop: '1px solid rgba(0,208,130,0.07)',
+            borderTop: '1px solid #E2E8F0',
             paddingTop: 24,
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
           }}
         >
-          <span style={{ fontSize: 12, color: '#1E293B', fontFamily: 'var(--font-inter), sans-serif' }}>© 2025 Voxara, Inc.</span>
-          <span style={{ fontSize: 12, color: '#1E293B', fontFamily: 'var(--font-inter), sans-serif' }}>Built for builders.</span>
+          <span style={{ fontSize: 12, color: '#94A3B8', fontFamily: 'var(--font-inter), sans-serif' }}>© 2025 Voxara, Inc.</span>
+          <span style={{ fontSize: 12, color: '#94A3B8', fontFamily: 'var(--font-inter), sans-serif' }}>Built for builders.</span>
         </div>
       </div>
     </footer>

@@ -27,9 +27,9 @@ export function NavHeader({ onNav }: NavHeaderProps) {
         right: 0,
         zIndex: 200,
         height: 64,
-        background: scrolled ? 'rgba(6,15,26,0.85)' : 'transparent',
+        background: scrolled ? 'rgba(248,250,252,0.92)' : 'transparent',
         backdropFilter: scrolled ? 'blur(24px) saturate(160%)' : 'none',
-        borderBottom: scrolled ? '1px solid rgba(0,208,130,0.12)' : '1px solid transparent',
+        borderBottom: scrolled ? '1px solid rgba(0,0,0,0.08)' : '1px solid transparent',
         transition: 'all 0.35s',
         padding: '0 60px',
         display: 'flex',
@@ -44,7 +44,7 @@ export function NavHeader({ onNav }: NavHeaderProps) {
             key={l}
             onClick={() => onNav(l)}
             onMouseEnter={(e) => (e.currentTarget.style.color = '#00D082')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#4A6080')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '#334155')}
             style={{
               background: 'transparent',
               border: 'none',
@@ -52,7 +52,7 @@ export function NavHeader({ onNav }: NavHeaderProps) {
               fontFamily: 'var(--font-inter), sans-serif',
               fontSize: 14,
               fontWeight: 500,
-              color: '#4A6080',
+              color: '#334155',
               padding: '8px 14px',
               borderRadius: 8,
               transition: 'color 0.2s',
@@ -66,7 +66,7 @@ export function NavHeader({ onNav }: NavHeaderProps) {
         <button
           onClick={() => onNav('app')}
           onMouseEnter={(e) => (e.currentTarget.style.color = '#00D082')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '#4A6080')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = '#334155')}
           style={{
             background: 'transparent',
             border: 'none',
@@ -74,7 +74,7 @@ export function NavHeader({ onNav }: NavHeaderProps) {
             fontFamily: 'var(--font-inter), sans-serif',
             fontSize: 14,
             fontWeight: 500,
-            color: '#4A6080',
+            color: '#334155',
             padding: '8px 14px',
             transition: 'color 0.2s',
           }}

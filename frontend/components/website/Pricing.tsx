@@ -46,20 +46,17 @@ function PlanCard({ plan, onCTA }: { plan: (typeof plans)[number]; onCTA?: () =>
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        background: plan.hi
-          ? 'rgba(9,20,38,0.80)'
-          : 'rgba(9,20,38,0.55)',
+        background: plan.hi ? '#F0FDF4' : '#FFFFFF',
         border: plan.hi
           ? '1px solid rgba(0,208,130,0.45)'
-          : `1px solid ${hov ? 'rgba(0,208,130,0.18)' : 'rgba(0,208,130,0.08)'}`,
+          : `1px solid ${hov ? 'rgba(0,208,130,0.25)' : '#E2E8F0'}`,
         borderRadius: 18,
         padding: plan.hi ? '34px 28px' : '26px 28px',
         boxShadow: plan.hi
-          ? '0 0 60px rgba(0,208,130,0.12), 0 24px 48px rgba(0,0,0,0.35)'
-          : hov ? '0 8px 32px rgba(0,0,0,0.3)' : 'none',
+          ? '0 0 48px rgba(0,208,130,0.10), 0 8px 24px rgba(15,23,42,0.08)'
+          : hov ? '0 8px 24px rgba(15,23,42,0.08)' : '0 1px 4px rgba(15,23,42,0.06)',
         transform: plan.hi ? 'scale(1.04)' : hov ? 'translateY(-2px)' : 'none',
         transition: 'all 0.3s',
-        backdropFilter: 'blur(20px) saturate(140%)',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -99,13 +96,13 @@ function PlanCard({ plan, onCTA }: { plan: (typeof plans)[number]; onCTA?: () =>
             fontFamily: 'var(--font-jetbrains-mono), monospace',
             fontSize: 40,
             fontWeight: 600,
-            color: plan.hi ? '#00D082' : '#F1F5F9',
+            color: plan.hi ? '#00D082' : '#0F172A',
             letterSpacing: '-0.03em',
           }}
         >
           {plan.price}
         </span>
-        <span style={{ fontSize: 14, color: '#3D4F68', fontFamily: 'var(--font-inter), sans-serif' }}>{plan.period}</span>
+        <span style={{ fontSize: 14, color: '#94A3B8', fontFamily: 'var(--font-inter), sans-serif' }}>{plan.period}</span>
       </div>
       <div style={{ fontSize: 13, color: '#4A6080', marginBottom: 22, lineHeight: 1.55, fontFamily: 'var(--font-inter), sans-serif' }}>
         {plan.desc}
@@ -123,7 +120,7 @@ function PlanCard({ plan, onCTA }: { plan: (typeof plans)[number]; onCTA?: () =>
           fontFamily: 'var(--font-inter), sans-serif',
           fontWeight: 700,
           fontSize: 14,
-          color: plan.hi ? '#060F1A' : '#64748B',
+          color: plan.hi ? '#060F1A' : '#334155',
           cursor: 'pointer',
           marginBottom: 22,
           transition: 'all 0.25s',
@@ -134,7 +131,7 @@ function PlanCard({ plan, onCTA }: { plan: (typeof plans)[number]; onCTA?: () =>
       </button>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {plan.features.map((f) => (
-          <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, color: '#4A5568', fontFamily: 'var(--font-inter), sans-serif' }}>
+          <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, color: '#64748B', fontFamily: 'var(--font-inter), sans-serif' }}>
             {checkGreenIcon}
             {f}
           </div>
@@ -170,10 +167,10 @@ export function SocialProof() {
   return (
     <div
       style={{
-        borderTop: '1px solid rgba(0,208,130,0.08)',
-        borderBottom: '1px solid rgba(0,208,130,0.08)',
+        borderTop: '1px solid #E2E8F0',
+        borderBottom: '1px solid #E2E8F0',
         padding: '18px 80px',
-        background: 'rgba(6,9,16,0.7)',
+        background: '#F1F5F9',
       }}
     >
       <div
@@ -192,7 +189,7 @@ export function SocialProof() {
             fontWeight: 700,
             letterSpacing: '0.1em',
             textTransform: 'uppercase',
-            color: '#1E293B',
+            color: '#94A3B8',
             whiteSpace: 'nowrap',
             fontFamily: 'var(--font-inter), sans-serif',
           }}
@@ -205,7 +202,7 @@ export function SocialProof() {
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: '#1E2D3D',
+              color: '#334155',
               letterSpacing: '0.02em',
               fontFamily: 'var(--font-inter), sans-serif',
             }}
@@ -241,7 +238,7 @@ export function CTASection({ onCTA }: { onCTA?: () => void }) {
         style={{
           position: 'absolute',
           inset: 0,
-          backgroundImage: 'radial-gradient(rgba(0,208,130,0.03) 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(rgba(0,208,130,0.18) 1px, transparent 1px)',
           backgroundSize: '32px 32px',
           pointerEvents: 'none',
         }}
@@ -253,7 +250,7 @@ export function CTASection({ onCTA }: { onCTA?: () => void }) {
             fontSize: 54,
             fontWeight: 800,
             letterSpacing: '-0.035em',
-            color: '#F1F5F9',
+            color: '#0F172A',
             lineHeight: 1.05,
             marginBottom: 20,
           }}
@@ -271,7 +268,7 @@ export function CTASection({ onCTA }: { onCTA?: () => void }) {
             waiting to work.
           </span>
         </h2>
-        <p style={{ fontSize: 17, color: '#4A6080', marginBottom: 36, lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
+        <p style={{ fontSize: 17, color: '#64748B', marginBottom: 36, lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
           No engineers needed. Powered by ElevenLabs + Twilio. Go live in under 5 minutes.
         </p>
         <Btn variant="primary" size="lg" onClick={onCTA}>

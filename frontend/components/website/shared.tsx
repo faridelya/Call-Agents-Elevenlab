@@ -38,7 +38,7 @@ export function WaveLogo({ size = 'md' as LogoSize }: { size?: LogoSize }) {
           fontFamily: 'var(--font-syne), sans-serif',
           fontWeight: 800,
           fontSize: s.fs,
-          color: '#F1F5F9',
+          color: '#0F172A',
           letterSpacing: '-0.04em',
           lineHeight: 1,
         }}
@@ -65,14 +65,14 @@ interface BtnProps {
 
 const btnVariants: Record<BtnVariant, React.CSSProperties> = {
   primary:   { background: 'linear-gradient(135deg, #00D082 0%, #00C2B8 100%)', color: '#060F1A', boxShadow: '0 0 24px rgba(0,208,130,0.4)', border: 'none' },
-  secondary: { background: 'rgba(9,20,38,0.65)', color: '#CBD5E1', border: '1px solid rgba(0,208,130,0.25)', backdropFilter: 'blur(12px)' },
+  secondary: { background: 'rgba(255,255,255,0.9)', color: '#334155', border: '1px solid rgba(0,208,130,0.3)', backdropFilter: 'blur(12px)' },
   ghost:     { background: 'transparent', color: '#64748B', border: '1px solid transparent' },
 };
 
 const btnHover: Record<BtnVariant, React.CSSProperties> = {
   primary:   { background: 'linear-gradient(135deg, #00E890 0%, #00D4C8 100%)', transform: 'translateY(-2px)', boxShadow: '0 8px 32px rgba(0,208,130,0.55)' },
-  secondary: { borderColor: 'rgba(0,208,130,0.5)', color: '#F1F5F9', background: 'rgba(0,208,130,0.08)' },
-  ghost:     { color: '#F1F5F9', background: 'rgba(255,255,255,0.04)' },
+  secondary: { borderColor: 'rgba(0,208,130,0.5)', color: '#0F172A', background: 'rgba(0,208,130,0.06)' },
+  ghost:     { color: '#334155', background: 'rgba(15,23,42,0.04)' },
 };
 
 const btnSizes: Record<BtnSize, React.CSSProperties> = {
@@ -140,7 +140,7 @@ export function SectionHeading({ children, sub }: { children: React.ReactNode; s
           fontSize: 46,
           fontWeight: 800,
           letterSpacing: '-0.03em',
-          color: '#F1F5F9',
+          color: '#0F172A',
           lineHeight: 1.08,
           marginBottom: sub ? 14 : 0,
         }}
@@ -151,7 +151,7 @@ export function SectionHeading({ children, sub }: { children: React.ReactNode; s
         <p
           style={{
             fontSize: 17,
-            color: '#4A6080',
+            color: '#64748B',
             maxWidth: 520,
             lineHeight: 1.65,
             fontFamily: 'var(--font-inter), sans-serif',

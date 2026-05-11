@@ -335,8 +335,8 @@ function ContactEditModal({ contact, agentOptions, onSave, onClose }: {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.60)',
-      backdropFilter: 'none', display: 'flex', alignItems: 'center',
+      position: 'fixed', inset: 0, background: 'transparent',
+      display: 'flex', alignItems: 'center',
       justifyContent: 'center', zIndex: 1001,
     }}>
       <div style={{
@@ -498,8 +498,8 @@ function NewCampaignModal({ onClose, agentOptions, contactGroups, allContacts }:
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(2,10,20,0.88)',
-      backdropFilter: 'none', display: 'flex', alignItems: 'center',
+      position: 'fixed', inset: 0, background: 'transparent',
+      display: 'flex', alignItems: 'center',
       justifyContent: 'center', zIndex: 999,
     }}>
       <div style={{
@@ -1316,8 +1316,7 @@ function CampaignActionErrorModal({ message, action, onClose }: {
   return (
     <div style={{
       position: 'fixed', inset: 0,
-      background: 'rgba(2,6,16,0.82)',
-      backdropFilter: 'none',
+      background: 'transparent',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 1100,
       animation: 'fade-in 0.18s both',
@@ -1457,7 +1456,7 @@ function DeleteModal({ name, onConfirm, onCancel }: { name: string; onConfirm: (
       onClick={onCancel}
       style={{
         position: 'fixed', inset: 0, zIndex: 9000,
-        background: 'rgba(0,0,0,0.65)', backdropFilter: 'none',
+        background: 'transparent',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
