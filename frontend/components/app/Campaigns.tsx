@@ -1280,23 +1280,6 @@ function ContactsPoolPanel({ contacts, onRemove, onEdit, agentOptions }: {
         )}
       </div>
 
-      {/* Group summary */}
-      {groups.length > 0 && (
-        <div style={{
-          padding: '8px 20px', borderTop: '1px solid #F1F5F9',
-          display: 'flex', gap: 5, flexWrap: 'wrap', background: '#FAFAFA', flexShrink: 0,
-        }}>
-          {groups.map((g) => {
-            const cnt = contacts.filter((c) => c.group === g).length;
-            return (
-              <span key={g} style={{
-                fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
-                background: 'rgba(56,189,248,0.07)', color: '#38BDF8', border: '1px solid rgba(56,189,248,0.15)',
-              }}>Grp {g}: {cnt}</span>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
