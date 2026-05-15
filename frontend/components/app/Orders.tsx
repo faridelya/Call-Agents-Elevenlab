@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useCalls } from '@/lib/hooks/useCalls';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { apiFetch } from '@/lib/api';
-import type { CallRecord } from '@/lib/api';
+import type { CallRecord, ElCriterionResult } from '@/lib/api';
 import { getOutcomeColor, getOutcomeLabel, getOutcomeIcon } from '@/lib/outcomeUtils';
 
 // ─── Transfer-pending helpers ─────────────────────────────────────────────────
@@ -55,6 +55,209 @@ function Sk({ w = '100%', h = 14, r = 5 }: { w?: string | number; h?: number; r?
       background: 'linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%)',
       backgroundSize: '800px 100%', animation: 'shimmer 1.8s infinite linear',
     }} />
+  );
+}
+
+// ─── Pending section skeleton ─────────────────────────────────────────────────
+function PendingSectionSkeleton({ label }: { label: string }) {
+  return (
+    <div style={{
+      padding: '12px 24px',
+      borderBottom: '1px solid #F1F5F9',
+      flexShrink: 0,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {[70, 55, 80].map((w, i) => (
+          <div key={i} style={{
+            height: 14, borderRadius: 6, width: `${w}%`,
+            background: 'rgba(255,255,255,0.05)',
+            animation: 'pulse-opacity 1.8s ease-in-out infinite',
+            animationDelay: `${i * 150}ms`,
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── EL success badge ─────────────────────────────────────────────────────────
+function renderElSuccessBadge(result: 'success' | 'failure' | 'unknown') {
+  const cfg = {
+    success: { bg: 'rgba(16,185,129,0.15)', color: '#10B981', icon: '✓', text: 'Success' },
+    failure: { bg: 'rgba(239,68,68,0.15)',  color: '#EF4444', icon: '✗', text: 'Failed'  },
+    unknown: { bg: 'rgba(148,163,184,0.1)', color: '#94A3B8', icon: '?', text: 'Unknown' },
+  }[result];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontSize: 11.5, fontWeight: 600, padding: '3px 9px', borderRadius: 9999,
+      background: cfg.bg, color: cfg.color,
+    }}>
+      <span style={{ fontSize: 10 }}>{cfg.icon}</span>
+      {cfg.text}
+    </span>
+  );
+}
+
+// ─── Criterion chip ───────────────────────────────────────────────────────────
+function CriterionChip({ result }: { result: 'success' | 'failure' | 'unknown' }) {
+  const cfg = {
+    success: { bg: 'rgba(16,185,129,0.15)',  color: '#10B981', icon: '✓' },
+    failure: { bg: 'rgba(239,68,68,0.15)',   color: '#EF4444', icon: '✗' },
+    unknown: { bg: 'rgba(148,163,184,0.1)',  color: '#94A3B8', icon: '?' },
+  }[result];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+      background: cfg.bg, color: cfg.color,
+      fontSize: 11, fontWeight: 700,
+    }}>
+      {cfg.icon}
+    </span>
+  );
+}
+
+// ─── Collapsible criterion row ────────────────────────────────────────────────
+function CriterionRow({ criterion, isLast }: { criterion: ElCriterionResult; isLast: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div style={{
+      padding: '10px 0',
+      borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+        <CriterionChip result={criterion.result} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#0F172A' }}>
+              {criterion.name}
+            </span>
+            {criterion.rationale && (
+              <button
+                onClick={() => setExpanded((v) => !v)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  color: '#64748B', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0,
+                  fontSize: 10.5,
+                }}
+              >
+                {expanded ? 'hide' : 'show'}
+                <svg
+                  width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.5" strokeLinecap="round"
+                  style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {expanded && criterion.rationale && (
+            <div style={{
+              fontSize: 12, color: '#64748B', fontStyle: 'italic',
+              lineHeight: 1.55, marginTop: 5,
+              animation: 'fade-in 0.18s both',
+            }}>
+              {criterion.rationale}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Evaluation Results section ───────────────────────────────────────────────
+function EvaluationResultsSection({ criteria }: { criteria: ElCriterionResult[] }) {
+  if (!criteria || criteria.length === 0) return null;
+  return (
+    <div style={{
+      padding: '14px 24px',
+      borderBottom: '1px solid #F1F5F9',
+      flexShrink: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#8B5CF6', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Evaluation Results
+        </div>
+        <span
+          title="Evaluated by ElevenLabs after the call"
+          style={{
+            width: 14, height: 14, borderRadius: '50%', display: 'inline-flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            background: 'rgba(139,92,246,0.1)', color: '#8B5CF6',
+            fontSize: 9, fontWeight: 700, cursor: 'default',
+          }}
+        >i</span>
+      </div>
+      <div style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 10, padding: '0 12px',
+      }}>
+        {criteria.map((c, i) => (
+          <CriterionRow key={c.id} criterion={c} isLast={i === criteria.length - 1} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Extracted Data section ───────────────────────────────────────────────────
+function ExtractedDataSection({ data }: { data: Record<string, string | boolean | number> }) {
+  const entries = Object.entries(data);
+  if (entries.length === 0) return null;
+  return (
+    <div style={{
+      padding: '14px 24px',
+      borderBottom: '1px solid #F1F5F9',
+      flexShrink: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#06B6D4', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Extracted Data
+        </div>
+        <span
+          title="Automatically extracted by ElevenLabs from the conversation"
+          style={{
+            width: 14, height: 14, borderRadius: '50%', display: 'inline-flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            background: 'rgba(6,182,212,0.1)', color: '#06B6D4',
+            fontSize: 9, fontWeight: 700, cursor: 'default',
+          }}
+        >i</span>
+      </div>
+      <div style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 10, padding: '10px 12px',
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px',
+      }}>
+        {entries.map(([key, val]) => {
+          const isNonString = typeof val !== 'string';
+          return (
+            <div key={key}>
+              <div style={{
+                fontSize: 10, color: '#94A3B8', textTransform: 'uppercase',
+                letterSpacing: '0.05em', marginBottom: 2,
+              }}>
+                {key.replace(/_/g, ' ')}
+              </div>
+              <div style={{
+                fontSize: 13.5, color: '#0F172A',
+                fontFamily: isNonString ? 'var(--font-mono)' : 'inherit',
+              }}>
+                {String(val)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -134,8 +337,16 @@ function TranscriptPanel({ call, onClose, width }: { call: CallRecord; onClose: 
   const transcript = (src as any).transcript_entries ?? (src as any).transcript ?? [];
   const callTs = (src as any).ended_at ?? (src as any).created_at ?? call.created_at;
   const pendingPhase = getPendingPhase(transcript, (src as any).outcome, (src as any).auto_summary, callTs);
+
+  // Determine overall badge: prefer EL analysis result, fallback to outcome badge
+  const elResult = (src as any).el_analysis_results?.call_successful as 'success' | 'failure' | 'unknown' | undefined;
   const oc = getOutcomeColor((src as any).outcome ?? call.outcome);
   const ol = getOutcomeLabel((src as any).outcome ?? call.outcome);
+  const oi = ((src as any).outcome ?? call.outcome) ? getOutcomeIcon((src as any).outcome ?? call.outcome) : null;
+
+  const isProcessing = src.status === 'processing' || src.status === 'in_progress';
+  const criteriaResults = (src as any).el_analysis_results?.criteria_results ?? [];
+  const extractedData = (src as any).el_data_collection as Record<string, string | boolean | number> | undefined;
 
   return (
     <div style={{
@@ -181,19 +392,52 @@ function TranscriptPanel({ call, onClose, width }: { call: CallRecord; onClose: 
 
         {/* Stats strip */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {[
-            { l: 'Duration', v: fmtDuration(call.duration_seconds), c: '#3B82F6' },
-            { l: 'Outcome', v: ol, c: oc },
-            { l: 'Sentiment', v: si.label, c: si.color },
-          ].map(({ l, v, c }) => (
-            <div key={l} style={{
-              background: `${c}10`, border: `1px solid ${c}25`,
-              borderRadius: 8, padding: '5px 10px', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 10, color: c, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: c, marginTop: 1 }}>{v}</div>
+          {/* Duration */}
+          <div style={{
+            background: '#3B82F610', border: '1px solid #3B82F625',
+            borderRadius: 8, padding: '5px 10px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 10, color: '#3B82F6', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Duration</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#3B82F6', marginTop: 1 }}>{fmtDuration(call.duration_seconds)}</div>
+          </div>
+
+          {/* Outcome — EL result takes priority */}
+          <div style={{
+            background: elResult
+              ? (elResult === 'success' ? 'rgba(16,185,129,0.08)' : elResult === 'failure' ? 'rgba(239,68,68,0.08)' : 'rgba(148,163,184,0.08)')
+              : `${oc}10`,
+            border: `1px solid ${elResult
+              ? (elResult === 'success' ? 'rgba(16,185,129,0.25)' : elResult === 'failure' ? 'rgba(239,68,68,0.25)' : 'rgba(148,163,184,0.2)')
+              : `${oc}25`}`,
+            borderRadius: 8, padding: '5px 10px', textAlign: 'center',
+          }}>
+            <div style={{
+              fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+              color: elResult
+                ? (elResult === 'success' ? '#10B981' : elResult === 'failure' ? '#EF4444' : '#94A3B8')
+                : oc,
+            }}>Outcome</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 1 }}>
+              {elResult
+                ? renderElSuccessBadge(elResult)
+                : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: oc }}>
+                    {oi && <span style={{ fontSize: 10 }}>{oi}</span>}
+                    {ol}
+                  </span>
+                )
+              }
             </div>
-          ))}
+          </div>
+
+          {/* Sentiment */}
+          <div style={{
+            background: `${si.color}10`, border: `1px solid ${si.color}25`,
+            borderRadius: 8, padding: '5px 10px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 10, color: si.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sentiment</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: si.color, marginTop: 1 }}>{si.label}</div>
+          </div>
         </div>
       </div>
 
@@ -213,6 +457,20 @@ function TranscriptPanel({ call, onClose, width }: { call: CallRecord; onClose: 
           </div>
         </div>
       )}
+
+      {/* Evaluation Results — skeleton while processing, real data when available */}
+      {isProcessing ? (
+        <PendingSectionSkeleton label="Evaluation Results" />
+      ) : criteriaResults.length > 0 ? (
+        <EvaluationResultsSection criteria={criteriaResults} />
+      ) : null}
+
+      {/* Extracted Data — skeleton while processing, real data when available */}
+      {isProcessing ? (
+        <PendingSectionSkeleton label="Extracted Data" />
+      ) : (extractedData && Object.keys(extractedData).length > 0) ? (
+        <ExtractedDataSection data={extractedData} />
+      ) : null}
 
       {/* Transcript */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>

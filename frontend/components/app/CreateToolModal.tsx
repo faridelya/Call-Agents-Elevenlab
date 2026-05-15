@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { CustomToolCreate, ToolParameter, HeaderPair, QueryParam } from '@/lib/api';
+import { mcpServers as mcpServersApi } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -668,9 +669,10 @@ function McpForm({ config, onChange }: {
   config: Record<string, unknown>;
   onChange: (c: Record<string, unknown>) => void;
 }) {
-  const serverUrl = (config.server_url as string) ?? '';
-  const authType  = (config.auth_type as string)  ?? 'none';
-  const authToken = (config.auth_token as string)  ?? '';
+  const serverName = (config.mcp_server_name as string) ?? '';
+  const serverUrl  = (config.server_url as string) ?? '';
+  const transport  = (config.transport as string) ?? 'sse';
+  const secretToken = (config.secret_token as string) ?? '';
   const set = (k: string, v: unknown) => onChange({ ...config, [k]: v });
 
   return (
@@ -683,12 +685,23 @@ function McpForm({ config, onChange }: {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.purpleL} strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
           <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3"/>
         </svg>
-        MCP tools are proxied through Voxara's backend to your Model Context Protocol server. The server must implement the MCP specification.
+        MCP tools connect Voxara to your Model Context Protocol server. The server name and URL will be registered globally and can be attached to any agent.
       </div>
 
-      <SectionDivider label="Server Connection" color={T.purpleL} />
+      <SectionDivider label="Server Details" color={T.purpleL} />
+
       <div style={{ marginBottom: 12 }}>
-        <FLabel>MCP Server URL <span style={{ color: T.red }}>*</span></FLabel>
+        <FLabel>Server Name <span style={{ color: T.red }}>*</span></FLabel>
+        <FInput
+          value={serverName}
+          onChange={(v) => set('mcp_server_name', v)}
+          placeholder="My MCP Server"
+          error={!serverName}
+        />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <FLabel>Server URL <span style={{ color: T.red }}>*</span></FLabel>
         <FInput
           value={serverUrl}
           onChange={(v) => set('server_url', v)}
@@ -698,33 +711,24 @@ function McpForm({ config, onChange }: {
         />
       </div>
 
-      <SectionDivider label="Authentication" color={T.yellow} />
-      <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 10 }}>
-        <div>
-          <FLabel>Auth type</FLabel>
-          <FSelect value={authType} onChange={(v) => set('auth_type', v)}>
-            <option value="none">None</option>
-            <option value="bearer">Bearer Token</option>
-          </FSelect>
-        </div>
-        {authType === 'bearer' && (
-          <div>
-            <FLabel>Bearer token</FLabel>
-            <FInput type="password" value={authToken} onChange={(v) => set('auth_token', v)} placeholder="mcp_token_…" />
-          </div>
-        )}
+      <div style={{ marginBottom: 12 }}>
+        <FLabel>Transport Protocol</FLabel>
+        <FSelect value={transport} onChange={(v) => set('transport', v)}>
+          <option value="sse">SSE (Server-Sent Events)</option>
+          <option value="http">HTTP Streamable</option>
+        </FSelect>
       </div>
 
-      <SectionDivider label="Scaffold Note" color={T.textM} />
-      <div style={{
-        padding: '10px 14px', background: `${T.bg0}`,
-        border: `1px solid ${T.border}`, borderRadius: 8,
-        fontSize: 11.5, color: T.textM, lineHeight: 1.6,
-        fontFamily: 'JetBrains Mono, monospace',
-      }}>
-        <div style={{ color: T.purpleL, fontWeight: 600, marginBottom: 4 }}>MCP Integration — Phase 1 Scaffold</div>
-        Tool parameters will be sent as: <span style={{ color: T.textS }}>{'{ "tool": "<name>", "parameters": { ... } }'}</span><br />
-        Your MCP server should respond with: <span style={{ color: T.textS }}>{'{ "result": "..." }'}</span>
+      <SectionDivider label="Authentication" color={T.yellow} />
+
+      <div style={{ marginBottom: 12 }}>
+        <FLabel hint="— leave blank if not required">Secret Token</FLabel>
+        <FInput
+          type="password"
+          value={secretToken}
+          onChange={(v) => set('secret_token', v)}
+          placeholder="Authorization token if required"
+        />
       </div>
     </div>
   );
@@ -811,13 +815,43 @@ export function CreateToolModal({ agentId, initialType, editTool, onSave, onClos
     if (toolType === 'webhook' && !(webhookConfig.url as string)?.trim()) {
       setUrlErr(true); err = true;
     }
-    if (toolType === 'mcp' && !(mcpConfig.server_url as string)?.trim()) {
-      err = true;
+    if (toolType === 'mcp') {
+      if (!(mcpConfig.mcp_server_name as string)?.trim()) err = true;
+      if (!(mcpConfig.server_url as string)?.trim()) err = true;
     }
     if (err) return;
 
     setSaving(true);
     try {
+      // MCP type: register as a global MCP server, then notify via onSave
+      if (toolType === 'mcp') {
+        await mcpServersApi.create({
+          name:         (mcpConfig.mcp_server_name as string).trim(),
+          url:          (mcpConfig.server_url as string).trim(),
+          transport:    ((mcpConfig.transport as string) ?? 'sse') as 'sse' | 'http',
+          secret_token: (mcpConfig.secret_token as string)?.trim() || undefined,
+          description:  description.trim() || undefined,
+        });
+        // Also create a stub custom tool so the agent builder is aware
+        const mcpPayload: CustomToolCreate = {
+          agent_id:          agentId,
+          el_tool_type:      'mcp',
+          tool_type:         'custom_mcp',
+          name:              name.trim(),
+          description:       description.trim(),
+          parameters_schema: {},
+          tool_parameters:   [],
+          config:            mcpConfig,
+          disable_interruptions: disableInterruptions,
+          execution_mode:    executionMode,
+          pre_tool_speech:   preToolSpeech,
+          expects_response:  false,
+          response_timeout_secs: 20,
+        };
+        await onSave(mcpPayload);
+        return;
+      }
+
       // Build parameters_schema from webhook body params
       let parametersSchema: Record<string, unknown> = {};
       if (toolType === 'webhook') {
@@ -836,12 +870,12 @@ export function CreateToolModal({ agentId, initialType, editTool, onSave, onClos
       const payload: CustomToolCreate = {
         agent_id:             agentId,
         el_tool_type:         toolType,
-        tool_type:            toolType === 'webhook' ? 'custom_webhook' : toolType === 'client' ? 'custom_client' : 'custom_mcp',
+        tool_type:            toolType === 'webhook' ? 'custom_webhook' : 'custom_client',
         name:                 name.trim(),
         description:          description.trim(),
         parameters_schema:    parametersSchema,
         tool_parameters:      toolType === 'client' ? clientParams : [],
-        config:               toolType === 'webhook' ? webhookConfig : toolType === 'mcp' ? mcpConfig : {},
+        config:               toolType === 'webhook' ? webhookConfig : {},
         disable_interruptions: disableInterruptions,
         execution_mode:       executionMode,
         pre_tool_speech:      preToolSpeech,

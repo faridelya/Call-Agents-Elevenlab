@@ -246,6 +246,18 @@ export const agents = {
 
 // ── Calls ─────────────────────────────────────────────────────────────────────
 
+export interface ElCriterionResult {
+  id: string;
+  name: string;
+  result: 'success' | 'failure' | 'unknown';
+  rationale: string;
+}
+
+export interface ElAnalysisResults {
+  call_successful: 'success' | 'failure' | 'unknown';
+  criteria_results: ElCriterionResult[];
+}
+
 export interface CallRecord {
   id: string;
   agent_id?: string;
@@ -260,6 +272,9 @@ export interface CallRecord {
   sentiment_score?: number;
   talk_ratio?: number;
   auto_summary?: string;
+  call_summary_title?: string;
+  el_analysis_results?: ElAnalysisResults;
+  el_data_collection?: Record<string, string | boolean | number>;
   transcript?: Array<{ role: string; text: string; timestamp: string }>;
   started_at?: string;
   ended_at?: string;
@@ -630,7 +645,7 @@ export interface CustomToolCreate {
 
 export const tools = {
   catalog: () =>
-    apiFetch<Array<{ name: string; tier: number; execution: string; description: string; parameters: object }>>(
+    apiFetch<Array<{ name: string; tier: number; execution: string; description: string; parameters: object; default_config: Record<string, unknown> }>>(
       '/api/v1/tools/catalog',
     ),
 
@@ -653,4 +668,37 @@ export const tools = {
 
   deleteCustom: (id: string) =>
     apiFetch<void>(`/api/v1/tools/custom/${id}`, { method: 'DELETE' }),
+};
+
+// ── MCP Servers ───────────────────────────────────────────────────────────────
+
+export interface McpServer {
+  id: string;
+  name: string;
+  description?: string;
+  url: string;
+  transport: 'sse' | 'http';
+  secret_token?: string;
+  el_mcp_server_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface McpServerCreate {
+  name: string;
+  description?: string;
+  url: string;
+  transport: 'sse' | 'http';
+  secret_token?: string;
+}
+
+export const mcpServers = {
+  list: () =>
+    apiFetch<McpServer[]>('/api/v1/mcp-servers'),
+
+  create: (data: McpServerCreate) =>
+    apiFetch<McpServer>('/api/v1/mcp-servers', { method: 'POST', body: JSON.stringify(data) }),
+
+  delete: (id: string) =>
+    apiFetch<void>(`/api/v1/mcp-servers/${id}`, { method: 'DELETE' }),
 };

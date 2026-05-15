@@ -65,6 +65,8 @@ async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
         return  # Skip sync — call in progress
 
     # Fetch custom (Tier 3) tools for this agent
+    from app.models.mcp_server import McpServer
+
     tools_result = await db.execute(
         select(Tool).where(Tool.agent_id == agent.id, Tool.is_active == True)
     )
@@ -81,9 +83,32 @@ async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
             "disable_interruptions": t.disable_interruptions,
             "execution_mode": t.execution_mode,
             "pre_tool_speech": t.pre_tool_speech,
+            "config": t.config or {},
         }
         for t in tools_result.scalars().all()
     ]
+
+    # Resolve el_mcp_server_ids from registered MCP servers for MCP stub tools.
+    # EL attaches MCP servers to agents via mcp_server_ids in the prompt block —
+    # the stub custom tools are display-only; they must NOT become webhook tool defs.
+    mcp_ids_for_agent: list[str] = []
+    for ct in custom_tools:
+        if ct["el_tool_type"] == "mcp":
+            server_url = ct["config"].get("server_url", "")
+            if server_url:
+                r = await db.execute(
+                    select(McpServer.el_mcp_server_id).where(
+                        McpServer.user_id == agent.user_id,
+                        McpServer.url == server_url,
+                        McpServer.el_mcp_server_id.isnot(None),
+                    )
+                )
+                el_id = r.scalar_one_or_none()
+                if el_id and el_id not in mcp_ids_for_agent:
+                    mcp_ids_for_agent.append(el_id)
+
+    if mcp_ids_for_agent:
+        agent.mcp_server_ids = mcp_ids_for_agent
 
     config = elevenlabs_service.build_agent_config(agent, custom_tools)
 

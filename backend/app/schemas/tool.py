@@ -81,6 +81,7 @@ class BuiltinToolInfo(BaseModel):
     execution: str  # "client" | "server"
     description: str
     parameters: dict
+    default_config: dict = {}
     requires_config: list[str] = []
 
 

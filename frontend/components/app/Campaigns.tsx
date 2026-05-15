@@ -4,13 +4,181 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useCampaigns, useCampaignAction, useCreateCampaign, useDeleteCampaign } from '@/lib/hooks/useCampaigns';
 import { useAgents } from '@/lib/hooks/useAgents';
-import type { Campaign } from '@/lib/api';
-import { contactPool as poolApi } from '@/lib/api';
+import type { Campaign, CallRecord, ElCriterionResult } from '@/lib/api';
+import { contactPool as poolApi, apiFetch } from '@/lib/api';
 
 const SC: Record<Campaign['status'], string> = {
   running: '#10B981', paused: '#F0B429', draft: '#94A3B8',
   scheduled: '#38BDF8', completed: '#06B6D4', failed: '#FF4D6D',
 };
+
+// ── Call analysis shared components ───────────────────────────────────────────
+
+function CampaignCriterionRow({ criterion: c, isLast }: { criterion: ElCriterionResult; isLast: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const dotColor = c.result === 'success' ? '#10B981' : c.result === 'failure' ? '#EF4444' : '#94A3B8';
+  const chipBg   = c.result === 'success' ? 'rgba(16,185,129,0.12)' : c.result === 'failure' ? 'rgba(239,68,68,0.12)' : 'rgba(148,163,184,0.1)';
+  const icon     = c.result === 'success' ? '✓' : c.result === 'failure' ? '✗' : '?';
+
+  return (
+    <div style={{
+      padding: '9px 12px',
+      borderBottom: isLast ? 'none' : '1px solid rgba(0,0,0,0.05)',
+      cursor: c.rationale ? 'pointer' : 'default',
+    }} onClick={() => c.rationale && setExpanded((e) => !e)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span style={{
+          width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+          background: chipBg, color: dotColor,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 700,
+        }}>{icon}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: '#0F172A', flex: 1 }}>{c.name}</span>
+        {c.rationale && (
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round"
+            style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s', flexShrink: 0 }}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        )}
+      </div>
+      {expanded && c.rationale && (
+        <div style={{ marginTop: 7, marginLeft: 29, fontSize: 11.5, color: '#64748B', fontStyle: 'italic', lineHeight: 1.6 }}>
+          {c.rationale}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CampaignEvaluationResultsSection({ call }: { call: CallRecord }) {
+  const isProcessing = call.status === 'in_progress' || call.status === 'processing';
+  const criteria = call.el_analysis_results?.criteria_results;
+
+  if (isProcessing) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 10.5, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 7 }}>
+          Evaluation Results
+        </div>
+        <div style={{
+          background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)',
+          borderRadius: 8, padding: '10px 12px',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <div style={{
+            width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
+            border: '2px solid #F59E0B', borderTopColor: 'transparent',
+            animation: 'spin-cw 1s linear infinite',
+          }} />
+          <span style={{ fontSize: 12, color: '#94A3B8' }}>Analyzing conversation…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!criteria || criteria.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 10.5, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 7 }}>
+        Evaluation Results
+      </div>
+      <div style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.07)', borderRadius: 8, overflow: 'hidden' }}>
+        {criteria.map((c, i) => (
+          <CampaignCriterionRow key={c.id} criterion={c} isLast={i === criteria.length - 1} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CampaignExtractedDataSection({ call }: { call: CallRecord }) {
+  const data = call.el_data_collection;
+  if (!data || Object.keys(data).length === 0) return null;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 10.5, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 7 }}>
+        Extracted Data
+      </div>
+      <div style={{
+        background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.07)', borderRadius: 8,
+        padding: '10px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px 14px',
+      }}>
+        {Object.entries(data).map(([k, v]) => (
+          <div key={k}>
+            <div style={{ fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+              {k.replace(/_/g, ' ')}
+            </div>
+            <div style={{ fontSize: 12.5, color: '#0F172A', fontFamily: typeof v !== 'string' ? 'var(--font-mono)' : 'inherit' }}>
+              {String(v)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Campaign call detail panel ─────────────────────────────────────────────────
+function CampaignCallDetailPanel({ call, onClose }: { call: CallRecord; onClose: () => void }) {
+  const [detail, setDetail] = useState<CallRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setDetail(null);
+    setLoading(true);
+    (async () => {
+      try {
+        const d = await apiFetch<CallRecord>(`/api/v1/calls/${call.id}`);
+        setDetail(d);
+      } catch { /* fall through */ }
+      finally { setLoading(false); }
+    })();
+  }, [call.id]);
+
+  const src = detail ?? call;
+  const hasCriteria = (src.el_analysis_results?.criteria_results?.length ?? 0) > 0;
+  const hasData = src.el_data_collection && Object.keys(src.el_data_collection).length > 0;
+  const isProcessing = src.status === 'in_progress' || src.status === 'processing';
+
+  if (!hasCriteria && !hasData && !isProcessing && !loading) return null;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'transparent',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+      zIndex: 1200, pointerEvents: 'none',
+    }}>
+      <div style={{
+        pointerEvents: 'all',
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '16px 0 0 16px',
+        width: 420, maxWidth: '90vw',
+        maxHeight: '70vh', overflowY: 'auto',
+        boxShadow: '-8px 0 32px rgba(0,0,0,0.12)',
+        padding: '20px',
+        animation: 'slide-in-right 0.25s ease-out',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>
+            Call Analysis
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 18, lineHeight: 1,
+          }}>×</button>
+        </div>
+        {loading ? (
+          <div style={{ padding: '20px 0', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>Loading…</div>
+        ) : (
+          <>
+            <CampaignEvaluationResultsSection call={src} />
+            <CampaignExtractedDataSection call={src} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function fmtDate(iso?: string) {
   if (!iso) return '—';

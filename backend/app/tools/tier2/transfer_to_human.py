@@ -122,17 +122,28 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
     cfg: dict = ctx.tool_configs.get("transfer_to_human", {})
     transfer_to: str = (cfg.get("transfer_to") or "").strip()
 
+    # Configurable messages — fall back to sensible defaults if not set
+    unavailable_msg: str = (cfg.get("unavailable_message") or "").strip() or (
+        "I'm sorry — I wasn't able to connect you to a human agent because "
+        "no transfer number has been configured. Please contact us directly "
+        "and I'll do everything I can to help you in the meantime."
+    )
+    config_error_msg: str = (cfg.get("config_error_message") or "").strip() or (
+        "I'm sorry — the transfer could not be completed due to a "
+        "configuration issue. I apologize for the inconvenience. "
+        "Is there anything I can help you with directly?"
+    )
+    connecting_msg: str = (cfg.get("connecting_message") or "").strip() or (
+        "Connecting you now — please hold while we transfer your call."
+    )
+
     if not transfer_to:
         log.warning(
             "transfer_no_number_configured",
             call_record_id=ctx.call_record_id,
             agent_id=ctx.agent_id,
         )
-        return (
-            "I'm sorry — I wasn't able to connect you to a human agent because "
-            "no transfer number has been configured. Please contact us directly "
-            "and I'll do everything I can to help you in the meantime."
-        )
+        return unavailable_msg
 
     if not _E164_RE.match(transfer_to):
         log.error(
@@ -140,11 +151,7 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
             number=transfer_to,
             call_record_id=ctx.call_record_id,
         )
-        return (
-            "I'm sorry — the transfer could not be completed due to a "
-            "configuration issue. I apologize for the inconvenience. "
-            "Is there anything I can help you with directly?"
-        )
+        return config_error_msg
 
     # ── 2. Determine transfer type ────────────────────────────────────────────
     transfer_type = (
@@ -264,10 +271,11 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
             "transfer_fallback_status",
             "redirect_failed",
         )
-        return (
+        failed_msg = (cfg.get("transfer_failed_message") or "").strip() or (
             f"I was unable to complete the transfer at this time. "
             f"You can reach our team directly at {_readable_number(transfer_to)}. "
             f"I apologize for the inconvenience."
         )
+        return failed_msg
 
-    return "Connecting you now — please hold while we transfer your call."
+    return connecting_msg

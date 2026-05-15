@@ -23,6 +23,7 @@ from app.schemas.tool import (
 )
 from app.tools.registry import list_tools
 from app.tools.system_catalog import EL_KNOWLEDGE_BASE_META, EL_SYSTEM_TOOLS
+from app.tools.tier2_catalog import REGISTERED_TOOL_DEFAULT_CONFIGS, TIER2_SERVER_CATALOG
 
 log = structlog.get_logger(__name__)
 
@@ -33,17 +34,34 @@ router = APIRouter(prefix="/tools", tags=["tools"])
 
 @router.get("/catalog", response_model=list[BuiltinToolInfo])
 async def get_tool_catalog(current_user: User = Depends(get_current_user)):
-    """Built-in Voxara tools (Tier 1 always-on + Tier 2 optional) with their schemas."""
-    return [
-        BuiltinToolInfo(
+    """All built-in Voxara tools — Tier 1 + Tier 2 — with description, parameters, and default_config."""
+    items: list[BuiltinToolInfo] = []
+
+    # Registered tools (tier1 + leave_voicemail + transfer_to_human via @register_tool)
+    for t in list_tools():
+        items.append(BuiltinToolInfo(
             name=t["name"],
             tier=t["tier"],
             execution=t["execution"],
             description=t["description"],
             parameters=t["parameters"],
-        )
-        for t in list_tools()
-    ]
+            default_config=REGISTERED_TOOL_DEFAULT_CONFIGS.get(t["name"], {}),
+        ))
+
+    # Tier-2 server tools (not in @register_tool registry — executed by tools.py router)
+    registered_names = {t["name"] for t in list_tools()}
+    for name, meta in TIER2_SERVER_CATALOG.items():
+        if name not in registered_names:
+            items.append(BuiltinToolInfo(
+                name=name,
+                tier=meta["tier"],
+                execution=meta["execution"],
+                description=meta["description"],
+                parameters=meta["parameters"],
+                default_config=meta.get("default_config", {}),
+            ))
+
+    return items
 
 
 @router.get("/system-catalog", response_model=list[SystemToolMeta])
@@ -357,7 +375,12 @@ async def _execute_mcp_tool(tool: Tool, body: dict) -> dict:
 async def _get_agent_crm_creds(agent: Agent) -> tuple[str, dict]:
     tool_configs = agent.tool_configs or {}
     crm_cfg = tool_configs.get("check_crm_record") or tool_configs.get("update_crm_record") or {}
-    return crm_cfg.get("provider", ""), crm_cfg.get("credentials", {})
+    provider = crm_cfg.get("provider", "")
+    # Support both nested credentials dict (legacy) and flat api_key (from UI)
+    credentials = crm_cfg.get("credentials") or {}
+    if not credentials and crm_cfg.get("api_key"):
+        credentials = {"access_token": crm_cfg["api_key"]}
+    return provider, credentials
 
 
 @router.post("/check_crm_record")

@@ -26,12 +26,20 @@ class AgentCreate(BaseModel):
     voice_stability: float | None = None
     voice_similarity: float | None = None
     call_script: dict = Field(default_factory=dict)
-    enabled_tools: list[str] = Field(default_factory=list)
+    enabled_tools: list[str] = Field(
+        default_factory=lambda: [
+            "save_lead", "get_contact_info", "end_call",
+            "log_call_outcome", "get_call_script", "update_call_stage",
+        ]
+    )
     tool_configs: dict = Field(default_factory=dict)
     product_catalog: list = Field(default_factory=list)
     qualification_criteria: dict = Field(default_factory=dict)
     knowledge_base_id: str | None = None
     knowledge_base_name: str | None = None
+    mcp_server_ids: list[str] | None = None
+    evaluation_criteria: list | None = None
+    data_collection: list | None = None
 
 
 class AgentUpdate(BaseModel):
@@ -62,6 +70,9 @@ class AgentUpdate(BaseModel):
     qualification_criteria: dict | None = None
     knowledge_base_id: str | None = None
     knowledge_base_name: str | None = None
+    mcp_server_ids: list[str] | None = None
+    evaluation_criteria: list | None = None
+    data_collection: list | None = None
     is_active: bool | None = None
 
 
@@ -99,6 +110,9 @@ class AgentResponse(BaseModel):
     qualification_criteria: dict
     knowledge_base_id: str | None
     knowledge_base_name: str | None
+    mcp_server_ids: list | None
+    evaluation_criteria: list | None = None
+    data_collection: list | None = None
     elevenlabs_agent_id: str | None
     el_last_synced_at: str | None
     is_active: bool

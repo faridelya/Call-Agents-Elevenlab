@@ -371,102 +371,134 @@ class ElevenLabsService:
         if kb_id:
             prompt_block["knowledge_base"] = [{"type": "file", "id": kb_id}]
 
+        # Attach MCP servers registered with ElevenLabs
+        mcp_ids = getattr(agent, "mcp_server_ids", None) or []
+        if mcp_ids:
+            prompt_block["mcp_server_ids"] = mcp_ids
+
+        conversation_config: dict = {
+            "agent": {
+                "prompt": prompt_block,
+                "first_message": agent.first_message or "",
+                "language": agent.language,
+            },
+            "tts": tts_config,
+            "asr": {
+                "quality": "high",
+                "provider": stt_provider,
+            },
+            "turn": {
+                "turn_timeout": agent.silence_timeout_seconds,
+                "silence_end_call_timeout": 30,
+                "mode": "turn",
+            },
+            "max_duration_seconds": max_call_dur,
+        }
+
+        # Evaluation criteria — sync to EL if configured
+        evaluation_criteria = getattr(agent, "evaluation_criteria", None) or []
+        if evaluation_criteria:
+            conversation_config["evaluation_settings"] = {
+                "criteria": [
+                    {
+                        "id": c["id"],
+                        "name": c["name"],
+                        "type": "prompt",
+                        "conversation_goal_prompt": c["conversation_goal_prompt"],
+                        "scope": c.get("scope", "conversation"),
+                    }
+                    for c in evaluation_criteria
+                ]
+            }
+
+        platform_settings: dict = {
+            "auth": {"enable_auth": False},
+        }
+
+        # Data collection — attach under platform_settings if configured
+        data_collection = getattr(agent, "data_collection", None) or []
+        if data_collection:
+            try:
+                platform_settings["data_collection"] = [
+                    {
+                        "id": d["id"],
+                        "name": d["name"],
+                        "type": d.get("type", "string"),
+                        "description": d.get("description", ""),
+                    }
+                    for d in data_collection
+                ]
+            except Exception:
+                # Don't break sync if EL rejects data_collection format
+                pass
+
         return {
             "name": f"Voxara: {agent.name}",
-            "conversation_config": {
-                "agent": {
-                    "prompt": prompt_block,
-                    "first_message": agent.first_message or "",
-                    "language": agent.language,
-                },
-                "tts": tts_config,
-                "asr": {
-                    "quality": "high",
-                    "provider": stt_provider,
-                },
-                "turn": {
-                    "turn_timeout": agent.silence_timeout_seconds,
-                    "silence_end_call_timeout": 30,
-                    "mode": "turn",
-                },
-                "max_duration_seconds": max_call_dur,
-            },
-            "platform_settings": {
-                "auth": {"enable_auth": False},
-            },
+            "conversation_config": conversation_config,
+            "platform_settings": platform_settings,
         }
+
+    @staticmethod
+    def _override_tool_parameters(tool_name: str, base_params: dict, tool_configs: dict) -> dict:
+        """Return a (possibly modified) copy of base_params with per-agent enum overrides applied."""
+        import copy, json as _json
+        cfg = tool_configs.get(tool_name, {})
+
+        def _parse_list(raw: str) -> list[str]:
+            raw = (raw or "").strip()
+            if not raw:
+                return []
+            try:
+                parsed = _json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(v).strip() for v in parsed if str(v).strip()]
+            except _json.JSONDecodeError:
+                pass
+            return [v.strip() for v in raw.split(",") if v.strip()]
+
+        overrides: dict[str, list[str]] = {}
+        if tool_name == "log_call_outcome":
+            items = _parse_list(cfg.get("custom_outcomes", ""))
+            if items:
+                overrides["outcome"] = items
+        elif tool_name == "update_call_stage":
+            items = _parse_list(cfg.get("custom_stages", ""))
+            if items:
+                overrides["stage"] = items
+        elif tool_name == "get_call_script":
+            items = _parse_list(cfg.get("custom_sections", ""))
+            if items:
+                overrides["section"] = items
+
+        if not overrides:
+            return base_params
+
+        params = copy.deepcopy(base_params)
+        for field, enum_vals in overrides.items():
+            if "properties" in params and field in params["properties"]:
+                params["properties"][field]["enum"] = enum_vals
+        return params
 
     def _build_tool_definitions(self, agent, custom_tools: list[dict]) -> list[dict]:
         from app.tools.registry import get_tool
         from app.config import settings as _settings
         from app.tools.system_catalog import EL_SYSTEM_TOOLS, build_system_tool_def
+        from app.tools.tier2_catalog import TIER2_SERVER_CATALOG
 
         base_url = _settings.public_url
         tool_configs = getattr(agent, "tool_configs", None) or {}
         defs = []
 
-        # ── Tier 1: always-on platform webhook tools ──────────────────────────
-        tier1_names = [
+        # ── Tool name sets ────────────────────────────────────────────────────
+        # Tier 1 tools are now OPTIONAL — only included if they appear in
+        # agent.enabled_tools. New agents default to all 6 in their enabled_tools
+        # (set by the router at creation time) so the existing behavior is preserved.
+        tier1_names = {
             "save_lead", "get_contact_info", "end_call",
             "log_call_outcome", "get_call_script", "update_call_stage",
-        ]
-        for name in tier1_names:
-            tool = get_tool(name)
-            if tool:
-                defs.append({
-                    "type": "webhook",
-                    "name": name,
-                    "description": tool["description"],
-                    "api_schema": {
-                        "url": f"{base_url}/api/v1/el/tools/{name}",
-                        "method": "POST",
-                        "request_headers": {
-                            "X-Voxara-Secret": agent.signing_secret,
-                            "X-Agent-Id": agent.id,
-                        },
-                        "request_body_schema": tool["parameters"],
-                    },
-                })
-
-        # ── Tier 2: optional platform tools enabled per-agent ─────────────────
-        tier2_client = {"leave_voicemail"}
-        tier2_server = {
-            "book_meeting", "send_followup_sms", "lookup_product_info",
-            "check_crm_record", "update_crm_record", "qualify_lead",
         }
-        tier2_descriptions = {
-            "book_meeting":       "Book a meeting or appointment for the contact via the configured calendar integration.",
-            "send_followup_sms":  "Send a follow-up SMS message to the contact after the call.",
-            "lookup_product_info":"Look up product or pricing information from the agent's product catalog.",
-            "check_crm_record":   "Look up the contact's existing record in the CRM by phone number.",
-            "update_crm_record":  "Push call outcome and notes to the contact's CRM record.",
-            "qualify_lead":       "Score and qualify the lead based on the agent's criteria.",
-        }
-        tier2_parameters = {
-            "book_meeting": {"type": "object", "properties": {
-                "contact_name":   {"type": "string", "description": "Full name of the contact"},
-                "preferred_date": {"type": "string", "description": "Preferred date/time, e.g. 'Tuesday afternoon'"},
-                "meeting_type":   {"type": "string", "description": "Type of meeting: demo, discovery call, follow-up"},
-            }, "required": ["contact_name", "preferred_date"]},
-            "send_followup_sms": {"type": "object", "properties": {
-                "phone_number":     {"type": "string", "description": "Recipient phone number in E.164 format"},
-                "message_template": {"type": "string", "description": "Optional custom message; uses default template if omitted"},
-            }, "required": ["phone_number"]},
-            "lookup_product_info": {"type": "object", "properties": {
-                "query": {"type": "string", "description": "Product name, feature, or pricing question"},
-            }, "required": ["query"]},
-            "check_crm_record": {"type": "object", "properties": {
-                "phone_number": {"type": "string", "description": "Phone number to look up"},
-            }, "required": ["phone_number"]},
-            "update_crm_record": {"type": "object", "properties": {
-                "crm_id":    {"type": "string", "description": "CRM record ID"},
-                "properties":{"type": "object", "description": "Key-value pairs to update"},
-                "note":      {"type": "string", "description": "Note to add about this call"},
-            }, "required": ["crm_id"]},
-            "qualify_lead": {"type": "object", "properties": {
-                "answers": {"type": "object", "description": "Qualification criteria and contact's answers"},
-            }, "required": ["answers"]},
-        }
+        # Tier-2 server tools sourced from catalog (single source of truth)
+        tier2_server = set(TIER2_SERVER_CATALOG.keys())
 
         for tool_name in agent.enabled_tools:
             # ── EL native system tools (keys start with "el_") ─────────────────
@@ -475,6 +507,31 @@ class ElevenLabsService:
                 sys_def = build_system_tool_def(tool_name, cfg)
                 if sys_def:
                     defs.append(sys_def)
+                continue
+
+            # ── Tier 1: platform webhook tools (now opt-in per enabled_tools) ──
+            if tool_name in tier1_names:
+                tool = get_tool(tool_name)
+                if tool:
+                    # Allow description override from tool_configs
+                    custom_desc = tool_configs.get(tool_name, {}).get("description")
+                    description = custom_desc if custom_desc else tool["description"]
+                    # Apply per-agent enum overrides (custom outcomes/stages/sections)
+                    params = self._override_tool_parameters(tool_name, tool["parameters"], tool_configs)
+                    defs.append({
+                        "type": "webhook",
+                        "name": tool_name,
+                        "description": description,
+                        "api_schema": {
+                            "url": f"{base_url}/api/v1/el/tools/{tool_name}",
+                            "method": "POST",
+                            "request_headers": {
+                                "X-Voxara-Secret": agent.signing_secret,
+                                "X-Agent-Id": agent.id,
+                            },
+                            "request_body_schema": params,
+                        },
+                    })
                 continue
 
             # ── Our custom transfer_to_human (Twilio webhook) ──────────────────
@@ -489,10 +546,13 @@ class ElevenLabsService:
                         if configured_number
                         else " WARNING: no transfer number has been configured for this agent."
                     )
+                    # Allow description override from tool_configs
+                    custom_desc = cfg.get("description")
+                    base_desc = custom_desc if custom_desc else tool["description"]
                     defs.append({
                         "type": "webhook",
                         "name": "transfer_to_human",
-                        "description": tool["description"] + number_note,
+                        "description": base_desc + number_note,
                         "api_schema": {
                             "url": f"{base_url}/api/v1/el/tools/transfer_to_human",
                             "method": "POST",
@@ -503,20 +563,33 @@ class ElevenLabsService:
                             "request_body_schema": tool["parameters"],
                         },
                     })
-            elif tool_name in tier2_client:
+            elif tool_name == "leave_voicemail":
                 tool = get_tool(tool_name)
                 if tool:
+                    custom_desc = tool_configs.get(tool_name, {}).get("description")
+                    description = custom_desc if custom_desc else tool["description"]
                     defs.append({
-                        "type": "client",
-                        "name": tool_name,
-                        "description": tool["description"],
-                        "parameters": tool["parameters"],
+                        "type": "webhook",
+                        "name": "leave_voicemail",
+                        "description": description,
+                        "api_schema": {
+                            "url": f"{base_url}/api/v1/el/tools/leave_voicemail",
+                            "method": "POST",
+                            "request_headers": {
+                                "X-Voxara-Secret": agent.signing_secret,
+                                "X-Agent-Id": agent.id,
+                            },
+                            "request_body_schema": tool["parameters"],
+                        },
                     })
             elif tool_name in tier2_server:
+                meta = TIER2_SERVER_CATALOG[tool_name]
+                custom_desc = tool_configs.get(tool_name, {}).get("description")
+                description = custom_desc if custom_desc else meta["description"]
                 defs.append({
                     "type": "webhook",
                     "name": tool_name,
-                    "description": tier2_descriptions.get(tool_name, tool_name),
+                    "description": description,
                     "api_schema": {
                         "url": f"{base_url}/api/v1/tools/{tool_name}",
                         "method": "POST",
@@ -524,18 +597,29 @@ class ElevenLabsService:
                             "X-Voxara-Secret": agent.signing_secret,
                             "X-Agent-Id": agent.id,
                         },
-                        "request_body_schema": tier2_parameters.get(tool_name, {"type": "object", "properties": {}}),
+                        "request_body_schema": meta["parameters"],
                     },
                 })
 
-        # ── Custom user-created tools (webhook | client | mcp) ────────────────
+        # ── Custom user-created tools (webhook | client) ─────────────────────
+        # MCP tools are attached via mcp_server_ids in the prompt block — skip here.
         for ct in custom_tools:
             el_type = ct.get("el_tool_type", "webhook")
+            if el_type == "mcp":
+                continue
+            # Description override: check tool_configs by tool name or id
+            ct_name = ct["name"]
+            ct_custom_desc = (
+                tool_configs.get(ct_name, {}).get("description")
+                or tool_configs.get(ct.get("id", ""), {}).get("description")
+            )
+            ct_description = ct_custom_desc if ct_custom_desc else ct["description"]
+
             if el_type == "client":
                 defs.append({
                     "type": "client",
-                    "name": ct["name"],
-                    "description": ct["description"],
+                    "name": ct_name,
+                    "description": ct_description,
                     "parameters": ct.get("tool_parameters", []),
                     "expects_response": ct.get("expects_response", False),
                     "response_timeout_secs": ct.get("response_timeout_secs", 20),
@@ -547,8 +631,8 @@ class ElevenLabsService:
                 # webhook and mcp both call back to our proxy
                 defs.append({
                     "type": "webhook",
-                    "name": ct["name"],
-                    "description": ct["description"],
+                    "name": ct_name,
+                    "description": ct_description,
                     "api_schema": {
                         "url": f"{base_url}/api/v1/tools/custom/{ct['id']}",
                         "method": "POST",

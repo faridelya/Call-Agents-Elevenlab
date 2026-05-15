@@ -13,6 +13,7 @@ const tabs = [
   { id: 'tools',    label: 'Tools',    icon: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z' },
   { id: 'voice',    label: 'Voice',    icon: 'M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2' },
   { id: 'script',   label: 'Script',   icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8' },
+  { id: 'analysis', label: 'Analysis', icon: 'M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z' },
   { id: 'advanced', label: 'Advanced', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z' },
 ];
 
@@ -32,28 +33,75 @@ export const BUILTIN_TOOLS: Array<{
   { id: 'save_lead',           name: 'Save Lead',           desc: 'Capture contact info during call',       color: '#10B981', tier: 1, configurable: false },
   { id: 'get_contact_info',    name: 'Get Contact',         desc: 'Fetch existing lead before call',        color: '#38BDF8', tier: 1, configurable: false },
   { id: 'end_call',            name: 'End Call',            desc: 'Terminate call with outcome',            color: '#FF4D6D', tier: 1, configurable: false },
-  { id: 'log_call_outcome',    name: 'Log Outcome',         desc: 'Record result and next action',          color: '#06B6D4', tier: 1, configurable: false },
-  { id: 'get_call_script',     name: 'Get Script',          desc: 'Fetch script section on demand',         color: '#A89AF9', tier: 1, configurable: false },
-  { id: 'update_call_stage',   name: 'Update Stage',        desc: 'Track call stage for analytics',         color: '#64748B', tier: 1, configurable: false },
+  { id: 'log_call_outcome',    name: 'Log Outcome',               desc: 'Record result and next action',              color: '#06B6D4', tier: 1, configurable: true },
+  { id: 'get_call_script',     name: 'Product / Service Details', desc: 'Retrieve product info or playbook section',   color: '#A89AF9', tier: 1, configurable: true },
+  { id: 'update_call_stage',   name: 'Update Stage',              desc: 'Track call stage for analytics',             color: '#64748B', tier: 1, configurable: true },
   { id: 'book_meeting',        name: 'Book Meeting',        desc: 'Schedule via calendar integration',      color: '#F0B429', tier: 2, configurable: true },
   { id: 'send_followup_sms',   name: 'Send Follow-up SMS',  desc: 'Send SMS message after call',            color: '#38BDF8', tier: 2, configurable: true },
   { id: 'qualify_lead',        name: 'Qualify Lead',        desc: 'Score lead against your criteria',       color: '#A89AF9', tier: 2, configurable: false },
   { id: 'lookup_product_info', name: 'Product Info Lookup', desc: 'Answer questions from product catalog',  color: '#06B6D4', tier: 2, configurable: false },
   { id: 'check_crm_record',    name: 'CRM Lookup',          desc: 'Fetch contact from HubSpot/Salesforce',  color: '#F0B429', tier: 2, configurable: true },
   { id: 'update_crm_record',   name: 'CRM Update',          desc: 'Push outcome + notes to CRM',            color: '#10B981', tier: 2, configurable: true },
-  { id: 'transfer_to_human',   name: 'Transfer to Human',   desc: 'Warm/cold transfer via conference',      color: '#FF4D6D', tier: 2, configurable: true },
+  { id: 'transfer_to_human',   name: 'Transfer to Human (Custom)',   desc: 'Transfers via Twilio with dual-channel recording + AI transcription of the human-agent conversation.',      color: '#FF4D6D', tier: 2, configurable: true },
   { id: 'leave_voicemail',     name: 'Leave Voicemail',     desc: 'Play recorded voicemail, end call',      color: '#64748B', tier: 2, configurable: true },
 ];
 
 export const TIER1_IDS = new Set(BUILTIN_TOOLS.filter((t) => t.tier === 1).map((t) => t.id));
 
+// Static fallback descriptions — exactly match backend defaults.
+// Dynamically overwritten from GET /api/v1/tools/catalog on mount.
+const DEFAULT_TOOL_DESCRIPTIONS: Record<string, string> = {
+  // Tier 1 — from @register_tool decorators
+  save_lead: "Save or update the contact information for the person you're speaking with. Call this whenever you learn new details about them.",
+  get_contact_info: "Look up existing information about the contact you're speaking with, including their history and previous interactions.",
+  end_call: "End the call. IMPORTANT: Before calling this tool, always say a proper closing line to the contact and give them a chance to respond or ask anything else. Only call end_call after you have verbally said goodbye and the contact has acknowledged or there is a clear natural end to the conversation. Never cut the call abruptly mid-sentence or without a warm closing.",
+  log_call_outcome: "Log the outcome of this call before ending the conversation. Call this once you have a clear sense of the result — typically just before saying goodbye. The post-call system will verify and may refine the outcome from the full transcript, so an approximate value is fine if you are unsure.",
+  get_call_script: "Retrieve a specific section of your product details, service information, or playbook to guide the conversation.",
+  update_call_stage: "Track the current stage of the conversation for analytics and reporting.",
+  // Tier 2 registered
+  transfer_to_human: "Transfer this call to a human agent. Trigger when: (1) the customer explicitly asks for a human, (2) you cannot resolve the issue after genuine effort, (3) the customer is highly upset or the matter requires personal judgment. REQUIRED: Before calling this tool you MUST say to the customer exactly: 'I understand — let me connect you with one of our team members right away. Please hold for just a moment.' Call this tool immediately after saying that. Do not wait for a reply.",
+  leave_voicemail: "Leave a voicemail message when the contact does not answer, then end the call.",
+  // Tier 2 server (from tier2_catalog.py)
+  book_meeting: "Book a meeting or appointment for the contact via the configured calendar integration.",
+  send_followup_sms: "Send a follow-up SMS message to the contact after the call.",
+  lookup_product_info: "Look up product or pricing information from the agent's product catalog.",
+  check_crm_record: "Look up the contact's existing record in the CRM by phone number.",
+  update_crm_record: "Push call outcome and notes to the contact's CRM record.",
+  qualify_lead: "Score and qualify the lead based on the agent's criteria.",
+};
+
+// Live descriptions fetched from backend — overlays DEFAULT_TOOL_DESCRIPTIONS.
+// Mutated once on first ToolsTab mount; module-level so it persists across re-renders.
+const _liveToolDescriptions: Record<string, string> = { ...DEFAULT_TOOL_DESCRIPTIONS };
+// Live default configs from backend catalog — overlays DEFAULT_TOOL_CONFIGS.
+const _liveDefaultConfigs: Record<string, Record<string, unknown>> = {};
+let _catalogFetched = false;
+
+// Default configs — must exactly match backend defaults (tier2_catalog.py + individual tool handlers).
+// These are pre-filled for new agents and shown as placeholders for existing ones.
 const DEFAULT_TOOL_CONFIGS: Record<string, Record<string, string>> = {
-  book_meeting:      { calendar_provider: 'cal.com', api_key: '', calendar_id: '' },
-  send_followup_sms: { message_template: "Hi {{lead_first_name}}, thanks for chatting! We'll follow up shortly." },
-  check_crm_record:  { provider: 'hubspot', api_key: '' },
-  update_crm_record: { provider: 'hubspot', api_key: '' },
-  transfer_to_human: { transfer_to: '', mode: 'warm' },
-  leave_voicemail:   { default_message: "Hi, this is {{company_name}}. Sorry we missed you — we'll try again soon!" },
+  // Tier 1 configurable
+  get_call_script:    { custom_sections: '' },
+  log_call_outcome:   { custom_outcomes: '' },
+  update_call_stage:  { custom_stages: '' },
+  // Tier 2 registered
+  transfer_to_human: {
+    transfer_to: '', mode: 'cold',
+    connecting_message: "Connecting you now — please hold while we transfer your call.",
+    unavailable_message: "I'm sorry — I wasn't able to connect you to a human agent because no transfer number has been configured. Please contact us directly and I'll do everything I can to help you in the meantime.",
+    config_error_message: "I'm sorry — the transfer could not be completed due to a configuration issue. I apologize for the inconvenience. Is there anything I can help you with directly?",
+    transfer_failed_message: "I was unable to complete the transfer at this time. I apologize for the inconvenience.",
+  },
+  leave_voicemail:    { default_message: "Hi, this is {{company_name}}. Sorry we missed you — we'll try again soon!" },
+  // Tier 2 server (from tier2_catalog.py default_config)
+  book_meeting:          { calendar_provider: 'cal.com', calendar_id: '', api_key: '' },
+  send_followup_sms:     { message_template: "Thank you for your time today!" },
+  check_crm_record:      { provider: 'hubspot', api_key: '' },
+  update_crm_record:     { provider: 'hubspot', api_key: '' },
+  // EL system tools (from system_catalog.py default_config)
+  el_transfer_to_number: { transfer_to: '', condition: 'customer explicitly requests to speak with a human', transfer_type: 'conference', disable_interruptions: 'false', tool_error_handling_mode: 'auto' },
+  el_end_conversation:   { disable_interruptions: 'false', tool_error_handling_mode: 'auto' },
+  el_language_detection: { disable_interruptions: 'false', tool_error_handling_mode: 'auto' },
 };
 
 const POPULAR_VOICES: Array<{ voice_id: string; name: string; gender: string; accent: string }> = [
@@ -300,6 +348,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
   const [inboundPhone,      setInboundPhone]      = useState('');
   const [knowledgeBaseId,   setKnowledgeBaseId]   = useState('');
   const [knowledgeBaseName, setKnowledgeBaseName] = useState('');
+  const [evaluationCriteria, setEvaluationCriteria] = useState<Array<{ id: string; name: string; conversation_goal_prompt: string; scope: 'conversation' | 'agent' }>>([]);
+  const [dataCollection, setDataCollection] = useState<Array<{ id: string; name: string; type: 'string' | 'boolean' | 'number' | 'enum'; description: string }>>([]);
   const [isSaving,  setIsSaving]  = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -335,7 +385,19 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
     const tools = existing.enabled_tools ?? [];
     setEnabledTools([...new Set([...TIER1_IDS, ...tools])]);
     const savedCfg = (existing.tool_configs as Record<string, Record<string, string>>) ?? {};
-    setToolConfigs({ ...DEFAULT_TOOL_CONFIGS, ...savedCfg });
+    const mergedCfg: Record<string, Record<string, string>> = { ...DEFAULT_TOOL_CONFIGS, ...savedCfg };
+
+    // Seed agent-level fields into tool_configs so their UI editors can display them
+    const existingAny = existing as unknown as Record<string, unknown>;
+    const prodCatalog = existingAny.product_catalog as object[] | undefined;
+    if (prodCatalog && prodCatalog.length > 0 && !mergedCfg.lookup_product_info?.catalog_json) {
+      mergedCfg.lookup_product_info = { ...(mergedCfg.lookup_product_info ?? {}), catalog_json: JSON.stringify(prodCatalog, null, 2) };
+    }
+    const qualCrit = existingAny.qualification_criteria as Record<string, string> | undefined;
+    if (qualCrit && Object.keys(qualCrit).length > 0 && !mergedCfg.qualify_lead?.criteria_json) {
+      mergedCfg.qualify_lead = { ...(mergedCfg.qualify_lead ?? {}), criteria_json: JSON.stringify(qualCrit, null, 2) };
+    }
+    setToolConfigs(mergedCfg);
     setMaxDuration(existing.max_call_duration_seconds ?? 300);
     setSilenceTimeout(existing.silence_timeout_seconds ?? 10);
     setLlmModel(existing.llm_model ?? 'gemini-2.0-flash');
@@ -351,6 +413,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
     setScriptObjection(cs.objection_handling ?? '');
     setScriptClosing(cs.closing ?? '');
     setScriptFaq(cs.faq ?? '');
+    setEvaluationCriteria((existing as unknown as Record<string, unknown>).evaluation_criteria as typeof evaluationCriteria ?? []);
+    setDataCollection((existing as unknown as Record<string, unknown>).data_collection as typeof dataCollection ?? []);
     if (voicesData) {
       const libIds = new Set(voicesData.map((v) => v.voice_id));
       const merged = [...voicesData, ...POPULAR_VOICES.filter((v) => !libIds.has(v.voice_id))];
@@ -369,11 +433,23 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
   const mergedVoices = [...voices, ...POPULAR_VOICES.filter((v) => !libraryIds.has(v.voice_id))];
   const voiceId = mergedVoices[selectedVoice]?.voice_id ?? '';
 
-  function buildBody(): AgentCreate {
+  function buildBody() {
     const relevantConfigs: Record<string, Record<string, string>> = {};
     for (const toolId of enabledTools) {
       if (toolConfigs[toolId]) relevantConfigs[toolId] = toolConfigs[toolId];
     }
+
+    // Extract agent-level fields from tool_configs UI editors
+    // lookup_product_info stores catalog as catalog_json (JSON string → array)
+    let productCatalog: object[] = (existing as unknown as Record<string, unknown>)?.product_catalog as object[] ?? [];
+    const catalogRaw = toolConfigs.lookup_product_info?.catalog_json;
+    if (catalogRaw) { try { productCatalog = JSON.parse(catalogRaw); } catch { /* keep existing */ } }
+
+    // qualify_lead stores criteria as criteria_json (JSON string → dict)
+    let qualificationCriteria: Record<string, string> = (existing as unknown as Record<string, unknown>)?.qualification_criteria as Record<string, string> ?? {};
+    const criteriaRaw = toolConfigs.qualify_lead?.criteria_json;
+    if (criteriaRaw) { try { qualificationCriteria = JSON.parse(criteriaRaw); } catch { /* keep existing */ } }
+
     return {
       name: agentName, description, call_type: callType, voice_id: voiceId || 'default',
       language, system_prompt: systemPrompt, first_message: firstMessage,
@@ -385,6 +461,8 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
       tts_model: ttsModel, stt_provider: sttProvider,
       voice_stability: stability ?? undefined, voice_similarity: similarity ?? undefined,
       enabled_tools: enabledTools, tool_configs: relevantConfigs as Record<string, unknown>,
+      product_catalog: productCatalog,
+      qualification_criteria: qualificationCriteria,
       knowledge_base_id: knowledgeBaseId || null,
       knowledge_base_name: knowledgeBaseName || null,
       call_script: {
@@ -392,7 +470,9 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
         pitch: scriptPitch || undefined, objection_handling: scriptObjection || undefined,
         closing: scriptClosing || undefined, faq: scriptFaq || undefined,
       },
-    };
+      evaluation_criteria: evaluationCriteria,
+      data_collection: dataCollection,
+    } as AgentCreate;
   }
 
   function triggerValidationShake() {
@@ -730,6 +810,7 @@ export function AgentBuilder({ agentId, onBack }: { agentId: string | null; onBa
         )}
         {tab === 'voice'    && <VoiceTab voices={voices} selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice} ttsModel={ttsModel} setTtsModel={setTtsModel} sttProvider={sttProvider} setSttProvider={setSttProvider} />}
         {tab === 'script'   && <ScriptTab opener={scriptOpener} setOpener={setScriptOpener} discovery={scriptDiscovery} setDiscovery={setScriptDiscovery} pitch={scriptPitch} setPitch={setScriptPitch} objection={scriptObjection} setObjection={setScriptObjection} closing={scriptClosing} setClosing={setScriptClosing} faq={scriptFaq} setFaq={setScriptFaq} />}
+        {tab === 'analysis' && <AnalysisTab evaluationCriteria={evaluationCriteria} setEvaluationCriteria={setEvaluationCriteria} dataCollection={dataCollection} setDataCollection={setDataCollection} />}
         {tab === 'advanced' && <AdvancedTab maxDuration={maxDuration} setMaxDuration={setMaxDuration} silenceTimeout={silenceTimeout} setSilenceTimeout={setSilenceTimeout} llmModel={llmModel} setLlmModel={setLlmModel} temperature={temperature} setTemperature={setTemperature} />}
       </div>
 
@@ -913,10 +994,10 @@ const EL_SYSTEM_TOOLS: Array<{
 }> = [
   {
     key: 'el_transfer_to_number',
-    label: 'Transfer to Number',
+    label: 'Transfer to Number (EL Native)',
     subtitle: 'EL Native',
-    desc: 'Built-in call transfer via cold/warm/conference/SIP REFER — no backend required.',
-    color: '#7C6EFA',
+    desc: 'ElevenLabs handles the transfer natively — no dual-channel recording. Best for simple warm/cold transfers.',
+    color: '#22D3EE',
     icon: 'M16 3h5v5M4 20L21 3M21 3l-5 18-4-7-7-4',
     hasConfig: true,
   },
@@ -927,7 +1008,7 @@ const EL_SYSTEM_TOOLS: Array<{
     desc: 'Agent cleanly hangs up without additional backend logic.',
     color: '#EF4444',
     icon: 'M18 6 6 18M6 6l12 12',
-    hasConfig: false,
+    hasConfig: true,
   },
   {
     key: 'el_language_detection',
@@ -936,7 +1017,7 @@ const EL_SYSTEM_TOOLS: Array<{
     desc: 'Auto-detects caller language and switches response language.',
     color: '#22D3EE',
     icon: 'M2 12a10 10 0 1 0 20 0A10 10 0 0 0 2 12zM12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z',
-    hasConfig: false,
+    hasConfig: true,
   },
 ];
 
@@ -984,8 +1065,8 @@ function ExpandPanel({ open, color = '#F8FAFC', children }: { open: boolean; col
       transition: 'max-height 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.2s',
     }}>
       <div style={{
-        padding: '14px 16px 16px',
-        borderTop: '1px solid #F1F5F9',
+        padding: '16px 16px 18px',
+        borderTop: '1px solid #EDF2F7',
         background: color,
         animation: open ? 'ab-unfold 0.18s both' : 'none',
       }}>
@@ -999,13 +1080,14 @@ function ExpandPanel({ open, color = '#F8FAFC', children }: { open: boolean; col
 function SectionLabel({ label, accent = '#10B981', hint }: { label: string; accent?: string; hint?: string }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8, marginTop: 4,
+      display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, marginTop: 4,
     }}>
-      <div style={{ width: 3, height: 13, borderRadius: 2, background: accent, flexShrink: 0 }} />
-      <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: accent }}>
+      <div style={{ width: 4, height: 16, borderRadius: 2, background: `linear-gradient(180deg, ${accent}, ${accent}88)`, flexShrink: 0 }} />
+      <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: accent }}>
         {label}
       </span>
-      {hint && <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>{hint}</span>}
+      {hint && <span style={{ fontSize: 10.5, color: '#94A3B8', fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>{hint}</span>}
+      <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${accent}22, transparent)` }} />
     </div>
   );
 }
@@ -1032,6 +1114,9 @@ function ToolsTab({
   const [expandedCustom,  setExpandedCustom]  = useState<string | null>(null);
   const [kbOpen,          setKbOpen]          = useState(false);
 
+  const [toolDescriptions, setToolDescriptions] = useState<Record<string, string>>(_liveToolDescriptions);
+  const [toolDefaultConfigs, setToolDefaultConfigs] = useState<Record<string, Record<string, unknown>>>({ ..._liveDefaultConfigs });
+
   useEffect(() => {
     if (!agentId) return;
     setLoadingCustom(true);
@@ -1041,13 +1126,48 @@ function ToolsTab({
       .finally(() => setLoadingCustom(false));
   }, [agentId]);
 
+  // Fetch live descriptions + default_configs from backend /catalog once.
+  // Also fetch /system-catalog for EL system tool defaults.
+  // Backend is single source of truth — these overlay the static fallbacks above.
+  useEffect(() => {
+    if (_catalogFetched) return;
+    _catalogFetched = true;
+
+    const fetchCatalog = toolsApi.catalog().then((items: Array<{ name: string; description: string; default_config?: Record<string, unknown> }>) => {
+      const descMap: Record<string, string> = { ..._liveToolDescriptions };
+      const cfgMap: Record<string, Record<string, unknown>> = { ..._liveDefaultConfigs };
+      items.forEach((t) => {
+        descMap[t.name] = t.description;
+        if (t.default_config && Object.keys(t.default_config).length > 0) {
+          cfgMap[t.name] = t.default_config;
+        }
+      });
+      Object.assign(_liveToolDescriptions, descMap);
+      Object.assign(_liveDefaultConfigs, cfgMap);
+      setToolDescriptions({ ...descMap });
+      setToolDefaultConfigs({ ...cfgMap });
+    }).catch(() => {/* keep defaults */});
+
+    const fetchSysCatalog = toolsApi.systemCatalog().then((items) => {
+      const cfgMap: Record<string, Record<string, unknown>> = { ..._liveDefaultConfigs };
+      items.forEach((t) => {
+        if (t.default_config && Object.keys(t.default_config).length > 0) {
+          cfgMap[t.key] = t.default_config;
+        }
+      });
+      Object.assign(_liveDefaultConfigs, cfgMap);
+      setToolDefaultConfigs((prev) => ({ ...prev, ...cfgMap }));
+    }).catch(() => {});
+
+    Promise.allSettled([fetchCatalog, fetchSysCatalog]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Open KB panel if KB ID already set (editing existing agent)
   useEffect(() => {
     if (knowledgeBaseId) setKbOpen(true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id: string) => {
-    if (TIER1_IDS.has(id)) return;
     const willEnable = !enabledTools.includes(id);
     const next = willEnable ? [...enabledTools, id] : enabledTools.filter((t) => t !== id);
     setEnabledTools(next);
@@ -1095,48 +1215,70 @@ function ToolsTab({
   const kbActive = !!knowledgeBaseId.trim();
 
   // Row for EL Native + Platform Extension tools
-  const ToolRow = ({ id, label, desc, color, active, hasConfig, children }: {
+  const ToolRow = ({ id, label, desc, color, active, hasConfig, elBadge, children }: {
     id: string; label: string; desc: string; color: string;
-    active: boolean; hasConfig: boolean; children?: React.ReactNode;
+    active: boolean; hasConfig: boolean; elBadge?: React.ReactNode; children?: React.ReactNode;
   }) => {
     const expanded = expandedKey === id && active && hasConfig;
     return (
       <div style={{
-        background: active ? `${color}06` : '#FAFAFA',
-        border: `1px solid ${active ? `${color}22` : '#E2E8F0'}`,
+        background: active ? '#FFFFFF' : '#FAFAFA',
+        border: `1px solid ${active ? `${color}33` : '#E8EDF2'}`,
+        borderLeft: `3px solid ${active ? color : '#E2E8F0'}`,
         borderRadius: 10, overflow: 'hidden',
-        transition: 'border-color 0.2s, background 0.2s',
+        boxShadow: active ? `0 2px 12px ${color}12, 0 1px 3px rgba(0,0,0,0.06)` : '0 1px 2px rgba(0,0,0,0.03)',
+        transition: 'border-color 0.2s, background 0.2s, box-shadow 0.2s',
       }}>
         <div
           onClick={() => toggle(id)}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', cursor: 'pointer', userSelect: 'none' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px 12px 12px', cursor: 'pointer', userSelect: 'none' }}
         >
+          {/* Color dot */}
           <div style={{
-            width: 5, height: 28, borderRadius: 3, flexShrink: 0,
-            background: active ? color : '#E2E8F0',
-            transition: 'background 0.2s', boxShadow: active ? `0 0 8px ${color}55` : 'none',
-          }} />
+            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+            background: active ? `${color}15` : '#F1F5F9',
+            border: `1px solid ${active ? `${color}30` : '#E2E8F0'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s',
+          }}>
+            <div style={{
+              width: 10, height: 10, borderRadius: '50%',
+              background: active ? color : '#CBD5E1',
+              boxShadow: active ? `0 0 6px ${color}88` : 'none',
+              transition: 'all 0.2s',
+            }} />
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: active ? '#0F172A' : '#94A3B8', marginBottom: 2, transition: 'color 0.2s' }}>
-              {label}
+            <div style={{ fontSize: 13, fontWeight: 600, color: active ? '#0F172A' : '#64748B', marginBottom: 3, transition: 'color 0.2s', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0 }}>
+              {elBadge ?? label}
             </div>
-            <div style={{ fontSize: 10.5, color: '#94A3B8', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 11, color: active ? '#64748B' : '#94A3B8', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {desc}
             </div>
           </div>
           <ToggleSwitch active={active} color={color} />
-          {active && hasConfig && (
-            <div onClick={(e) => { e.stopPropagation(); setExpandedKey(expanded ? null : id); }}
-              style={{ padding: '4px 2px', cursor: 'pointer', color: '#94A3B8' }}>
-              <Chevron open={expanded} />
-            </div>
-          )}
+          {/* Always reserve chevron space — prevents toggle button jumping left/right */}
+          <div
+            onClick={(e) => {
+              if (!active || !hasConfig) return;
+              e.stopPropagation();
+              setExpandedKey(expanded ? null : id);
+            }}
+            style={{
+              width: 20, flexShrink: 0, padding: '4px 2px',
+              cursor: active && hasConfig ? 'pointer' : 'default',
+              color: '#94A3B8',
+              opacity: active && hasConfig ? 1 : 0,
+              transition: 'opacity 0.18s',
+              pointerEvents: active && hasConfig ? 'auto' : 'none',
+            }}
+          >
+            <Chevron open={expanded} />
+          </div>
         </div>
-        {hasConfig && (
-          <ExpandPanel open={expanded} color={`${color}05`}>
-            {children}
-          </ExpandPanel>
-        )}
+        <ExpandPanel open={expanded} color={`${color}04`}>
+          {children}
+        </ExpandPanel>
       </div>
     );
   };
@@ -1186,27 +1328,23 @@ function ToolsTab({
 
       {/* ── 1. Core Platform Tools ───────────────────────────────────────────── */}
       <div>
-        <SectionLabel label="Core Platform Tools" hint="· always active, no config needed" />
-        <div style={{
-          background: '#FFFFFF', border: '1px solid #E2E8F0',
-          borderRadius: 12, padding: '14px 16px',
-        }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-            {tier1.map((tool) => (
-              <div key={tool.id} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                background: '#F8FAFC', borderRadius: 8, padding: '8px 11px',
-                border: `1px solid ${tool.color}20`,
-              }}>
-                <div style={{ width: 5, height: 5, borderRadius: '50%', background: tool.color, boxShadow: `0 0 6px ${tool.color}`, flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tool.name}</div>
-                  <div style={{ fontSize: 9.5, color: '#94A3B8', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.desc}</div>
-                </div>
-                <span style={{ fontSize: 7.5, fontWeight: 800, color: tool.color, background: `${tool.color}18`, padding: '1.5px 5px', borderRadius: 9999, letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>core</span>
-              </div>
-            ))}
-          </div>
+        <SectionLabel label="Core Platform Tools" hint="· toggle to include or exclude from agent" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {tier1.map((tool) => {
+            const active = enabledTools.includes(tool.id);
+            const cfg = toolConfigs[tool.id] ?? {};
+            return (
+              <ToolRow key={tool.id} id={tool.id} label={tool.name} desc={tool.desc}
+                color={tool.color} active={active} hasConfig={true}>
+                <Tier1DescriptionEditor
+                  toolId={tool.id}
+                  config={cfg}
+                  onChange={(key, val) => updateConfig(tool.id, key, val)}
+                  liveDescriptions={toolDescriptions}
+                />
+              </ToolRow>
+            );
+          })}
         </div>
       </div>
 
@@ -1217,31 +1355,90 @@ function ToolsTab({
           {EL_SYSTEM_TOOLS.map((sys) => {
             const active = enabledTools.includes(sys.key);
             const cfg = (toolConfigs[sys.key] ?? {}) as Record<string, string>;
+            // Backend default_config for this system tool (fetched from /system-catalog or static fallback)
+            const sysDef = (toolDefaultConfigs[sys.key] ?? DEFAULT_TOOL_CONFIGS[sys.key] ?? {}) as Record<string, unknown>;
+            const elLabel = (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
+                {sys.label}
+                <span style={{ background: 'rgba(34,211,238,0.12)', color: '#22D3EE', borderRadius: 4, padding: '2px 6px', fontSize: 11, marginLeft: 8 }}>EL Native</span>
+              </span>
+            );
             return (
               <ToolRow key={sys.key} id={sys.key} label={sys.label} desc={sys.desc}
-                color={sys.color} active={active} hasConfig={sys.hasConfig}>
-                {/* EL Transfer config */}
-                {sys.key === 'el_transfer_to_number' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                elBadge={elLabel} color={sys.color} active={active} hasConfig={sys.hasConfig}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* EL Transfer config */}
+                  {sys.key === 'el_transfer_to_number' && (
+                    <>
+                      <div>
+                        <GLabel>Transfer Phone Number</GLabel>
+                        <GInput type="tel" value={cfg.transfer_to ?? ''} onChange={(e) => updateSysConfig(sys.key, 'transfer_to', e.target.value)} placeholder="+1 (555) 000-0000" />
+                      </div>
+                      <div>
+                        <GLabel>Transfer Condition</GLabel>
+                        <GInput value={cfg.condition ?? ''} onChange={(e) => updateSysConfig(sys.key, 'condition', e.target.value)} placeholder={String(sysDef.condition ?? 'customer explicitly requests to speak with a human')} />
+                      </div>
+                      <div>
+                        <GLabel>Transfer Type</GLabel>
+                        <GSelect value={cfg.transfer_type ?? String(sysDef.transfer_type ?? 'conference')} onChange={(e) => updateSysConfig(sys.key, 'transfer_type', e.target.value)}>
+                          <option value="conference">Conference — agent stays on call</option>
+                          <option value="cold">Cold — direct transfer, agent drops</option>
+                          <option value="warm">Warm — agent stays briefly</option>
+                        </GSelect>
+                      </div>
+                    </>
+                  )}
+                  {/* Advanced: disable_interruptions + error handling — all EL system tools */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div>
-                      <GLabel>Transfer-to number (E.164)</GLabel>
-                      <GInput value={cfg.phone_number ?? ''} onChange={(e) => updateSysConfig(sys.key, 'phone_number', e.target.value)} placeholder="+15551234567" />
-                    </div>
-                    <div>
-                      <GLabel>Transfer type</GLabel>
-                      <GSelect value={cfg.transfer_type ?? 'cold'} onChange={(e) => updateSysConfig(sys.key, 'transfer_type', e.target.value)}>
-                        <option value="cold">Cold — immediate handoff</option>
-                        <option value="warm">Warm — agent stays briefly</option>
-                        <option value="conference">Conference — 3-way bridge</option>
-                        <option value="sip_refer">SIP REFER — carrier-level</option>
+                      <GLabel>Disable Interruptions</GLabel>
+                      <GSelect
+                        value={cfg.disable_interruptions ?? String(sysDef.disable_interruptions ?? 'false')}
+                        onChange={(e) => updateSysConfig(sys.key, 'disable_interruptions', e.target.value)}
+                      >
+                        <option value="false">No — allow interruptions</option>
+                        <option value="true">Yes — block interruptions</option>
                       </GSelect>
                     </div>
-                    <div style={{ gridColumn: '1/-1' }}>
-                      <GLabel hint="— optional, leave blank to always transfer">Condition</GLabel>
-                      <GInput value={cfg.condition ?? ''} onChange={(e) => updateSysConfig(sys.key, 'condition', e.target.value)} placeholder="when user asks to speak with a human" />
+                    <div>
+                      <GLabel>On Error</GLabel>
+                      <GSelect
+                        value={cfg.tool_error_handling_mode ?? String(sysDef.tool_error_handling_mode ?? 'auto')}
+                        onChange={(e) => updateSysConfig(sys.key, 'tool_error_handling_mode', e.target.value)}
+                      >
+                        <option value="auto">Auto — agent handles gracefully</option>
+                        <option value="fail">Fail — end call on error</option>
+                        <option value="ignore">Ignore — continue silently</option>
+                      </GSelect>
                     </div>
                   </div>
-                )}
+                  {/* Description override for all EL system tools */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Custom Description</span>
+                      {cfg.description ? (
+                        <button onClick={() => updateSysConfig(sys.key, 'description', '')}
+                          style={{ fontSize: 10.5, color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, textDecoration: 'underline', textDecorationStyle: 'dotted' }}>
+                          Reset to default
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 10, color: '#94A3B8', fontStyle: 'italic' }}>leave blank to keep default</span>
+                      )}
+                    </div>
+                    <textarea
+                      value={cfg.description || ''}
+                      onChange={(e) => updateSysConfig(sys.key, 'description', e.target.value)}
+                      placeholder={sys.desc}
+                      rows={3}
+                      style={{
+                        background: '#FFFFFF', border: '1px solid #E2E8F0',
+                        color: '#334155', borderRadius: 9, padding: '9px 12px', fontSize: 13,
+                        minHeight: 60, resize: 'vertical', width: '100%', outline: 'none',
+                        lineHeight: 1.65, fontFamily: 'var(--font-ui), sans-serif', boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
               </ToolRow>
             );
           })}
@@ -1255,10 +1452,17 @@ function ToolsTab({
           {tier2.map((tool) => {
             const active = enabledTools.includes(tool.id);
             const cfg = toolConfigs[tool.id] ?? {};
+            const voxaraBadge = tool.id === 'transfer_to_human' ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
+                {tool.name}
+                <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10B981', borderRadius: 4, padding: '2px 6px', fontSize: 11, marginLeft: 8 }}>Voxara Custom</span>
+              </span>
+            ) : undefined;
             return (
               <ToolRow key={tool.id} id={tool.id} label={tool.name} desc={tool.desc}
-                color={tool.color} active={active} hasConfig={tool.configurable}>
-                <ToolConfigPanel tool={tool} config={cfg} onChange={(key, val) => updateConfig(tool.id, key, val)} />
+                elBadge={voxaraBadge}
+                color={tool.color} active={active} hasConfig={true}>
+                <ToolConfigPanel tool={tool} config={cfg} onChange={(key, val) => updateConfig(tool.id, key, val)} liveDescriptions={toolDescriptions} defaultConfig={toolDefaultConfigs[tool.id] ?? DEFAULT_TOOL_CONFIGS[tool.id] ?? {}} />
               </ToolRow>
             );
           })}
@@ -1269,23 +1473,35 @@ function ToolsTab({
       <div>
         <SectionLabel label="Knowledge Base" accent="#10B981" hint="· ElevenLabs native KB attachment" />
         <div style={{
-          background: kbActive ? 'rgba(16,185,129,0.045)' : '#FAFAFA',
-          border: `1px solid ${kbActive ? 'rgba(16,185,129,0.22)' : '#E2E8F0'}`,
-          borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.2s, background 0.2s',
+          background: kbActive ? '#FFFFFF' : '#FAFAFA',
+          border: `1px solid ${kbActive ? 'rgba(16,185,129,0.33)' : '#E8EDF2'}`,
+          borderLeft: `3px solid ${kbActive ? '#10B981' : '#E2E8F0'}`,
+          borderRadius: 10, overflow: 'hidden',
+          boxShadow: kbActive ? '0 2px 12px rgba(16,185,129,0.1), 0 1px 3px rgba(0,0,0,0.06)' : '0 1px 2px rgba(0,0,0,0.03)',
+          transition: 'border-color 0.2s, background 0.2s, box-shadow 0.2s',
         }}>
           {/* Toggle row */}
           <div
             onClick={() => setKbOpen((v) => !v)}
-            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', cursor: 'pointer', userSelect: 'none' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px 12px 12px', cursor: 'pointer', userSelect: 'none' }}
           >
             <div style={{
-              width: 5, height: 28, borderRadius: 3, flexShrink: 0,
-              background: kbActive ? '#10B981' : '#E2E8F0',
-              transition: 'background 0.2s', boxShadow: kbActive ? '0 0 8px rgba(16,185,129,0.5)' : 'none',
-            }} />
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: kbActive ? 'rgba(16,185,129,0.12)' : '#F1F5F9',
+              border: `1px solid ${kbActive ? 'rgba(16,185,129,0.25)' : '#E2E8F0'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s',
+            }}>
+              <div style={{
+                width: 10, height: 10, borderRadius: '50%',
+                background: kbActive ? '#10B981' : '#CBD5E1',
+                boxShadow: kbActive ? '0 0 6px rgba(16,185,129,0.6)' : 'none',
+                transition: 'all 0.2s',
+              }} />
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: kbActive ? '#FFFFFF' : '#94A3B8', transition: 'color 0.2s' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: kbActive ? '#0F172A' : '#64748B', transition: 'color 0.2s' }}>
                   {kbActive ? (knowledgeBaseName || 'Knowledge Base') : 'Knowledge Base'}
                 </span>
                 {kbActive && (
@@ -1361,22 +1577,31 @@ function ToolsTab({
               const open = expandedCustom === ct.id;
               return (
                 <div key={ct.id} style={{
-                  background: open ? `${typeColor}06` : '#FAFAFA',
-                  border: `1px solid ${open ? `${typeColor}22` : '#E2E8F0'}`,
+                  background: open ? '#FFFFFF' : '#FAFAFA',
+                  border: `1px solid ${open ? `${typeColor}30` : '#E8EDF2'}`,
+                  borderLeft: `3px solid ${open ? typeColor : '#E2E8F0'}`,
                   borderRadius: 10, overflow: 'hidden', opacity: ct.is_active ? 1 : 0.45,
+                  boxShadow: open ? `0 2px 10px ${typeColor}10, 0 1px 3px rgba(0,0,0,0.05)` : '0 1px 2px rgba(0,0,0,0.03)',
                   transition: 'all 0.2s',
                 }}>
                   <div
                     onClick={() => setExpandedCustom(open ? null : ct.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', userSelect: 'none' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 12px 12px', cursor: 'pointer', userSelect: 'none' }}
                   >
-                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: typeColor, background: `${typeColor}18`, padding: '2px 7px', borderRadius: 9999, flexShrink: 0 }}>
-                      {ct.el_tool_type}
-                    </span>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: '#0F172A', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                      background: `${typeColor}12`,
+                      border: `1px solid ${typeColor}25`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: typeColor }}>
+                        {ct.el_tool_type === 'webhook' ? 'WH' : ct.el_tool_type === 'client' ? 'CL' : 'MCP'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {ct.name}
                     </span>
-                    <span style={{ fontSize: 10.5, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200, flexShrink: 1 }}>
+                    <span style={{ fontSize: 10.5, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180, flexShrink: 1 }}>
                       {ct.description}
                     </span>
                     <Chevron open={open} />
@@ -1418,54 +1643,64 @@ function ToolsTab({
   );
 }
 
-function ToolConfigPanel({ tool, config, onChange }: {
+function ToolConfigPanel({ tool, config, onChange, liveDescriptions, defaultConfig = {} }: {
   tool: typeof BUILTIN_TOOLS[number]; config: Record<string, string>; onChange: (key: string, val: string) => void;
+  liveDescriptions?: Record<string, string>;
+  defaultConfig?: Record<string, unknown>;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Description — pre-populated with default, user can override */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-          <GLabel hint="— shown to the LLM, edit to customise">Tool description</GLabel>
-          {config.description_override && config.description_override !== tool.desc && (
+          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Custom Description</span>
+          {config.description ? (
             <button
-              onClick={() => onChange('description_override', '')}
-              style={{ fontSize: 10, color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}
+              onClick={() => onChange('description', '')}
+              style={{ fontSize: 10.5, color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, textDecoration: 'underline', textDecorationStyle: 'dotted' }}
             >
               Reset to default
             </button>
+          ) : (
+            <span style={{ fontSize: 10, color: '#94A3B8', fontStyle: 'italic' }}>leave blank to keep default</span>
           )}
         </div>
-        <GTextarea
-          value={config.description_override || tool.desc}
-          onChange={(e) => onChange('description_override', e.target.value)}
-          rows={2}
-          style={{ fontSize: 12 }}
+        <textarea
+          value={config.description || ''}
+          onChange={(e) => onChange('description', e.target.value)}
+          placeholder={(liveDescriptions?.[tool.id]) || DEFAULT_TOOL_DESCRIPTIONS[tool.id] || tool.desc}
+          rows={3}
+          style={{
+            background: '#FFFFFF', border: '1px solid #E2E8F0',
+            color: '#334155', borderRadius: 9, padding: '9px 12px', fontSize: 13,
+            minHeight: 60, resize: 'vertical', width: '100%', outline: 'none',
+            lineHeight: 1.65, fontFamily: 'var(--font-ui), sans-serif', boxSizing: 'border-box',
+          }}
         />
-        <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 4, lineHeight: 1.5 }}>
-          {config.description_override && config.description_override !== tool.desc
-            ? 'Custom — agent uses your version above'
-            : 'Default — click to customise what the agent is told about this tool'}
-        </div>
       </div>
 
       {tool.id === 'book_meeting' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
-            <GLabel>Calendar provider</GLabel>
-            <GSelect value={config.calendar_provider ?? 'cal.com'} onChange={(e) => onChange('calendar_provider', e.target.value)}>
-              <option value="cal.com">Cal.com</option>
-              <option value="google_calendar">Google Calendar</option>
-              <option value="calendly">Calendly</option>
-            </GSelect>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 11, color: '#F0B429', background: 'rgba(240,180,41,0.08)', border: '1px solid rgba(240,180,41,0.2)', borderRadius: 7, padding: '7px 10px' }}>
+            Calendar integration is in development. Config is saved and will activate when the integration ships.
           </div>
-          <div>
-            <GLabel>Calendar ID / username</GLabel>
-            <GInput value={config.calendar_id ?? ''} onChange={(e) => onChange('calendar_id', e.target.value)} placeholder="your-username" />
-          </div>
-          <div style={{ gridColumn: '1/-1' }}>
-            <GLabel>API key</GLabel>
-            <GInput type="password" value={config.api_key ?? ''} onChange={(e) => onChange('api_key', e.target.value)} placeholder="cal_xxxxxxxxxx" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <GLabel>Calendar provider</GLabel>
+              <GSelect value={config.calendar_provider ?? String(defaultConfig.calendar_provider ?? 'cal.com')} onChange={(e) => onChange('calendar_provider', e.target.value)}>
+                <option value="cal.com">Cal.com</option>
+                <option value="google_calendar">Google Calendar</option>
+                <option value="calendly">Calendly</option>
+              </GSelect>
+            </div>
+            <div>
+              <GLabel>Calendar ID / username</GLabel>
+              <GInput value={config.calendar_id ?? ''} onChange={(e) => onChange('calendar_id', e.target.value)} placeholder="your-username" />
+            </div>
+            <div style={{ gridColumn: '1/-1' }}>
+              <GLabel>API key</GLabel>
+              <GInput type="password" value={config.api_key ?? ''} onChange={(e) => onChange('api_key', e.target.value)} placeholder="cal_xxxxxxxxxx" />
+            </div>
           </div>
         </div>
       )}
@@ -1473,7 +1708,7 @@ function ToolConfigPanel({ tool, config, onChange }: {
       {tool.id === 'send_followup_sms' && (
         <div>
           <GLabel hint="— {{lead_first_name}}, {{company_name}}">Message template</GLabel>
-          <GTextarea value={config.message_template ?? ''} onChange={(e) => onChange('message_template', e.target.value)} rows={3} placeholder="Hi {{lead_first_name}}, thanks for chatting!" />
+          <GTextarea value={config.message_template ?? ''} onChange={(e) => onChange('message_template', e.target.value)} rows={3} placeholder={String(defaultConfig.message_template ?? DEFAULT_TOOL_CONFIGS.send_followup_sms?.message_template ?? 'Thank you for your time today!')} />
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
             {(config.message_template ?? '').length}/160
           </div>
@@ -1499,18 +1734,76 @@ function ToolConfigPanel({ tool, config, onChange }: {
         </div>
       )}
 
+      {tool.id === 'lookup_product_info' && (
+        <div>
+          <GLabel hint="— JSON array">Product Catalog</GLabel>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+            JSON array of product objects. The agent searches this catalog when asked about products or pricing.
+          </div>
+          <GTextarea
+            value={config.catalog_json ?? ''}
+            onChange={(e) => onChange('catalog_json', e.target.value)}
+            rows={6}
+            placeholder={`[\n  { "name": "Pro Plan", "price": "$99/mo", "features": "Unlimited calls, CRM sync" },\n  { "name": "Starter", "price": "$29/mo", "features": "100 calls/month" }\n]`}
+          />
+        </div>
+      )}
+
+      {tool.id === 'qualify_lead' && (
+        <div>
+          <GLabel hint="— JSON object">Qualification Criteria</GLabel>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+            JSON object where each key is a criteria identifier and the value is the question or requirement. The agent scores the lead based on how many criteria are met.
+          </div>
+          <GTextarea
+            value={config.criteria_json ?? ''}
+            onChange={(e) => onChange('criteria_json', e.target.value)}
+            rows={5}
+            placeholder={`{\n  "has_budget": "Does the contact have budget allocated?",\n  "decision_maker": "Is the contact the decision maker?",\n  "timeline": "Does the contact have a purchase timeline within 3 months?"\n}`}
+          />
+        </div>
+      )}
+
       {tool.id === 'transfer_to_human' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
-            <GLabel>Transfer-to number (E.164)</GLabel>
-            <GInput value={config.transfer_to ?? ''} onChange={(e) => onChange('transfer_to', e.target.value)} placeholder="+15551234567" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <GLabel>Transfer-to number (E.164)</GLabel>
+              <GInput value={config.transfer_to ?? ''} onChange={(e) => onChange('transfer_to', e.target.value)} placeholder="+15551234567" />
+            </div>
+            <div>
+              <GLabel>Transfer mode</GLabel>
+              <GSelect value={config.mode ?? String(defaultConfig.mode ?? 'cold')} onChange={(e) => onChange('mode', e.target.value)}>
+                <option value="cold">Cold — immediate handoff</option>
+                <option value="warm">Warm — agent stays briefly</option>
+              </GSelect>
+            </div>
           </div>
           <div>
-            <GLabel>Transfer mode</GLabel>
-            <GSelect value={config.mode ?? 'warm'} onChange={(e) => onChange('mode', e.target.value)}>
-              <option value="warm">Warm — agent stays briefly</option>
-              <option value="cold">Cold — immediate handoff</option>
-            </GSelect>
+            <GLabel hint="— spoken to caller when connecting">Connecting message</GLabel>
+            <GInput
+              value={config.connecting_message ?? ''}
+              onChange={(e) => onChange('connecting_message', e.target.value)}
+              placeholder={String(defaultConfig.connecting_message ?? DEFAULT_TOOL_CONFIGS.transfer_to_human?.connecting_message ?? '')}
+            />
+          </div>
+          <div>
+            <GLabel hint="— spoken when no number is configured">Unavailable message</GLabel>
+            <GTextarea
+              value={config.unavailable_message ?? ''}
+              onChange={(e) => onChange('unavailable_message', e.target.value)}
+              rows={2}
+              placeholder={String(defaultConfig.unavailable_message ?? DEFAULT_TOOL_CONFIGS.transfer_to_human?.unavailable_message ?? '')}
+            />
+          </div>
+          <div>
+            <GLabel hint="— spoken when Twilio redirect fails">Transfer failed message</GLabel>
+            <GTextarea
+              value={config.transfer_failed_message ?? ''}
+              onChange={(e) => onChange('transfer_failed_message', e.target.value)}
+              rows={2}
+              placeholder={String(defaultConfig.transfer_failed_message ?? DEFAULT_TOOL_CONFIGS.transfer_to_human?.transfer_failed_message ?? '')}
+            />
           </div>
         </div>
       )}
@@ -1518,7 +1811,7 @@ function ToolConfigPanel({ tool, config, onChange }: {
       {tool.id === 'leave_voicemail' && (
         <div>
           <GLabel hint="— {{company_name}}, {{lead_first_name}}">Voicemail message</GLabel>
-          <GTextarea value={config.default_message ?? ''} onChange={(e) => onChange('default_message', e.target.value)} rows={3} placeholder="Hi, this is {{company_name}}. Sorry we missed you!" />
+          <GTextarea value={config.default_message ?? ''} onChange={(e) => onChange('default_message', e.target.value)} rows={3} placeholder={String(defaultConfig.default_message ?? DEFAULT_TOOL_CONFIGS.leave_voicemail?.default_message ?? '')} />
         </div>
       )}
     </div>
@@ -1841,6 +2134,298 @@ function ScriptTab({ opener, setOpener, discovery, setDiscovery, pitch, setPitch
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tier1 description + optional config editor ───────────────────────────────
+function Tier1DescriptionEditor({ toolId, config, onChange, liveDescriptions }: {
+  toolId: string; config: Record<string, string>; onChange: (key: string, val: string) => void;
+  liveDescriptions: Record<string, string>;
+}) {
+  const taStyle: React.CSSProperties = {
+    background: '#FFFFFF', border: '1px solid #E2E8F0',
+    color: '#334155', borderRadius: 9, padding: '9px 12px', fontSize: 13,
+    resize: 'vertical', width: '100%', outline: 'none', lineHeight: 1.65,
+    fontFamily: 'var(--font-ui), sans-serif', boxSizing: 'border-box',
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Description override */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Custom Description</span>
+          {config.description ? (
+            <button onClick={() => onChange('description', '')}
+              style={{ fontSize: 10.5, color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, textDecoration: 'underline', textDecorationStyle: 'dotted' }}>
+              Reset to default
+            </button>
+          ) : (
+            <span style={{ fontSize: 10, color: '#94A3B8', fontStyle: 'italic' }}>leave blank to keep default</span>
+          )}
+        </div>
+        <textarea
+          value={config.description || ''}
+          onChange={(e) => onChange('description', e.target.value)}
+          placeholder={liveDescriptions[toolId] || DEFAULT_TOOL_DESCRIPTIONS[toolId] || 'Enter a custom description...'}
+          rows={3}
+          style={taStyle}
+        />
+      </div>
+
+      {/* log_call_outcome — custom outcome values */}
+      {toolId === 'log_call_outcome' && (
+        <div>
+          <GLabel hint="— comma-separated or JSON array">Custom Outcome Values</GLabel>
+          <div style={{ color: '#64748B', fontSize: 11, marginBottom: 6 }}>
+            Override the allowed outcome options the AI can log. Leave blank to use the defaults
+            (goal_achieved, interested, not_interested, voicemail_left, etc.).
+          </div>
+          <GTextarea
+            value={config.custom_outcomes ?? ''}
+            onChange={(e) => onChange('custom_outcomes', e.target.value)}
+            rows={3}
+            placeholder={'goal_achieved, interested, demo_scheduled, callback_requested, not_interested, do_not_call'}
+          />
+        </div>
+      )}
+
+      {/* update_call_stage — custom stage values */}
+      {toolId === 'update_call_stage' && (
+        <div>
+          <GLabel hint="— comma-separated or JSON array">Custom Stage Values</GLabel>
+          <div style={{ color: '#64748B', fontSize: 11, marginBottom: 6 }}>
+            Override the allowed stage options for your conversation flow. Leave blank for defaults
+            (intro, discovery, pitch, objection, closing, follow_up).
+          </div>
+          <GTextarea
+            value={config.custom_stages ?? ''}
+            onChange={(e) => onChange('custom_stages', e.target.value)}
+            rows={2}
+            placeholder={'intro, discovery, pitch, objection, closing, follow_up'}
+          />
+        </div>
+      )}
+
+      {/* get_call_script — custom section names */}
+      {toolId === 'get_call_script' && (
+        <div>
+          <GLabel hint="— comma-separated or JSON array">Custom Section Names</GLabel>
+          <div style={{ color: '#64748B', fontSize: 11, marginBottom: 6 }}>
+            Define the sections the AI can retrieve from your product/service details or playbook.
+            Leave blank for defaults (opener, discovery, pitch, objection_handling, closing, faq).
+          </div>
+          <GTextarea
+            value={config.custom_sections ?? ''}
+            onChange={(e) => onChange('custom_sections', e.target.value)}
+            rows={2}
+            placeholder={'opener, discovery, pitch, objection_handling, closing, faq'}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Analysis tab ─────────────────────────────────────────────────────────────
+function AnalysisTab({
+  evaluationCriteria, setEvaluationCriteria, dataCollection, setDataCollection,
+}: {
+  evaluationCriteria: Array<{ id: string; name: string; conversation_goal_prompt: string; scope: 'conversation' | 'agent' }>;
+  setEvaluationCriteria: (v: Array<{ id: string; name: string; conversation_goal_prompt: string; scope: 'conversation' | 'agent' }>) => void;
+  dataCollection: Array<{ id: string; name: string; type: 'string' | 'boolean' | 'number' | 'enum'; description: string }>;
+  setDataCollection: (v: Array<{ id: string; name: string; type: 'string' | 'boolean' | 'number' | 'enum'; description: string }>) => void;
+}) {
+  function addCriterion() {
+    setEvaluationCriteria([
+      ...evaluationCriteria,
+      { id: `crit_${Date.now()}`, name: '', conversation_goal_prompt: '', scope: 'conversation' },
+    ]);
+  }
+
+  function removeCriterion(id: string) {
+    setEvaluationCriteria(evaluationCriteria.filter((c) => c.id !== id));
+  }
+
+  function updateCriterion(id: string, key: string, value: string) {
+    setEvaluationCriteria(evaluationCriteria.map((c) => c.id === id ? { ...c, [key]: value } : c));
+  }
+
+  function addField() {
+    setDataCollection([
+      ...dataCollection,
+      { id: `field_${Date.now()}`, name: '', type: 'string', description: '' },
+    ]);
+  }
+
+  function removeField(id: string) {
+    setDataCollection(dataCollection.filter((f) => f.id !== id));
+  }
+
+  function updateField(id: string, key: string, value: string) {
+    setDataCollection(dataCollection.map((f) => f.id === id ? { ...f, [key]: value } : f));
+  }
+
+  const cardStyle: React.CSSProperties = {
+    background: 'rgba(255,255,255,0.02)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    padding: '14px 16px',
+    marginBottom: 10,
+  };
+
+  const inputStyle: React.CSSProperties = {
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 6,
+    color: '#F1F5F9',
+    padding: '8px 10px',
+    fontSize: 13,
+    width: '100%',
+    outline: 'none',
+    fontFamily: 'var(--font-ui), sans-serif',
+    boxSizing: 'border-box',
+  };
+
+  const addBtnStyle: React.CSSProperties = {
+    background: 'rgba(124,110,250,0.12)',
+    color: '#A89AF9',
+    border: '1px solid rgba(124,110,250,0.25)',
+    borderRadius: 6,
+    padding: '6px 12px',
+    fontSize: 13,
+    cursor: 'pointer',
+    fontFamily: 'var(--font-ui), sans-serif',
+  };
+
+  const removeBtnStyle: React.CSSProperties = {
+    background: 'rgba(239,68,68,0.1)',
+    color: '#EF4444',
+    border: 'none',
+    borderRadius: 4,
+    padding: '2px 6px',
+    cursor: 'pointer',
+    fontSize: 13,
+    fontFamily: 'var(--font-ui), sans-serif',
+    flexShrink: 0,
+  };
+
+  return (
+    <div style={{ maxWidth: 860 }}>
+      {/* Section 1: Success Evaluation Criteria */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#F1F5F9', margin: '0 0 6px 0', fontFamily: 'var(--font-ui), sans-serif' }}>
+            Success Evaluation Criteria
+          </h3>
+          <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.55 }}>
+            Define goals ElevenLabs will evaluate after every call. Each criterion gets a result: Success, Failure, or Unknown.
+          </p>
+        </div>
+
+        {evaluationCriteria.map((crit) => (
+          <div key={crit.id} style={cardStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 5, fontFamily: 'var(--font-ui), sans-serif' }}>Criterion Name</div>
+                <input
+                  value={crit.name}
+                  onChange={(e) => updateCriterion(crit.id, 'name', e.target.value)}
+                  placeholder="e.g. Appointment Booked"
+                  style={inputStyle}
+                />
+              </div>
+              <button onClick={() => removeCriterion(crit.id)} style={{ ...removeBtnStyle, marginTop: 22 }}>✕</button>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 5, fontFamily: 'var(--font-ui), sans-serif' }}>Goal Prompt</div>
+              <textarea
+                value={crit.conversation_goal_prompt}
+                onChange={(e) => updateCriterion(crit.id, 'conversation_goal_prompt', e.target.value)}
+                placeholder="e.g. Did the agent successfully book an appointment?"
+                rows={3}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 6, fontFamily: 'var(--font-ui), sans-serif' }}>Scope</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['conversation', 'agent'] as const).map((scope) => (
+                  <button
+                    key={scope}
+                    onClick={() => updateCriterion(crit.id, 'scope', scope)}
+                    style={{
+                      padding: '4px 12px', borderRadius: 9999, fontSize: 12, cursor: 'pointer',
+                      fontFamily: 'var(--font-ui), sans-serif',
+                      background: crit.scope === scope ? 'rgba(124,110,250,0.18)' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${crit.scope === scope ? 'rgba(124,110,250,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                      color: crit.scope === scope ? '#A89AF9' : '#64748B',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {scope === 'conversation' ? 'Full Conversation' : 'Agent Turn Only'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        <button onClick={addCriterion} style={addBtnStyle}>+ Add Criterion</button>
+      </div>
+
+      {/* Section 2: Data Collection */}
+      <div>
+        <div style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#F1F5F9', margin: '0 0 6px 0', fontFamily: 'var(--font-ui), sans-serif' }}>
+            Data Collection
+          </h3>
+          <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.55 }}>
+            Fields ElevenLabs will automatically extract from every conversation transcript.
+          </p>
+        </div>
+
+        {dataCollection.map((field) => (
+          <div key={field.id} style={cardStyle}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 2, minWidth: 120 }}>
+                <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 5, fontFamily: 'var(--font-ui), sans-serif' }}>Field Name</div>
+                <input
+                  value={field.name}
+                  onChange={(e) => updateField(field.id, 'name', e.target.value)}
+                  placeholder="e.g. contact_email"
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 100 }}>
+                <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 5, fontFamily: 'var(--font-ui), sans-serif' }}>Type</div>
+                <select
+                  value={field.type}
+                  onChange={(e) => updateField(field.id, 'type', e.target.value)}
+                  style={{ ...inputStyle, cursor: 'pointer' }}
+                >
+                  <option value="string">string</option>
+                  <option value="boolean">boolean</option>
+                  <option value="number">number</option>
+                  <option value="enum">enum</option>
+                </select>
+              </div>
+              <div style={{ flex: 3, minWidth: 160 }}>
+                <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 5, fontFamily: 'var(--font-ui), sans-serif' }}>Description</div>
+                <input
+                  value={field.description}
+                  onChange={(e) => updateField(field.id, 'description', e.target.value)}
+                  placeholder="e.g. Email address the contact mentioned"
+                  style={inputStyle}
+                />
+              </div>
+              <button onClick={() => removeField(field.id)} style={{ ...removeBtnStyle, marginBottom: 1 }}>✕</button>
+            </div>
+          </div>
+        ))}
+
+        <button onClick={addField} style={addBtnStyle}>+ Add Field</button>
       </div>
     </div>
   );

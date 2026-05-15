@@ -28,6 +28,7 @@ class CallResponse(BaseModel):
     ended_at: str | None
     sentiment_score: float | None
     auto_summary: str | None
+    call_summary_title: str | None = None
     created_at: datetime
 
     class Config:
@@ -43,6 +44,8 @@ class CallDetailResponse(CallResponse):
     talk_ratio: float | None
     follow_up_date: str | None
     next_action: str | None
+    el_analysis_results: dict | None = None
+    el_data_collection: dict | None = None
 
 
 class EndCallRequest(BaseModel):

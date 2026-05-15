@@ -1,14 +1,15 @@
 from app.tools.registry import register_tool
 from app.tools.schemas import CallContext
-import json
+
+DEFAULT_SECTIONS = ["opener", "discovery", "pitch", "objection_handling", "closing", "faq"]
 
 PARAMS = {
     "type": "object",
     "properties": {
         "section": {
             "type": "string",
-            "enum": ["opener", "discovery", "pitch", "objection_handling", "closing", "faq"],
-            "description": "Which part of the sales script to retrieve",
+            "enum": DEFAULT_SECTIONS,
+            "description": "Which section of the product/service details or playbook to retrieve",
         },
     },
     "required": ["section"],
@@ -18,8 +19,8 @@ PARAMS = {
 @register_tool(
     name="get_call_script",
     tier=1,
-    execution="client",
-    description="Retrieve a specific section of your sales script or playbook to guide the conversation.",
+    execution="server",
+    description="Retrieve a specific section of your product details, service information, or playbook to guide the conversation.",
     parameters=PARAMS,
 )
 async def handler(params: dict, ctx: CallContext, db, redis) -> str:
@@ -27,5 +28,5 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
     call_script = ctx.agent_config.get("call_script", {})
     content = call_script.get(section, "")
     if not content:
-        return f"No script configured for section: {section}"
+        return f"No content configured for section: {section}"
     return content

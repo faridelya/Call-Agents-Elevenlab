@@ -122,10 +122,12 @@ async def post_call_processing(
             if raw_stages:
                 call.stage_timeline = [json.loads(s) for s in raw_stages]
 
-        # ── 2. LLM: classify outcome + generate summary ───────────────────────
-        # Skip if the EL webhook already ran classification — no duplicate LLM cost.
+        # ── 2. Classify outcome + generate summary ────────────────────────────
+        # Primary: fetch analysis from EL (evaluation criteria results + summary).
+        # Fallback: existing LLM analyze path if EL data is unavailable.
+        #
         # Exception: if a human_agent entry exists (from transcribe_human_leg) we
-        # force re-classification so the full conversation informs the outcome.
+        # always force re-classification so the full conversation informs the outcome.
         has_human_leg = any(e.get("role") == "human_agent" for e in (call.transcript or []))
         already_classified = bool(call.auto_summary and call.outcome) and not has_human_leg
         if already_classified:
@@ -138,26 +140,76 @@ async def post_call_processing(
                 log.info("post_call_llm_reclassify",
                          call_id=call_id,
                          note="Human leg transcript present — re-classifying with full conversation")
-            hint = call.outcome  # set by log_call_outcome tool during the live call
-            analysis = await _llm_analyze_call(
-                call.transcript,
-                hint_outcome=hint,
-                llm_model=llm_model or None,
-                llm_temperature=llm_temperature or None,
-            )
-            if analysis:
-                if not hint or analysis.get("confidence", 0) >= 0.7:
-                    call.outcome = analysis.get("outcome") or hint
-                if not call.auto_summary:
-                    call.auto_summary = analysis.get("summary")
-                if not call.next_action and analysis.get("next_action"):
-                    call.next_action = analysis.get("next_action")
-                log.info("post_call_outcome_classified",
+
+            # Preserve the hint from log_call_outcome tool (live call signal)
+            hint = call.outcome
+
+            # ── 2a. Try EL analysis first ─────────────────────────────────
+            el_analysis: dict = {}
+            el_conv_id = getattr(call, "elevenlabs_conversation_id", None)
+            if el_conv_id:
+                el_analysis = await _fetch_el_analysis(el_conv_id)
+
+            if el_analysis.get("transcript_summary"):
+                # Use EL data as primary source
+                call.auto_summary = el_analysis["transcript_summary"]
+
+                title = el_analysis.get("call_summary_title")
+                if title:
+                    call.call_summary_title = title
+
+                call_successful = el_analysis.get("call_successful", "unknown")
+                # Map EL call_successful to Voxara outcome (hint takes priority if set)
+                outcome_from_el = {
+                    "success": "goal_achieved",
+                    "failure": "not_interested",
+                    "unknown": "follow_up_needed",
+                }.get(call_successful, "follow_up_needed")
+
+                if not hint:
+                    call.outcome = outcome_from_el
+                else:
+                    # hint was set during live call — keep it unless EL strongly disagrees
+                    call.outcome = hint
+
+                analysis_results = el_analysis.get("analysis_results") or []
+                call.el_analysis_results = {
+                    "criteria_results": analysis_results,
+                    "call_successful": call_successful,
+                }
+
+                data_coll = el_analysis.get("data_collection_results")
+                if data_coll:
+                    call.el_data_collection = data_coll
+
+                log.info("post_call_el_analysis_applied",
                          call_id=call_id,
                          outcome=call.outcome,
-                         hint_was=hint,
-                         confidence=analysis.get("confidence"),
-                         overrode_hint=hint is not None and call.outcome != hint)
+                         call_successful=call_successful,
+                         criteria_count=len(analysis_results),
+                         hint_was=hint)
+
+            else:
+                # ── 2b. Fallback: LLM classify ────────────────────────────
+                analysis = await _llm_analyze_call(
+                    call.transcript,
+                    hint_outcome=hint,
+                    llm_model=llm_model or None,
+                    llm_temperature=llm_temperature or None,
+                )
+                if analysis:
+                    if not hint or analysis.get("confidence", 0) >= 0.7:
+                        call.outcome = analysis.get("outcome") or hint
+                    if not call.auto_summary:
+                        call.auto_summary = analysis.get("summary")
+                    if not call.next_action and analysis.get("next_action"):
+                        call.next_action = analysis.get("next_action")
+                    log.info("post_call_outcome_classified",
+                             call_id=call_id,
+                             outcome=call.outcome,
+                             hint_was=hint,
+                             confidence=analysis.get("confidence"),
+                             overrode_hint=hint is not None and call.outcome != hint)
 
         # ── 3. Sentiment + talk ratio (cheap heuristic, always recompute) ─────
         # Recompute since transcript may have been updated by step 1 above.
@@ -192,6 +244,66 @@ async def post_call_processing(
                 })
             except Exception:
                 pass
+
+
+# ── ElevenLabs analysis fetch ─────────────────────────────────────────────────
+
+async def _fetch_el_analysis(el_conversation_id: str) -> dict:
+    """Fetch post-call analysis from ElevenLabs for a completed conversation.
+
+    Calls GET /v1/convai/conversations/{el_conversation_id} and extracts:
+      transcript_summary     — human-readable call summary
+      call_summary_title     — short title for the call
+      call_successful        — "success" | "failure" | "unknown"
+      analysis_results       — list of per-criterion evaluation results
+      data_collection_results— dict of extracted data fields
+
+    Returns an empty dict on any HTTP or parse error (callers fall back to LLM).
+    """
+    from app.config import settings
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(
+                f"{settings.elevenlabs_base_url}/convai/conversations/{el_conversation_id}",
+                headers={"xi-api-key": settings.elevenlabs_api_key},
+            )
+
+        if r.status_code != 200:
+            log.warning("fetch_el_analysis_failed",
+                        conversation_id=el_conversation_id,
+                        http_status=r.status_code)
+            return {}
+
+        data = r.json()
+        analysis = data.get("analysis") or {}
+        metadata = data.get("metadata") or {}
+
+        transcript_summary = analysis.get("transcript_summary") or ""
+        call_summary_title = analysis.get("call_summary_title") or ""
+        call_successful = analysis.get("call_successful") or "unknown"
+        analysis_results = analysis.get("criteria_results") or []
+        data_collection_results = analysis.get("data_collection_results") or None
+
+        log.info("fetch_el_analysis_ok",
+                 conversation_id=el_conversation_id,
+                 call_successful=call_successful,
+                 criteria_count=len(analysis_results),
+                 has_summary=bool(transcript_summary))
+
+        return {
+            "transcript_summary": transcript_summary,
+            "call_summary_title": call_summary_title,
+            "call_successful": call_successful,
+            "analysis_results": analysis_results,
+            "data_collection_results": data_collection_results,
+        }
+
+    except Exception as exc:
+        log.warning("fetch_el_analysis_error",
+                    conversation_id=el_conversation_id, error=str(exc))
+        return {}
 
 
 # ── LLM analysis ──────────────────────────────────────────────────────────────

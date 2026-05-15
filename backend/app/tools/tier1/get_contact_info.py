@@ -16,7 +16,7 @@ PARAMS = {
 @register_tool(
     name="get_contact_info",
     tier=1,
-    execution="client",
+    execution="server",
     description="Look up existing information about the contact you're speaking with, including their history and previous interactions.",
     parameters=PARAMS,
 )

@@ -24,7 +24,7 @@ PARAMS = {
 @register_tool(
     name="save_lead",
     tier=1,
-    execution="client",
+    execution="server",
     description="Save or update the contact information for the person you're speaking with. Call this whenever you learn new details about them.",
     parameters=PARAMS,
 )

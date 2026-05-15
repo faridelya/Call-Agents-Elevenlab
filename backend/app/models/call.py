@@ -46,6 +46,13 @@ class Call(Base, TimestampMixin):
     key_moments: Mapped[list] = mapped_column(JSON, default=list)
     auto_summary: Mapped[str | None] = mapped_column(Text)
 
+    # ElevenLabs analysis results
+    el_analysis_results: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # {criteria_results: [{id, name, result:"success"|"failure"|"unknown", rationale}], call_successful:"success"|"failure"|"unknown"}
+    el_data_collection: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # {field_name: extracted_value, ...}
+    call_summary_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Next steps
     follow_up_date: Mapped[str | None] = mapped_column(String(50))
     next_action: Mapped[str | None] = mapped_column(Text)
