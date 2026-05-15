@@ -8,6 +8,7 @@ from app.models.phone_number import PhoneNumber
 from app.models.tool import Tool
 from app.models.document import Document, DocumentChunk
 from app.models.refresh_token import RefreshToken
+from app.models.mcp_server import McpServer
 
 __all__ = [
     "Base",
@@ -21,4 +22,5 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "RefreshToken",
+    "McpServer",
 ]

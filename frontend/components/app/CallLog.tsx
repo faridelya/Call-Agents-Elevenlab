@@ -27,10 +27,10 @@ function fmtTime(iso?: string) {
 }
 
 function sentimentInfo(score?: number): { label: string; color: string } {
-  if (score == null) return { label: 'neutral', color: '#3D607A' };
-  if (score >= 0.65) return { label: 'positive', color: '#00D082' };
+  if (score == null) return { label: 'neutral', color: '#94A3B8' };
+  if (score >= 0.65) return { label: 'positive', color: '#10B981' };
   if (score <= 0.35) return { label: 'negative', color: '#FF4D6D' };
-  return { label: 'neutral', color: '#7BA5C8' };
+  return { label: 'neutral', color: '#64748B' };
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ function Sk({ w = '100%', h = 12, r = 4 }: { w?: string | number; h?: number; r?
   return (
     <div style={{
       width: w, height: h, borderRadius: r,
-      background: 'linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.07) 50%,rgba(255,255,255,0.04) 75%)',
+      background: 'linear-gradient(90deg,#F1F5F9 25%,#E2E8F0 50%,#F1F5F9 75%)',
       backgroundSize: '800px 100%', animation: 'shimmer 1.8s infinite linear',
     }} />
   );
@@ -57,9 +57,9 @@ function FilterPill({ label, active, count, onClick }: {
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
         padding: '5px 13px', borderRadius: 9999,
-        border: `1px solid ${active ? 'rgba(0,208,130,0.45)' : hov ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)'}`,
-        background: active ? 'rgba(0,208,130,0.12)' : hov ? 'rgba(255,255,255,0.04)' : 'transparent',
-        color: active ? '#00D082' : hov ? '#7BA5C8' : '#3D607A',
+        border: `1px solid ${active ? 'rgba(0,208,130,0.45)' : hov ? '#CBD5E1' : '#E2E8F0'}`,
+        background: active ? 'rgba(0,208,130,0.12)' : hov ? '#F8FAFC' : 'transparent',
+        color: active ? '#10B981' : hov ? '#64748B' : '#94A3B8',
         fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
       }}
     >
@@ -67,8 +67,8 @@ function FilterPill({ label, active, count, onClick }: {
       {count != null && (
         <span style={{
           fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 9999,
-          background: active ? 'rgba(0,208,130,0.22)' : 'rgba(255,255,255,0.07)',
-          color: active ? '#00D082' : '#3D607A',
+          background: active ? 'rgba(0,208,130,0.22)' : '#E2E8F0',
+          color: active ? '#10B981' : '#94A3B8',
         }}>
           {count}
         </span>
@@ -125,7 +125,7 @@ function Bubble({ role, text, timestamp, agentName }: {
 
   // AI agent or customer ('user' = live AI conv, 'customer' = diarized human leg)
   const isAgent = role === 'agent';
-  const accentClr = isAgent ? '#00D082' : '#38BDF8';
+  const accentClr = isAgent ? '#10B981' : '#38BDF8';
   const label = isAgent ? (agentName ?? 'AI Agent') : 'Customer';
 
   return (
@@ -136,7 +136,7 @@ function Bubble({ role, text, timestamp, agentName }: {
       <div style={{
         maxWidth: '88%',
         background: isAgent ? 'rgba(0,208,130,0.07)' : 'rgba(56,189,248,0.07)',
-        border: `1px solid ${isAgent ? 'rgba(0,208,130,0.15)' : 'rgba(56,189,248,0.12)'}`,
+        border: `1px solid ${isAgent ? '#CBD5E1' : 'rgba(56,189,248,0.12)'}`,
         borderRadius: isAgent ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
         padding: '9px 13px', fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6,
       }}>
@@ -168,7 +168,7 @@ function getPendingPhase(transcript: any[], outcome?: string, summary?: string, 
 }
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
-function CallDetail({ call, onClose }: { call: CallRecord; onClose: () => void }) {
+function CallDetail({ call, onClose, width }: { call: CallRecord; onClose: () => void; width: number }) {
   const [detail, setDetail] = useState<CallRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -225,23 +225,23 @@ function CallDetail({ call, onClose }: { call: CallRecord; onClose: () => void }
 
   const statChips = [
     { l: 'Duration', v: fmtDuration((src as any).duration_seconds ?? call.duration_seconds), c: '#38BDF8' },
-    { l: 'Direction', v: isOut ? 'Outbound' : 'Inbound', c: isOut ? '#38BDF8' : '#00D082' },
+    { l: 'Direction', v: isOut ? 'Outbound' : 'Inbound', c: isOut ? '#38BDF8' : '#10B981' },
     { l: 'Sentiment', v: si.label, c: si.color },
     { l: 'Outcome', v: getOutcomeLabel((src as any).outcome ?? call.outcome), c: oc },
-    { l: 'Status', v: (src as any).status ?? call.status ?? '—', c: '#00C2B8' },
+    { l: 'Status', v: (src as any).status ?? call.status ?? '—', c: '#06B6D4' },
   ];
 
   return (
     <div style={{
-      width: 380, flexShrink: 0,
-      background: 'rgba(7,16,30,0.97)',
-      backdropFilter: 'blur(24px)',
-      border: '1px solid rgba(0,208,130,0.10)',
+      width, flexShrink: 0,
+      background: '#FFFFFF',
+      backdropFilter: 'none',
+      border: '1px solid #E2E8F0',
       borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden',
       animation: 'slide-in-right 0.3s var(--ease-out)',
     }}>
       {/* Header */}
-      <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+      <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
@@ -253,12 +253,12 @@ function CallDetail({ call, onClose }: { call: CallRecord; onClose: () => void }
           </div>
           <button onClick={onClose} style={{
             width: 26, height: 26, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
+            background: '#F1F5F9', border: '1px solid #E2E8F0',
             cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.15s',
           }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,77,109,0.12)'; e.currentTarget.style.color = '#FF4D6D'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = 'var(--text-muted)'; }}
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M18 6L6 18M6 6l12 12" />
@@ -281,10 +281,10 @@ function CallDetail({ call, onClose }: { call: CallRecord; onClose: () => void }
       {/* AI Summary */}
       {(detail ?? call).auto_summary && (
         <div style={{
-          padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)',
-          background: 'rgba(0,208,130,0.04)', flexShrink: 0,
+          padding: '12px 20px', borderBottom: '1px solid #F1F5F9',
+          background: 'rgba(16,185,129,0.04)', flexShrink: 0,
         }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#00D082', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
             AI Summary
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
@@ -302,7 +302,7 @@ function CallDetail({ call, onClose }: { call: CallRecord; onClose: () => void }
           {transcript.length > 0 && (
             <span style={{
               fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 9999,
-              background: 'rgba(0,208,130,0.10)', color: '#00D082', border: '1px solid rgba(0,208,130,0.20)',
+              background: 'rgba(0,208,130,0.10)', color: '#10B981', border: '1px solid rgba(0,208,130,0.20)',
             }}>
               {transcript.length} messages
             </span>
@@ -373,11 +373,11 @@ function CallRow({ call, selected, compact, onSelect, idx }: {
           ? '150px 145px 65px 85px 1fr 65px'
           : '150px 160px 90px 90px 1fr 85px 65px',
         alignItems: 'center', padding: '11px 20px',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        borderBottom: '1px solid #F1F5F9',
         cursor: 'pointer',
-        background: selected ? 'rgba(0,208,130,0.06)' : hov ? 'rgba(255,255,255,0.025)' : 'transparent',
+        background: selected ? 'rgba(0,208,130,0.06)' : hov ? '#F8FAFC' : 'transparent',
         transition: 'background 0.12s',
-        borderLeft: `2px solid ${selected ? '#00D082' : 'transparent'}`,
+        borderLeft: `2px solid ${selected ? '#10B981' : 'transparent'}`,
         animation: `fade-in 0.4s ${idx * 35}ms both`,
       }}
     >
@@ -396,7 +396,7 @@ function CallRow({ call, selected, compact, onSelect, idx }: {
         <span style={{
           fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 9999,
           background: isOut ? 'rgba(56,189,248,0.10)' : 'rgba(0,208,130,0.10)',
-          color: isOut ? '#38BDF8' : '#00D082',
+          color: isOut ? '#38BDF8' : '#10B981',
           border: `1px solid ${isOut ? 'rgba(56,189,248,0.20)' : 'rgba(0,208,130,0.20)'}`,
           textTransform: 'uppercase',
         }}>
@@ -431,9 +431,26 @@ function CallRow({ call, selected, compact, onSelect, idx }: {
 
 // ─── Main View ────────────────────────────────────────────────────────────────
 export function CallLogView() {
-  const [page, setPage]         = useState(1);
-  const [selected, setSelected] = useState<CallRecord | null>(null);
-  const [dirFilter, setDir]     = useState<DirFilter>('all');
+  const [page, setPage]           = useState(1);
+  const [selected, setSelected]   = useState<CallRecord | null>(null);
+  const [dirFilter, setDir]       = useState<DirFilter>('all');
+  const [panelWidth, setPanelWidth] = useState(380);
+
+  const startPanelDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = panelWidth;
+    const onMove = (ev: MouseEvent) => {
+      const delta = startX - ev.clientX;
+      setPanelWidth(Math.min(700, Math.max(280, startW + delta)));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   const { data, isLoading } = useCalls(
     page,
@@ -461,7 +478,7 @@ export function CallLogView() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
         <div>
           <h1 style={{
-            fontFamily: 'var(--font-syne)', fontSize: 26, fontWeight: 700,
+            fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700,
             color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 6,
           }}>
             Call History
@@ -475,8 +492,8 @@ export function CallLogView() {
           {/* Direction filters */}
           <div style={{
             display: 'flex', gap: 4, padding: '4px',
-            background: 'rgba(255,255,255,0.03)',
-            borderRadius: 9999, border: '1px solid rgba(255,255,255,0.07)',
+            background: '#F8FAFC',
+            borderRadius: 9999, border: '1px solid #E2E8F0',
           }}>
             <FilterPill label="All" active={dirFilter === 'all'} count={totalCalls} onClick={() => handleDir('all')} />
             <FilterPill label="Inbound" active={dirFilter === 'inbound'} count={dirFilter === 'all' ? inCnt : undefined} onClick={() => handleDir('inbound')} />
@@ -488,8 +505,8 @@ export function CallLogView() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
                 style={{
-                  width: 30, height: 30, background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.09)', borderRadius: 8,
+                  width: 30, height: 30, background: '#F8FAFC',
+                  border: '1px solid #E2E8F0', borderRadius: 8,
                   color: page === 1 ? 'var(--text-disabled)' : 'var(--text-muted)',
                   cursor: page === 1 ? 'not-allowed' : 'pointer', fontSize: 16,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -501,8 +518,8 @@ export function CallLogView() {
               <button
                 onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page === pages}
                 style={{
-                  width: 30, height: 30, background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.09)', borderRadius: 8,
+                  width: 30, height: 30, background: '#F8FAFC',
+                  border: '1px solid #E2E8F0', borderRadius: 8,
                   color: page === pages ? 'var(--text-disabled)' : 'var(--text-muted)',
                   cursor: page === pages ? 'not-allowed' : 'pointer', fontSize: 16,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -514,15 +531,15 @@ export function CallLogView() {
       </div>
 
       {/* Content row */}
-      <div style={{ flex: 1, display: 'flex', gap: 16, minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', gap: 0, minHeight: 0 }}>
 
         {/* Table */}
         <div style={{
           flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-          background: 'rgba(9,20,38,0.60)',
-          backdropFilter: 'blur(20px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-          border: '1px solid rgba(255,255,255,0.07)',
+          background: '#FFFFFF',
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
+          border: '1px solid #E2E8F0',
           borderRadius: 16, overflow: 'hidden',
         }}>
           {/* Table header */}
@@ -532,8 +549,8 @@ export function CallLogView() {
               ? '150px 145px 65px 85px 1fr 65px'
               : '150px 160px 90px 90px 1fr 85px 65px',
             padding: '11px 20px',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-            background: 'rgba(255,255,255,0.02)', flexShrink: 0,
+            borderBottom: '1px solid #F1F5F9',
+            background: '#F8FAFC', flexShrink: 0,
           }}>
             {(selected
               ? ['Contact', 'Agent', 'Dir', 'Time', 'Outcome', 'Dur']
@@ -555,7 +572,7 @@ export function CallLogView() {
                 <div key={i} style={{
                   display: 'grid',
                   gridTemplateColumns: '150px 160px 90px 90px 1fr 85px 65px',
-                  padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  padding: '12px 20px', borderBottom: '1px solid #F1F5F9',
                   gap: 0, alignItems: 'center',
                 }}>
                   <div><Sk h={11} w="80%" /><div style={{ marginTop: 5 }} /><Sk h={8} w="40%" /></div>
@@ -588,8 +605,29 @@ export function CallLogView() {
           </div>
         </div>
 
+        {/* Resize handle */}
+        {selected && (
+          <div
+            onMouseDown={startPanelDrag}
+            style={{
+              width: 6, flexShrink: 0, cursor: 'col-resize', position: 'relative',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent', transition: 'background 0.15s', zIndex: 2,
+              margin: '0 4px',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,208,130,0.10)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <div style={{
+              width: 2, height: 36, borderRadius: 2,
+              background: 'rgba(0,0,0,0.12)',
+              pointerEvents: 'none',
+            }} />
+          </div>
+        )}
+
         {/* Detail panel */}
-        {selected && <CallDetail call={selected} onClose={() => setSelected(null)} />}
+        {selected && <CallDetail call={selected} onClose={() => setSelected(null)} width={panelWidth} />}
       </div>
     </div>
   );

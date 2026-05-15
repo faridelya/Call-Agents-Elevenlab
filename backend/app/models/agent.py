@@ -48,9 +48,23 @@ class Agent(Base, TimestampMixin):
     product_catalog: Mapped[list] = mapped_column(JSON, default=list)
     qualification_criteria: Mapped[dict] = mapped_column(JSON, default=dict)
 
+    # ElevenLabs evaluation & data collection
+    evaluation_criteria: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Array of: {id, name, type:"prompt", conversation_goal_prompt, scope:"conversation"|"agent"}
+    data_collection: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Array of: {id, name, type:"string"|"boolean"|"number"|"enum", description}
+
     # EL sync state
     el_config_snapshot: Mapped[dict | None] = mapped_column(JSON)
     el_last_synced_at: Mapped[str | None] = mapped_column(String(50))
+
+    # ElevenLabs Knowledge Base attachment
+    knowledge_base_id: Mapped[str | None] = mapped_column(String(255))
+    knowledge_base_name: Mapped[str | None] = mapped_column(String(255))
+
+    # ElevenLabs MCP server IDs to attach to this agent's prompt config.
+    # Each entry is an el_mcp_server_id string returned by the EL MCP registration API.
+    mcp_server_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     # Telephony — the Twilio number used for calls with this agent (E.164 format)
     twilio_phone_number: Mapped[str | None] = mapped_column(String(50))

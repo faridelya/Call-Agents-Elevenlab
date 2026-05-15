@@ -32,12 +32,12 @@ function PhoneField({ value, onChange, onKeyDown, disabled }: {
       placeholder="+1 (555) 000-0000"
       style={{
         width: '100%', boxSizing: 'border-box',
-        background: disabled ? '#060910' : '#080B14',
+        background: disabled ? '#F1F5F9' : '#F8FAFC',
         borderRadius: 12, padding: '14px 18px',
         fontSize: 20, fontFamily: 'var(--font-jetbrains-mono), monospace',
-        color: '#F1F5F9', outline: 'none', textAlign: 'center',
+        color: '#0F172A', outline: 'none', textAlign: 'center',
         letterSpacing: '0.06em',
-        border: `1px solid ${focused ? 'rgba(124,110,250,0.5)' : 'rgba(255,255,255,0.1)'}`,
+        border: `1px solid ${focused ? 'rgba(139,92,246,0.5)' : '#E2E8F0'}`,
         boxShadow: focused ? '0 0 0 3px rgba(124,110,250,0.08)' : 'none',
         transition: 'border-color 0.2s, box-shadow 0.2s',
         opacity: disabled ? 0.5 : 1,
@@ -63,11 +63,11 @@ function NameField({ value, onChange, placeholder, disabled }: {
       placeholder={placeholder ?? 'Customer Name'}
       style={{
         width: '100%', boxSizing: 'border-box',
-        background: disabled ? '#060910' : '#080B14',
+        background: disabled ? '#F1F5F9' : '#F8FAFC',
         borderRadius: 10, padding: '11px 14px',
-        fontSize: 14, fontFamily: 'var(--font-inter), sans-serif',
-        color: '#F1F5F9', outline: 'none',
-        border: `1px solid ${focused ? 'rgba(124,110,250,0.5)' : 'rgba(255,255,255,0.1)'}`,
+        fontSize: 14, fontFamily: 'var(--font-ui), sans-serif',
+        color: '#0F172A', outline: 'none',
+        border: `1px solid ${focused ? 'rgba(139,92,246,0.5)' : '#E2E8F0'}`,
         boxShadow: focused ? '0 0 0 3px rgba(124,110,250,0.07)' : 'none',
         transition: 'border-color 0.2s, box-shadow 0.2s',
         opacity: disabled ? 0.5 : 1,
@@ -85,20 +85,20 @@ function MsgBubble({ msg, agentName, customerName }: { msg: TranscriptMsg; agent
   const speaker = isAgent ? agentName : (customerName?.trim() || 'Customer');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isAgent ? 'flex-start' : 'flex-end', gap: 4, animation: 'msg-enter 0.22s ease forwards' }}>
-      <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em', fontFamily: 'var(--font-inter)', color: isAgent ? '#A89AF9' : '#22D3EE' }}>
+      <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em', fontFamily: 'var(--font-ui)', color: isAgent ? '#A89AF9' : '#22D3EE' }}>
         {speaker}
       </span>
       <div style={{
         maxWidth: '84%',
-        background: isAgent ? 'rgba(124,110,250,0.1)' : 'rgba(34,211,238,0.07)',
+        background: isAgent ? 'rgba(124,110,250,0.08)' : 'rgba(34,211,238,0.06)',
         border: `1px solid ${isAgent ? 'rgba(124,110,250,0.18)' : 'rgba(34,211,238,0.12)'}`,
         borderRadius: isAgent ? '4px 14px 14px 14px' : '14px 4px 14px 14px',
-        padding: '10px 14px', fontSize: 13, color: '#E2E8F0', lineHeight: 1.65,
-        fontFamily: 'var(--font-inter), sans-serif',
+        padding: '10px 14px', fontSize: 13, color: '#1E293B', lineHeight: 1.65,
+        fontFamily: 'var(--font-ui), sans-serif',
       }}>
         {msg.text}
       </div>
-      <span style={{ fontSize: 9, color: '#334155', fontFamily: 'var(--font-jetbrains-mono), monospace' }}>
+      <span style={{ fontSize: 9, color: '#94A3B8', fontFamily: 'var(--font-jetbrains-mono), monospace' }}>
         {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </span>
     </div>
@@ -113,8 +113,8 @@ function Prereq({ label, ok, hint }: { label: string; ok: boolean; hint: string 
       <div style={{ width: 20, height: 20, borderRadius: '50%', background: ok ? 'rgba(16,185,129,0.18)' : 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <span style={{ fontSize: 10, color: ok ? '#10B981' : '#F59E0B', fontWeight: 800 }}>{ok ? '✓' : '!'}</span>
       </div>
-      <span style={{ fontSize: 12, fontFamily: 'var(--font-inter)', color: ok ? '#94A3B8' : '#64748B', flex: 1 }}>{label}</span>
-      {!ok && <span style={{ fontSize: 10, color: '#475569', fontFamily: 'var(--font-inter)' }}>{hint}</span>}
+      <span style={{ fontSize: 12, fontFamily: 'var(--font-ui)', color: ok ? '#94A3B8' : '#64748B', flex: 1 }}>{label}</span>
+      {!ok && <span style={{ fontSize: 10, color: '#475569', fontFamily: 'var(--font-ui)' }}>{hint}</span>}
     </div>
   );
 }
@@ -140,10 +140,10 @@ function CredentialsRequired() {
         </svg>
       </div>
 
-      <div style={{ fontSize: 16, fontWeight: 700, color: '#F1F5F9', fontFamily: 'var(--font-syne), sans-serif', marginBottom: 6 }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-display), sans-serif', marginBottom: 6 }}>
         Twilio Credentials Required
       </div>
-      <div style={{ fontSize: 12, color: '#64748B', fontFamily: 'var(--font-inter)', lineHeight: 1.65, marginBottom: 24 }}>
+      <div style={{ fontSize: 12, color: '#64748B', fontFamily: 'var(--font-ui)', lineHeight: 1.65, marginBottom: 24 }}>
         Test calls require your own Twilio credentials. This platform does not use shared environment credentials — every workspace must connect its own Twilio account.
       </div>
 
@@ -157,7 +157,7 @@ function CredentialsRequired() {
             <div style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, background: 'rgba(240,180,41,0.1)', border: '1px solid rgba(240,180,41,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: '#F0B429', fontFamily: 'var(--font-jetbrains-mono), monospace' }}>
               {n}
             </div>
-            <span style={{ fontSize: 12, color: '#94A3B8', fontFamily: 'var(--font-inter)' }}>
+            <span style={{ fontSize: 12, color: '#94A3B8', fontFamily: 'var(--font-ui)' }}>
               {pre}
               <span style={{ color: '#F0B429', fontFamily: 'var(--font-jetbrains-mono), monospace', fontSize: 11, padding: '1px 5px', background: 'rgba(240,180,41,0.07)', borderRadius: 4, border: '1px solid rgba(240,180,41,0.18)' }}>
                 {highlight}
@@ -171,7 +171,7 @@ function CredentialsRequired() {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF4D6D" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-inter)' }}>Calls are blocked until credentials are verified.</span>
+        <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-ui)' }}>Calls are blocked until credentials are verified.</span>
       </div>
     </div>
   );
@@ -181,7 +181,7 @@ function CredentialsRequired() {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 8, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-inter)' }}>
+    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 8, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-ui)' }}>
       {children}
     </label>
   );
@@ -433,7 +433,7 @@ export function TestCallPanel({
   // ── ENDED ─────────────────────────────────────────────────────────────────
   if (callState === 'ended') {
     return (
-      <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#FFFFFF' }}>
         <style>{`
           @keyframes check-pop { 0%{transform:scale(0.4);opacity:0} 70%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
           @keyframes msg-enter { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
@@ -441,7 +441,7 @@ export function TestCallPanel({
 
         {/* Left: Summary */}
         <div style={{
-          flex: '0 0 38%', borderRight: '1px solid rgba(255,255,255,0.06)',
+          flex: '0 0 38%', borderRight: '1px solid #F1F5F9',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
           padding: '36px 32px',
@@ -452,36 +452,36 @@ export function TestCallPanel({
             <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
 
-          <h3 style={{ fontFamily: 'var(--font-syne), sans-serif', fontSize: 22, fontWeight: 700, color: '#F1F5F9', marginBottom: 6, textAlign: 'center' }}>Call Ended</h3>
-          <p style={{ fontSize: 13, color: '#475569', fontFamily: 'var(--font-inter)', marginBottom: 4, textAlign: 'center' }}>{endReason}</p>
+          <h3 style={{ fontFamily: 'var(--font-display), sans-serif', fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 6, textAlign: 'center' }}>Call Ended</h3>
+          <p style={{ fontSize: 13, color: '#475569', fontFamily: 'var(--font-ui)', marginBottom: 4, textAlign: 'center' }}>{endReason}</p>
 
           {/* Stats */}
           <div style={{ width: '100%', marginTop: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#0A0F1E', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10 }}>
-              <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-inter)' }}>Duration</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#F1F5F9', fontFamily: 'var(--font-jetbrains-mono)', letterSpacing: '0.04em' }}>{fmtDur(duration)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: 10 }}>
+              <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-ui)' }}>Duration</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-jetbrains-mono)', letterSpacing: '0.04em' }}>{fmtDur(duration)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#0A0F1E', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10 }}>
-              <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-inter)' }}>Messages</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#F1F5F9', fontFamily: 'var(--font-jetbrains-mono)' }}>{messages.length}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: 10 }}>
+              <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-ui)' }}>Messages</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-jetbrains-mono)' }}>{messages.length}</span>
             </div>
             {phone && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#0A0F1E', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10 }}>
-                <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-inter)' }}>Number</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: 10 }}>
+                <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-ui)' }}>Number</span>
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#64748B', fontFamily: 'var(--font-jetbrains-mono)', letterSpacing: '0.04em' }}>{phone}</span>
               </div>
             )}
             {customerName.trim() && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#0A0F1E', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10 }}>
-                <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-inter)' }}>Customer</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#CBD5E1', fontFamily: 'var(--font-inter)' }}>{customerName}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: 10 }}>
+                <span style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-ui)' }}>Customer</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'var(--font-ui)' }}>{customerName}</span>
               </div>
             )}
           </div>
 
           <button
             onClick={handleReset}
-            style={{ marginTop: 28, width: '100%', background: 'transparent', border: '1px solid rgba(124,110,250,0.3)', borderRadius: 11, padding: '11px 22px', fontFamily: 'var(--font-inter)', fontSize: 13, fontWeight: 600, color: '#A89AF9', cursor: 'pointer', transition: 'all 0.15s' }}
+            style={{ marginTop: 28, width: '100%', background: 'transparent', border: '1px solid rgba(124,110,250,0.3)', borderRadius: 11, padding: '11px 22px', fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: '#A89AF9', cursor: 'pointer', transition: 'all 0.15s' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(124,110,250,0.08)'; e.currentTarget.style.borderColor = 'rgba(124,110,250,0.5)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(124,110,250,0.3)'; }}
           >
@@ -491,10 +491,10 @@ export function TestCallPanel({
 
         {/* Right: Full Transcript */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '16px 22px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <div style={{ padding: '16px 22px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A89AF9" strokeWidth="1.8" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#F1F5F9', fontFamily: 'var(--font-inter)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Conversation Transcript</span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#334155', fontFamily: 'var(--font-jetbrains-mono)' }}>{messages.length} messages</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-ui)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Conversation Transcript</span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-jetbrains-mono)' }}>{messages.length} messages</span>
           </div>
 
           <div
@@ -504,7 +504,7 @@ export function TestCallPanel({
             {messages.length === 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 8 }}>
                 <div style={{ fontSize: 24, opacity: 0.15 }}>💬</div>
-                <span style={{ fontSize: 13, color: '#334155', fontFamily: 'var(--font-inter)' }}>No transcript recorded</span>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>No transcript recorded</span>
               </div>
             ) : (
               messages.map((msg, i) => <MsgBubble key={i} msg={msg} agentName={agentName} customerName={customerName} />)
@@ -521,7 +521,7 @@ export function TestCallPanel({
     const freqHeights = [8, 18, 28, 22, 14, 32, 20, 10, 26, 16, 24, 12];
 
     return (
-      <div style={{ display: 'flex', height: '100%' }}>
+      <div style={{ display: 'flex', height: '100%', background: '#FFFFFF' }}>
         <style>{`
           @keyframes ring-expand { 0%{transform:scale(1);opacity:0.7} 100%{transform:scale(2.8);opacity:0} }
           @keyframes orb-breathe { 0%,100%{box-shadow:0 0 28px rgba(124,110,250,0.3),0 0 60px rgba(124,110,250,0.1)} 50%{box-shadow:0 0 44px rgba(124,110,250,0.55),0 0 90px rgba(124,110,250,0.18)} }
@@ -533,10 +533,10 @@ export function TestCallPanel({
         `}</style>
 
         {/* Left: Transcript */}
-        <div style={{ flex: '0 0 55%', display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-          <div style={{ padding: '13px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'linear-gradient(90deg,#0C1120,#0D1226)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <div style={{ flex: '0 0 55%', display: 'flex', flexDirection: 'column', borderRight: '1px solid #F1F5F9', overflow: 'hidden' }}>
+          <div style={{ padding: '13px 20px', borderBottom: '1px solid #F1F5F9', background: '#FAFAFA', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 8px rgba(239,68,68,0.9)', animation: 'rec-blink 1.4s ease-in-out infinite' }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#F1F5F9', letterSpacing: '0.09em', textTransform: 'uppercase', fontFamily: 'var(--font-inter)' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#0F172A', letterSpacing: '0.09em', textTransform: 'uppercase', fontFamily: 'var(--font-ui)' }}>
               {isEnterprise ? 'Live Transcript' : 'Transcript'}
             </span>
             {isEnterprise ? (
@@ -546,11 +546,11 @@ export function TestCallPanel({
                 ))}
               </div>
             ) : (
-              <span style={{ fontSize: 9, color: '#475569', fontFamily: 'var(--font-inter)', background: 'rgba(255,255,255,0.04)', padding: '2px 7px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.07)' }}>
+              <span style={{ fontSize: 9, color: '#475569', fontFamily: 'var(--font-ui)', background: '#F8FAFC', padding: '2px 7px', borderRadius: 4, border: '1px solid #F1F5F9' }}>
                 updates every 2s
               </span>
             )}
-            {customerName && <span style={{ fontSize: 10, color: '#475569', fontFamily: 'var(--font-inter)', marginLeft: 'auto' }}>with {customerName}</span>}
+            {customerName && <span style={{ fontSize: 10, color: '#475569', fontFamily: 'var(--font-ui)', marginLeft: 'auto' }}>with {customerName}</span>}
             {!customerName && <span style={{ fontSize: 10, color: '#334155', fontFamily: 'var(--font-jetbrains-mono)', marginLeft: 'auto' }}>{messages.length} msgs</span>}
           </div>
           <div ref={transcriptRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -558,14 +558,14 @@ export function TestCallPanel({
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
                 <div style={{ display: 'flex', gap: 5 }}>
                   {[0, 0.18, 0.36].map((d, i) => (
-                    <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: '#1E2A3D', animation: `rec-blink 1.2s ease-in-out ${d}s infinite` }} />
+                    <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: '#CBD5E1', animation: `rec-blink 1.2s ease-in-out ${d}s infinite` }} />
                   ))}
                 </div>
-                <span style={{ fontSize: 12, color: '#334155', fontFamily: 'var(--font-inter)' }}>
+                <span style={{ fontSize: 12, color: '#334155', fontFamily: 'var(--font-ui)' }}>
                   {isEnterprise ? 'Waiting for conversation…' : 'Transcript will appear shortly…'}
                 </span>
                 {isEnterprise === false && (
-                  <span style={{ fontSize: 10, color: '#1E2A3D', fontFamily: 'var(--font-inter)', textAlign: 'center', maxWidth: 200 }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', textAlign: 'center', maxWidth: 200 }}>
                     Full transcript available after call ends
                   </span>
                 )}
@@ -604,13 +604,13 @@ export function TestCallPanel({
           <div style={{ textAlign: 'center', zIndex: 1 }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 9999, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', marginBottom: 12 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px rgba(16,185,129,0.8)', animation: 'orb-breathe 2s ease-in-out infinite' }} />
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#10B981', fontFamily: 'var(--font-inter)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Connected</span>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#10B981', fontFamily: 'var(--font-ui)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Connected</span>
             </div>
             <div style={{ fontSize: 52, fontWeight: 700, lineHeight: 1, fontFamily: 'var(--font-jetbrains-mono), monospace', letterSpacing: '0.04em', background: 'linear-gradient(135deg, #E2E8F0 30%, #A89AF9 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               {fmtDur(duration)}
             </div>
             <div style={{ fontSize: 11, color: '#475569', fontFamily: 'var(--font-jetbrains-mono), monospace', marginTop: 6, letterSpacing: '0.04em' }}>{phone}</div>
-            {customerName && <div style={{ fontSize: 11, color: '#64748B', fontFamily: 'var(--font-inter)', marginTop: 2 }}>{customerName}</div>}
+            {customerName && <div style={{ fontSize: 11, color: '#64748B', fontFamily: 'var(--font-ui)', marginTop: 2 }}>{customerName}</div>}
           </div>
 
           <button
@@ -633,7 +633,7 @@ export function TestCallPanel({
               <line x1="23" y1="1" x2="1" y2="23"/>
             </svg>
           </button>
-          <span style={{ fontSize: 10, color: '#475569', fontFamily: 'var(--font-inter)', letterSpacing: '0.08em', textTransform: 'uppercase', zIndex: 1 }}>End Call</span>
+          <span style={{ fontSize: 10, color: '#475569', fontFamily: 'var(--font-ui)', letterSpacing: '0.08em', textTransform: 'uppercase', zIndex: 1 }}>End Call</span>
         </div>
       </div>
     );
@@ -641,7 +641,7 @@ export function TestCallPanel({
 
   // ── IDLE / CALLING ─────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#FFFFFF' }}>
       <style>{`
         @keyframes orb-spin   { to { transform: rotate(360deg); } }
         @keyframes idle-pulse { 0%,100%{transform:scale(1);opacity:0.5} 50%{transform:scale(1.06);opacity:0.3} }
@@ -654,7 +654,7 @@ export function TestCallPanel({
       {/* Left: Agent Visual + Prerequisites */}
       <div style={{
         flex: '0 0 44%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: '36px 32px', borderRight: '1px solid rgba(255,255,255,0.06)',
+        padding: '36px 32px', borderRight: '1px solid #F1F5F9',
         background: 'radial-gradient(ellipse 90% 70% at 50% 46%, rgba(124,110,250,0.08) 0%, transparent 72%)',
         position: 'relative', overflow: 'hidden',
       }}>
@@ -663,7 +663,7 @@ export function TestCallPanel({
         {/* Orb */}
         <div style={{ position: 'relative', width: 112, height: 112, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 22 }}>
           <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(from 0deg, #7C6EFA, #22D3EE, #A89AF9, #7C6EFA)', animation: 'orb-spin 7s linear infinite', padding: 1.5 }}>
-            <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#080B14' }} />
+            <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#F8FAFC' }} />
           </div>
           {isCalling ? (
             <>
@@ -676,7 +676,7 @@ export function TestCallPanel({
               <div style={{ position: 'absolute', inset: -22, borderRadius: '50%', border: '1px solid rgba(124,110,250,0.08)', animation: 'idle-pulse 3s ease-in-out 0.8s infinite' }} />
             </>
           )}
-          <div style={{ width: 94, height: 94, borderRadius: '50%', position: 'relative', background: 'radial-gradient(circle at 38% 34%, rgba(168,154,249,0.2), rgba(124,110,250,0.06) 60%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(124,110,250,0.18), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+          <div style={{ width: 94, height: 94, borderRadius: '50%', position: 'relative', background: 'radial-gradient(circle at 38% 34%, rgba(168,154,249,0.2), rgba(124,110,250,0.06) 60%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(124,110,250,0.18)' }}>
             {isCalling ? (
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" strokeWidth="1.5" strokeLinecap="round" style={{ animation: 'dial-blink 1.2s ease-in-out infinite' }}>
                 <defs><linearGradient id="dial-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#10B981"/><stop offset="100%" stopColor="#22D3EE"/></linearGradient></defs>
@@ -694,16 +694,16 @@ export function TestCallPanel({
 
         {/* Agent name + status */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#F1F5F9', fontFamily: 'var(--font-syne), sans-serif', marginBottom: 8 }}>{agentName}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-display), sans-serif', marginBottom: 8 }}>{agentName}</div>
           {isCalling ? (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 9999, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin-cw 1s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', fontFamily: 'var(--font-inter)', letterSpacing: '0.08em' }}>DIALING…</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', fontFamily: 'var(--font-ui)', letterSpacing: '0.08em' }}>DIALING…</span>
             </div>
           ) : (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 9999, background: isSynced ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', border: `1px solid ${isSynced ? 'rgba(16,185,129,0.22)' : 'rgba(245,158,11,0.22)'}` }}>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: isSynced ? '#10B981' : '#F59E0B' }} />
-              <span style={{ fontSize: 10, fontWeight: 600, color: isSynced ? '#10B981' : '#F59E0B', fontFamily: 'var(--font-inter)' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: isSynced ? '#10B981' : '#F59E0B', fontFamily: 'var(--font-ui)' }}>
                 {isSynced ? 'Live on ElevenLabs' : 'Not synced to EL'}
               </span>
             </div>
@@ -722,18 +722,18 @@ export function TestCallPanel({
         {/* Recent calls */}
         {pastCalls.length > 0 && !isCalling && (
           <div style={{ width: '100%', marginTop: 24 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#334155', fontFamily: 'var(--font-inter)', marginBottom: 8 }}>Recent Calls</div>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#334155', fontFamily: 'var(--font-ui)', marginBottom: 8 }}>Recent Calls</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {pastCalls.map((call) => {
                 const stColor = call.status === 'completed' ? '#10B981' : call.status === 'in-progress' ? '#F59E0B' : '#475569';
                 const dur = call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}:${String(call.duration_seconds % 60).padStart(2, '0')}` : null;
                 const when = call.created_at ? new Date(call.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
                 return (
-                  <div key={call.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 11px', borderRadius: 8, background: '#0A0F1E', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div key={call.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 11px', borderRadius: 8, background: '#F8FAFC', border: '1px solid #F1F5F9' }}>
                     <div style={{ width: 5, height: 5, borderRadius: '50%', background: stColor, flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'var(--font-jetbrains-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{call.to_number ?? '—'}</div>
-                      <div style={{ fontSize: 9, color: '#334155', fontFamily: 'var(--font-inter)' }}>{when}</div>
+                      <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>{when}</div>
                     </div>
                     {dur && <span style={{ fontSize: 9, color: '#475569', fontFamily: 'var(--font-jetbrains-mono)' }}>{dur}</span>}
                   </div>
@@ -749,10 +749,10 @@ export function TestCallPanel({
         {twilioCxn === false ? <CredentialsRequired /> : (
         <div style={{ width: '100%', maxWidth: 380 }}>
           <div style={{ marginBottom: 28 }}>
-            <h3 style={{ fontFamily: 'var(--font-syne), sans-serif', fontSize: 18, fontWeight: 700, color: '#F1F5F9', marginBottom: 6 }}>
+            <h3 style={{ fontFamily: 'var(--font-display), sans-serif', fontSize: 18, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
               {isCalling ? 'Initiating Call…' : 'Start Test Call'}
             </h3>
-            <p style={{ fontSize: 12, color: '#475569', fontFamily: 'var(--font-inter)', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 12, color: '#475569', fontFamily: 'var(--font-ui)', lineHeight: 1.6 }}>
               {isCalling
                 ? 'Connecting to ElevenLabs and placing the call. This may take a few seconds.'
                 : 'Enter the customer details below to start a live test call with your agent.'
@@ -782,7 +782,7 @@ export function TestCallPanel({
             ) : (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 14px', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                <span style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'var(--font-inter)', lineHeight: 1.55 }}>
+                <span style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'var(--font-ui)', lineHeight: 1.55 }}>
                   No number configured on this agent. <strong style={{ color: '#F59E0B' }}>The call will fail</strong> unless a default number is set in your environment. Go to <strong>Edit Agent → Config</strong> to add a number.
                 </span>
               </div>
@@ -798,7 +798,7 @@ export function TestCallPanel({
               onKeyDown={(e) => e.key === 'Enter' && canCall && !isCalling && handleStart()}
               disabled={isCalling}
             />
-            <div style={{ fontSize: 10, color: '#334155', fontFamily: 'var(--font-inter)', marginTop: 6, textAlign: 'center' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', marginTop: 6, textAlign: 'center' }}>
               Format: +1 (555) 000-0000 or +44 7700 900000
             </div>
           </div>
@@ -811,11 +811,11 @@ export function TestCallPanel({
               width: '100%',
               background: canCall && !isCalling
                 ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)'
-                : '#0D1626',
-              border: canCall && !isCalling ? 'none' : '1px solid rgba(255,255,255,0.07)',
+                : '#F1F5F9',
+              border: canCall && !isCalling ? 'none' : '1px solid #E2E8F0',
               borderRadius: 13, padding: '15px 24px',
-              fontFamily: 'var(--font-inter)', fontSize: 14, fontWeight: 700,
-              color: canCall && !isCalling ? '#fff' : '#2A3548',
+              fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 700,
+              color: canCall && !isCalling ? '#fff' : '#94A3B8',
               cursor: canCall && !isCalling ? 'pointer' : 'not-allowed',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
               boxShadow: canCall && !isCalling ? '0 0 32px rgba(16,185,129,0.25), 0 4px 16px rgba(0,0,0,0.2)' : 'none',
@@ -845,7 +845,7 @@ export function TestCallPanel({
                 background: 'transparent',
                 border: '1px solid rgba(239,68,68,0.35)',
                 borderRadius: 13, padding: '13px 24px',
-                fontFamily: 'var(--font-inter)', fontSize: 13, fontWeight: 600,
+                fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600,
                 color: '#EF4444', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 transition: 'all 0.2s',
@@ -864,11 +864,11 @@ export function TestCallPanel({
           {callError && (
             <div style={{ marginTop: 12, padding: '11px 14px', borderRadius: 9, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'flex-start', gap: 9 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-              <div style={{ fontSize: 11, color: '#FCA5A5', fontFamily: 'var(--font-inter)', lineHeight: 1.55 }}>{callError}</div>
+              <div style={{ fontSize: 11, color: '#EF4444', fontFamily: 'var(--font-ui)', lineHeight: 1.55 }}>{callError}</div>
             </div>
           )}
           {!canCall && !isCalling && !callError && (
-            <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 9, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.12)', fontSize: 11, color: '#64748B', fontFamily: 'var(--font-inter)', lineHeight: 1.55, textAlign: 'center' }}>
+            <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 9, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.12)', fontSize: 11, color: '#64748B', fontFamily: 'var(--font-ui)', lineHeight: 1.55, textAlign: 'center' }}>
               {!agentId ? 'Save the agent first.' : !isSynced ? 'Sync to ElevenLabs before testing.' : 'Enter a valid phone number.'}
             </div>
           )}

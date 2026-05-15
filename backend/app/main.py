@@ -43,6 +43,7 @@ app.add_middleware(
 
 # ── Routers ──────────────────────────────────────────────────────────────────
 from app.routers import auth, agents, calls, campaigns, leads, phone_numbers, tools, webhooks, el_tools, analytics, settings as settings_router, knowledge_base  # noqa: E402
+from app.routers.mcp_servers import router as mcp_servers_router  # noqa: E402
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(agents.router, prefix="/api/v1")
@@ -56,6 +57,7 @@ app.include_router(el_tools.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(knowledge_base.router, prefix="/api/v1")
+app.include_router(mcp_servers_router, prefix="/api/v1")
 
 
 @app.get("/health")

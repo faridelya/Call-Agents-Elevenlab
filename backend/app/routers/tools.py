@@ -1,3 +1,5 @@
+import httpx
+import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,26 +12,85 @@ from app.models.base import new_uuid
 from app.models.tool import Tool
 from app.models.user import User
 from app.schemas.common import MessageResponse, PaginatedResponse
-from app.schemas.tool import BuiltinToolInfo, ToolCreate, ToolResponse, ToolTestRequest, ToolUpdate
+from app.schemas.tool import (
+    BuiltinToolInfo,
+    KnowledgeBaseMeta,
+    SystemToolMeta,
+    ToolCreate,
+    ToolResponse,
+    ToolTestRequest,
+    ToolUpdate,
+)
 from app.tools.registry import list_tools
+from app.tools.system_catalog import EL_KNOWLEDGE_BASE_META, EL_SYSTEM_TOOLS
+from app.tools.tier2_catalog import REGISTERED_TOOL_DEFAULT_CONFIGS, TIER2_SERVER_CATALOG
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 
 
+# ── Catalog endpoints ─────────────────────────────────────────────────────────
+
 @router.get("/catalog", response_model=list[BuiltinToolInfo])
 async def get_tool_catalog(current_user: User = Depends(get_current_user)):
-    """Return all built-in tools (Tier 1 + Tier 2) with their names, descriptions, and parameter schemas."""
-    return [
-        BuiltinToolInfo(
+    """All built-in Voxara tools — Tier 1 + Tier 2 — with description, parameters, and default_config."""
+    items: list[BuiltinToolInfo] = []
+
+    # Registered tools (tier1 + leave_voicemail + transfer_to_human via @register_tool)
+    for t in list_tools():
+        items.append(BuiltinToolInfo(
             name=t["name"],
             tier=t["tier"],
             execution=t["execution"],
             description=t["description"],
             parameters=t["parameters"],
+            default_config=REGISTERED_TOOL_DEFAULT_CONFIGS.get(t["name"], {}),
+        ))
+
+    # Tier-2 server tools (not in @register_tool registry — executed by tools.py router)
+    registered_names = {t["name"] for t in list_tools()}
+    for name, meta in TIER2_SERVER_CATALOG.items():
+        if name not in registered_names:
+            items.append(BuiltinToolInfo(
+                name=name,
+                tier=meta["tier"],
+                execution=meta["execution"],
+                description=meta["description"],
+                parameters=meta["parameters"],
+                default_config=meta.get("default_config", {}),
+            ))
+
+    return items
+
+
+@router.get("/system-catalog", response_model=list[SystemToolMeta])
+async def get_system_tool_catalog(current_user: User = Depends(get_current_user)):
+    """ElevenLabs native system tools (transfer_to_number, end_conversation, language_detection)."""
+    return [
+        SystemToolMeta(
+            key=key,
+            label=meta["label"],
+            subtitle=meta["subtitle"],
+            description=meta["description"],
+            icon=meta["icon"],
+            color=meta["color"],
+            el_type=meta["el_type"],
+            system_tool_type=meta["system_tool_type"],
+            default_config=meta["default_config"],
+            config_fields=meta["config_fields"],
         )
-        for t in list_tools()
+        for key, meta in EL_SYSTEM_TOOLS.items()
     ]
 
+
+@router.get("/knowledge-base-meta", response_model=KnowledgeBaseMeta)
+async def get_kb_meta(current_user: User = Depends(get_current_user)):
+    """Metadata about the ElevenLabs Knowledge Base attachment option."""
+    return KnowledgeBaseMeta(**EL_KNOWLEDGE_BASE_META)
+
+
+# ── Custom tool CRUD ──────────────────────────────────────────────────────────
 
 @router.get("/custom", response_model=PaginatedResponse[ToolResponse])
 async def list_custom_tools(
@@ -39,7 +100,7 @@ async def list_custom_tools(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List the user's custom (Tier 3) webhook tools, optionally scoped to a specific agent."""
+    """List the user's custom tools, optionally scoped to a specific agent."""
     filters = [Tool.user_id == current_user.id]
     if agent_id:
         filters.append(Tool.agent_id == agent_id)
@@ -49,7 +110,13 @@ async def list_custom_tools(
     result = await db.execute(
         select(Tool).where(*filters).order_by(Tool.created_at.desc()).offset(offset).limit(page_size)
     )
-    return PaginatedResponse(items=result.scalars().all(), total=total, page=page, page_size=page_size, pages=(total + page_size - 1) // page_size)
+    return PaginatedResponse(
+        items=result.scalars().all(),
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=(total + page_size - 1) // page_size,
+    )
 
 
 @router.post("/custom", response_model=ToolResponse, status_code=status.HTTP_201_CREATED)
@@ -58,12 +125,14 @@ async def create_custom_tool(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a custom webhook tool attached to an agent. The tool URL is called by ElevenLabs during live calls."""
+    """Create a webhook, client, or MCP tool attached to an agent."""
     await get_agent_or_404(body.agent_id, current_user.id, db)
-    tool = Tool(id=new_uuid(), user_id=current_user.id, **body.model_dump())
+    data = body.model_dump()
+    tool = Tool(id=new_uuid(), user_id=current_user.id, **data)
     db.add(tool)
     await db.commit()
     await db.refresh(tool)
+    log.info("custom_tool_created", tool_id=tool.id, el_type=tool.el_tool_type, name=tool.name)
     return tool
 
 
@@ -73,7 +142,6 @@ async def get_custom_tool(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Retrieve a single custom tool by ID."""
     return await get_tool_or_404(tool_id, current_user.id, db)
 
 
@@ -84,7 +152,6 @@ async def update_custom_tool(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a custom tool's name, description, parameters, config, or active flag."""
     tool = await get_tool_or_404(tool_id, current_user.id, db)
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(tool, field, value)
@@ -99,7 +166,7 @@ async def delete_custom_tool(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Permanently delete a custom tool. The next agent sync will remove it from ElevenLabs."""
+    """Delete a custom tool. The next agent sync removes it from ElevenLabs."""
     tool = await get_tool_or_404(tool_id, current_user.id, db)
     await db.delete(tool)
     await db.commit()
@@ -112,6 +179,15 @@ def _verify_secret(x_voxara_secret: str, x_agent_id: str, db_agent: Agent):
         raise HTTPException(status_code=401, detail="Invalid tool secret")
 
 
+async def _load_agent(agent_id: str, secret: str, db: AsyncSession) -> Agent:
+    result = await db.execute(select(Agent).where(Agent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404)
+    _verify_secret(secret, agent_id, agent)
+    return agent
+
+
 @router.post("/book_meeting")
 async def tool_book_meeting(
     body: dict,
@@ -119,18 +195,8 @@ async def tool_book_meeting(
     x_agent_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Server tool called by ElevenLabs to book a meeting. Validates the agent signing secret before executing.
-
-    Requires X-Voxara-Secret and X-Agent-Id headers. Calendar integration is stubbed — Phase 5.
-    """
-    result = await db.execute(select(Agent).where(Agent.id == x_agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404)
-    _verify_secret(x_voxara_secret, x_agent_id, agent)
-
+    agent = await _load_agent(x_agent_id, x_voxara_secret, db)
     params = body.get("parameters", {})
-    # TODO Phase 5: integrate Cal.com / Google Calendar
     contact = params.get("contact_name", "the contact")
     date = params.get("preferred_date", "a suitable time")
     return {"result": f"Meeting request recorded for {contact} on {date}. Calendar integration coming soon."}
@@ -143,16 +209,7 @@ async def tool_send_followup_sms(
     x_agent_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Server tool called by ElevenLabs to send a follow-up SMS via Twilio.
-
-    Uses the agent's configured message_template; falls back to a generic message.
-    """
-    result = await db.execute(select(Agent).where(Agent.id == x_agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404)
-    _verify_secret(x_voxara_secret, x_agent_id, agent)
-
+    agent = await _load_agent(x_agent_id, x_voxara_secret, db)
     params = body.get("parameters", {})
     from app.services.twilio_service import TwilioService
     from app.config import settings
@@ -174,27 +231,17 @@ async def tool_product_info(
     x_agent_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Server tool: search the agent's product catalog using keyword matching and return the best matching item."""
-    result = await db.execute(select(Agent).where(Agent.id == x_agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404)
-    _verify_secret(x_voxara_secret, x_agent_id, agent)
-
+    agent = await _load_agent(x_agent_id, x_voxara_secret, db)
     params = body.get("parameters", {})
     query = params.get("query", "").lower()
     catalog = agent.product_catalog or []
-
     if not catalog:
         return {"result": "No product catalog configured for this agent"}
-
-    # Simple keyword search in catalog
     for item in catalog:
         if isinstance(item, dict):
             text = " ".join(str(v) for v in item.values()).lower()
             if query and any(word in text for word in query.split()):
                 return {"result": str(item)}
-
     return {"result": f"Product info for '{query}': " + str(catalog[0]) if catalog else "No matching products found"}
 
 
@@ -205,25 +252,15 @@ async def tool_qualify_lead(
     x_agent_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Server tool: score a lead against the agent's qualification_criteria. Returns a 0–100 score and qualified/not verdict."""
-    result = await db.execute(select(Agent).where(Agent.id == x_agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404)
-    _verify_secret(x_voxara_secret, x_agent_id, agent)
-
+    agent = await _load_agent(x_agent_id, x_voxara_secret, db)
     params = body.get("parameters", {})
     answers = params.get("answers", {})
     criteria = agent.qualification_criteria or {}
-
-    # Simple scoring: count how many criteria are answered positively
-    score = 0
+    score = sum(
+        1 for key in criteria
+        if (answers.get(key, "") or "").lower() not in ("no", "false", "0", "none", "")
+    )
     total = len(criteria) or 1
-    for key, criterion in criteria.items():
-        answer = answers.get(key, "")
-        if answer and answer.lower() not in ("no", "false", "0", "none", ""):
-            score += 1
-
     pct = int(score / total * 100)
     qualified = pct >= 60
     return {"result": f"Lead score: {pct}/100. {'Qualified' if qualified else 'Not yet qualified'}."}
@@ -237,48 +274,112 @@ async def tool_custom_webhook(
     x_agent_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Server tool proxy: validates agent secret, then forwards the call parameters to the user's configured webhook URL."""
-    result = await db.execute(select(Agent).where(Agent.id == x_agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404)
-    _verify_secret(x_voxara_secret, x_agent_id, agent)
+    """Proxy tool call to the user's configured webhook URL or handle client tool no-op."""
+    agent = await _load_agent(x_agent_id, x_voxara_secret, db)
 
-    tool_result = await db.execute(select(Tool).where(Tool.id == tool_id, Tool.agent_id == x_agent_id))
+    tool_result = await db.execute(
+        select(Tool).where(Tool.id == tool_id, Tool.agent_id == x_agent_id, Tool.is_active == True)
+    )
     tool = tool_result.scalar_one_or_none()
-    if not tool or not tool.is_active:
-        raise HTTPException(status_code=404, detail="Tool not found")
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found or inactive")
 
+    if tool.el_tool_type == "client":
+        # Client tools execute in the caller's browser/SDK — no server proxy needed.
+        # For our Twilio-native integration, simply acknowledge.
+        return {"result": "Client tool acknowledged", "is_error": False}
+
+    if tool.el_tool_type == "mcp":
+        return await _execute_mcp_tool(tool, body)
+
+    # webhook (default)
+    return await _execute_webhook_tool(tool, body)
+
+
+async def _execute_webhook_tool(tool: Tool, body: dict) -> dict:
     config = tool.config or {}
     url = config.get("url", "")
     if not url:
-        return {"result": "Tool URL not configured"}
+        return {"result": "Webhook URL not configured", "is_error": True}
 
-    import httpx
-    headers = config.get("headers", {})
     method = config.get("method", "POST").upper()
     params = body.get("parameters", {})
+    timeout = tool.response_timeout_secs or 20
+
+    # Build headers: static headers from config + any auth header
+    headers: dict[str, str] = {}
+    for h in config.get("headers", []):
+        if h.get("key") and h.get("value"):
+            headers[h["key"]] = h["value"]
+
+    auth = config.get("auth", {})
+    auth_type = auth.get("type", "none")
+    if auth_type == "bearer" and auth.get("token"):
+        headers["Authorization"] = f"Bearer {auth['token']}"
+    elif auth_type == "api_key" and auth.get("header") and auth.get("token"):
+        headers[auth["header"]] = auth["token"]
+    elif auth_type == "basic" and auth.get("username") and auth.get("password"):
+        import base64
+        creds = base64.b64encode(f"{auth['username']}:{auth['password']}".encode()).decode()
+        headers["Authorization"] = f"Basic {creds}"
+
+    # Build response assignments mapping: value_path → dynamic_variable
+    assignments = config.get("assignments", [])
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=float(timeout)) as client:
             if method == "GET":
                 response = await client.get(url, params=params, headers=headers)
+            elif method == "DELETE":
+                response = await client.delete(url, headers=headers)
+            elif method == "PUT":
+                response = await client.put(url, json=params, headers=headers)
+            elif method == "PATCH":
+                response = await client.patch(url, json=params, headers=headers)
             else:
                 response = await client.post(url, json=params, headers=headers)
-        return {"result": response.text[:500]}
-    except Exception as e:
-        return {"result": f"Webhook error: {str(e)}", "is_error": True}
+
+        result_text = response.text[:1000]
+        log.info("custom_webhook_executed", tool_id=tool.id, status=response.status_code)
+        return {"result": result_text, "is_error": response.status_code >= 400}
+    except httpx.TimeoutException:
+        log.warning("custom_webhook_timeout", tool_id=tool.id, url=url)
+        return {"result": f"Webhook timed out after {timeout}s", "is_error": True}
+    except Exception as exc:
+        log.error("custom_webhook_error", tool_id=tool.id, error=str(exc))
+        return {"result": f"Webhook error: {exc}", "is_error": True}
+
+
+async def _execute_mcp_tool(tool: Tool, body: dict) -> dict:
+    """Scaffold for MCP tool execution — proxies to the configured MCP server."""
+    config = tool.config or {}
+    server_url = config.get("server_url", "")
+    if not server_url:
+        return {"result": "MCP server URL not configured", "is_error": True}
+
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if config.get("auth_token"):
+        headers["Authorization"] = f"Bearer {config['auth_token']}"
+
+    params = body.get("parameters", {})
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(server_url, json={"tool": tool.name, "parameters": params}, headers=headers)
+        return {"result": r.text[:1000], "is_error": r.status_code >= 400}
+    except Exception as exc:
+        return {"result": f"MCP error: {exc}", "is_error": True}
 
 
 # ── CRM tool endpoints ────────────────────────────────────────────────────────
 
-async def _get_agent_crm_creds(agent: "Agent") -> tuple[str, dict]:
-    """Return (provider, credentials_dict) from agent tool_configs."""
+async def _get_agent_crm_creds(agent: Agent) -> tuple[str, dict]:
     tool_configs = agent.tool_configs or {}
-    # Check both possible config keys (check_crm_record is the canonical key)
     crm_cfg = tool_configs.get("check_crm_record") or tool_configs.get("update_crm_record") or {}
     provider = crm_cfg.get("provider", "")
-    credentials = crm_cfg.get("credentials", {})
+    # Support both nested credentials dict (legacy) and flat api_key (from UI)
+    credentials = crm_cfg.get("credentials") or {}
+    if not credentials and crm_cfg.get("api_key"):
+        credentials = {"access_token": crm_cfg["api_key"]}
     return provider, credentials
 
 
@@ -289,31 +390,21 @@ async def tool_crm_lookup(
     x_agent_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Server tool: look up a contact in HubSpot or Salesforce by phone number. Returns the record as a string."""
-    result = await db.execute(select(Agent).where(Agent.id == x_agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404)
-    _verify_secret(x_voxara_secret, x_agent_id, agent)
-
+    agent = await _load_agent(x_agent_id, x_voxara_secret, db)
     params = body.get("parameters", {})
     phone = params.get("phone_number", "")
     if not phone:
         return {"result": "No phone number provided"}
-
     provider, credentials = await _get_agent_crm_creds(agent)
     if not provider or not credentials:
         return {"result": "CRM not configured for this agent"}
-
     try:
         from app.services.crm_service import get_crm_service
         crm = get_crm_service(provider, credentials)
         contact = await crm.get_contact(phone)
-        if contact:
-            return {"result": str(contact)}
-        return {"result": f"No CRM record found for {phone}"}
-    except Exception as e:
-        return {"result": f"CRM lookup error: {str(e)}", "is_error": True}
+        return {"result": str(contact) if contact else f"No CRM record found for {phone}"}
+    except Exception as exc:
+        return {"result": f"CRM lookup error: {exc}", "is_error": True}
 
 
 @router.post("/update_crm_record")
@@ -323,35 +414,26 @@ async def tool_crm_update(
     x_agent_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Server tool: update a CRM contact record by ID and optionally create a call note."""
-    result = await db.execute(select(Agent).where(Agent.id == x_agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404)
-    _verify_secret(x_voxara_secret, x_agent_id, agent)
-
+    agent = await _load_agent(x_agent_id, x_voxara_secret, db)
     params = body.get("parameters", {})
     crm_id = params.get("crm_id", "")
-    properties = params.get("properties", {})
-    note = params.get("note", "")
-
     if not crm_id:
         return {"result": "crm_id is required"}
-
     provider, credentials = await _get_agent_crm_creds(agent)
     if not provider or not credentials:
         return {"result": "CRM not configured for this agent"}
-
     try:
         from app.services.crm_service import get_crm_service
         crm = get_crm_service(provider, credentials)
+        properties = params.get("properties", {})
+        note = params.get("note", "")
         if properties:
             await crm.update_contact(crm_id, properties)
         if note and hasattr(crm, "create_note"):
             await crm.create_note(crm_id, note)
         return {"result": f"CRM record {crm_id} updated"}
-    except Exception as e:
-        return {"result": f"CRM update error: {str(e)}", "is_error": True}
+    except Exception as exc:
+        return {"result": f"CRM update error: {exc}", "is_error": True}
 
 
 # ── KB query tool endpoint ────────────────────────────────────────────────────
@@ -364,18 +446,11 @@ async def tool_kb_query(
     x_agent_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Server tool: run a semantic similarity search against the agent's knowledge base and return the top-3 chunks."""
-    result = await db.execute(select(Agent).where(Agent.id == x_agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404)
-    _verify_secret(x_voxara_secret, x_agent_id, agent)
-
+    agent = await _load_agent(x_agent_id, x_voxara_secret, db)
     params = body.get("parameters", {})
     query = params.get("query", "")
     if not query:
         return {"result": "No query provided"}
-
     try:
         from app.services.embedding_service import query_knowledge_base
         results = await query_knowledge_base(agent_id_path, query, db, top_k=3)
@@ -383,5 +458,5 @@ async def tool_kb_query(
             combined = "\n\n".join(r["content"] for r in results)
             return {"result": combined[:1500]}
         return {"result": "No relevant content found in knowledge base"}
-    except Exception as e:
-        return {"result": f"KB query error: {str(e)}", "is_error": True}
+    except Exception as exc:
+        return {"result": f"KB query error: {exc}", "is_error": True}

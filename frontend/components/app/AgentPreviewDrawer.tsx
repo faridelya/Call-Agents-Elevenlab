@@ -64,7 +64,7 @@ function Ring({ value, label, color, size = 64 }: {
       <div style={{ position: 'relative', width: size, height: size }}>
         <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
           <circle cx={size/2} cy={size/2} r={r} fill="none"
-            stroke="rgba(255,255,255,0.06)" strokeWidth={5} />
+            stroke="#E2E8F0" strokeWidth={5} />
           <circle cx={size/2} cy={size/2} r={r} fill="none"
             stroke={color} strokeWidth={5}
             strokeDasharray={`${circ}`}
@@ -88,7 +88,7 @@ function Ring({ value, label, color, size = 64 }: {
       </div>
       <span style={{
         fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-        letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)',
+        letterSpacing: '0.1em', color: '#64748B',
         textAlign: 'center', lineHeight: 1.3, maxWidth: size,
       }}>
         {label}
@@ -98,7 +98,7 @@ function Ring({ value, label, color, size = 64 }: {
 }
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
-function Section({ title, icon, accent = '#00D082', delay = 0, children }: {
+function Section({ title, icon, accent = '#10B981', delay = 0, children }: {
   title: string; icon: React.ReactNode;
   accent?: string; delay?: number;
   children: React.ReactNode;
@@ -139,17 +139,17 @@ function KV({ k, v, mono = false, accent }: {
   return (
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-      padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+      padding: '8px 0', borderBottom: '1px solid #F1F5F9',
     }}>
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', flex: '0 0 auto', marginRight: 16 }}>{k}</span>
+      <span style={{ fontSize: 11, color: '#64748B', flex: '0 0 auto', marginRight: 16 }}>{k}</span>
       <span style={{
         fontSize: 12, fontWeight: 600, textAlign: 'right', lineHeight: 1.4,
-        color: accent ?? 'rgba(255,255,255,0.85)',
+        color: accent ?? '#0F172A',
         fontFamily: mono ? 'JetBrains Mono, monospace' : 'inherit',
         letterSpacing: mono ? '0.03em' : 0,
         wordBreak: 'break-all',
       }}>
-        {v || <span style={{ color: 'rgba(255,255,255,0.2)', fontWeight: 400 }}>—</span>}
+        {v || <span style={{ color: '#94A3B8', fontWeight: 400 }}>—</span>}
       </span>
     </div>
   );
@@ -165,8 +165,8 @@ function ScriptCard({ label, text, color, delay }: {
   return (
     <div style={{
       borderRadius: 10, overflow: 'hidden',
-      border: '1px solid rgba(255,255,255,0.06)',
-      background: 'rgba(255,255,255,0.02)',
+      border: '1px solid #E2E8F0',
+      background: '#F8FAFC',
       marginBottom: 10,
       animation: `section-rise 0.4s ${delay}ms both`,
     }}>
@@ -182,7 +182,7 @@ function ScriptCard({ label, text, color, delay }: {
           {label}
         </div>
         <p style={{
-          fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.65,
+          fontSize: 12, color: '#4B5563', lineHeight: 1.65,
           margin: 0, whiteSpace: 'pre-wrap',
         }}>
           {preview}
@@ -211,14 +211,14 @@ function ToolPill({ name, idx }: { name: string; idx: number }) {
       padding: '4px 10px', borderRadius: 20,
       background: 'rgba(0,194,184,0.07)',
       border: '1px solid rgba(0,194,184,0.22)',
-      fontSize: 10.5, fontWeight: 600, color: '#00C2B8',
+      fontSize: 10.5, fontWeight: 600, color: '#06B6D4',
       fontFamily: 'JetBrains Mono, monospace',
       letterSpacing: '0.02em',
       animation: `badge-pop 0.3s ${idx * 50}ms both`,
     }}>
       <span style={{
         width: 5, height: 5, borderRadius: '50%',
-        background: '#00C2B8',
+        background: '#06B6D4',
         boxShadow: '0 0 6px rgba(0,194,184,0.8)',
         animation: 'glow-breathe 2s infinite',
       }} />
@@ -245,11 +245,11 @@ function Badge({ label, color }: { label: string; color: string }) {
 export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
   const isActive = agent.is_active;
   const isSynced = Boolean(agent.elevenlabs_agent_id);
-  const accentPrimary = isActive ? '#00D082' : '#F0B429';
+  const accentPrimary = isActive ? '#10B981' : '#F0B429';
 
   const callTypeColor =
     agent.call_type === 'outbound' ? '#38BDF8'
-    : agent.call_type === 'inbound' ? '#00D082'
+    : agent.call_type === 'inbound' ? '#10B981'
     : '#A89AF9';
 
   const hasScript = Object.values(agent.call_script ?? {}).some(Boolean);
@@ -261,13 +261,12 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
     <>
       <style>{STYLES}</style>
 
-      {/* Backdrop */}
+      {/* Backdrop — transparent click-away target only */}
       <div
         onClick={onClose}
         style={{
           position: 'fixed', inset: 0, zIndex: 1000,
-          background: 'rgba(2, 6, 16, 0.75)',
-          backdropFilter: 'blur(8px)',
+          background: 'transparent',
         }}
       />
 
@@ -276,9 +275,10 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(760px, 78vw)',
         zIndex: 1001,
-        background: 'rgba(4, 9, 22, 0.97)',
-        backdropFilter: 'blur(32px)',
-        borderLeft: '1px solid rgba(255,255,255,0.08)',
+        background: '#FFFFFF',
+        backdropFilter: 'none',
+        borderLeft: 'none',
+        boxShadow: '-8px 0 40px rgba(15,23,42,0.10)',
         display: 'flex', flexDirection: 'column',
         animation: 'drawer-slide 0.38s cubic-bezier(0.16,1,0.3,1) both',
         overflow: 'hidden',
@@ -302,7 +302,7 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
         {/* Subtle dot grid background */}
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
-          backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)`,
+          backgroundImage: `radial-gradient(circle, rgba(15,23,42,0.04) 1px, transparent 1px)`,
           backgroundSize: '24px 24px',
           opacity: 0.6,
         }} />
@@ -310,9 +310,9 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
         {/* ── STICKY HEADER ── */}
         <div style={{
           flexShrink: 0, padding: '22px 28px 18px 28px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          background: 'rgba(4,9,22,0.92)',
-          backdropFilter: 'blur(20px)',
+          borderBottom: '1px solid #F1F5F9',
+          background: '#FFFFFF',
+          backdropFilter: 'none',
           position: 'relative', zIndex: 1,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -344,16 +344,16 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
 
               {/* Name */}
               <h2 style={{
-                fontFamily: 'var(--font-syne), sans-serif',
+                fontFamily: 'var(--font-display), sans-serif',
                 fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em',
-                color: '#F8FAFC', margin: 0, marginBottom: 5,
+                color: '#0F172A', margin: 0, marginBottom: 5,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {agent.name}
               </h2>
 
               {/* Meta line */}
-              <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: 'rgba(255,255,255,0.38)' }}>
+              <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: '#64748B' }}>
                 {agent.company_name && <span>{agent.company_name}</span>}
                 {agent.agent_role   && <span>· {agent.agent_role}</span>}
                 <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10 }}>
@@ -373,7 +373,7 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
                     padding: '8px 16px', borderRadius: 9,
                     background: 'rgba(0,208,130,0.1)',
                     border: '1px solid rgba(0,208,130,0.3)',
-                    color: '#00D082', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    color: '#10B981', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                     transition: 'all 0.15s',
                   }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,208,130,0.18)'; }}
@@ -390,14 +390,14 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
                 onClick={onClose}
                 style={{
                   width: 34, height: 34, borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: '#F1F5F9',
+                  border: '1px solid #E2E8F0',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', color: 'rgba(255,255,255,0.55)',
+                  cursor: 'pointer', color: '#64748B',
                   transition: 'all 0.15s',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,77,109,0.15)'; e.currentTarget.style.color = '#FF4D6D'; e.currentTarget.style.borderColor = 'rgba(255,77,109,0.3)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.55)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M18 6L6 18M6 6l12 12"/>
@@ -423,17 +423,17 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
               {agent.description && (
                 <div style={{
                   padding: '12px 14px', borderRadius: 10,
-                  background: 'rgba(56,189,248,0.04)',
-                  border: '1px solid rgba(56,189,248,0.12)',
-                  fontSize: 12.5, color: 'rgba(255,255,255,0.72)',
+                  background: 'rgba(59,130,246,0.04)',
+                  border: '1px solid rgba(59,130,246,0.12)',
+                  fontSize: 12.5, color: '#374151',
                   lineHeight: 1.7, marginBottom: 12,
                 }}>
                   {agent.description}
                 </div>
               )}
               <div style={{
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid rgba(255,255,255,0.05)',
+                background: '#F8FAFC',
+                border: '1px solid #F1F5F9',
                 borderRadius: 10, padding: '4px 14px',
               }}>
                 {agent.agent_role   && <KV k="Role"     v={agent.agent_role} />}
@@ -453,24 +453,24 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
                 { label: 'Outbound Number', value: agent.twilio_phone_number, color: '#38BDF8', icon: '↗' },
-                { label: 'Inbound Number',  value: agent.inbound_phone_number, color: '#00D082', icon: '↙' },
+                { label: 'Inbound Number',  value: agent.inbound_phone_number, color: '#10B981', icon: '↙' },
               ].map(({ label, value, color, icon }) => (
                 <div key={label} style={{
                   padding: '12px 14px', borderRadius: 10,
-                  background: value ? `${color}07` : 'rgba(255,255,255,0.02)',
-                  border: `1px solid ${value ? color + '20' : 'rgba(255,255,255,0.06)'}`,
+                  background: value ? `${color}07` : '#F8FAFC',
+                  border: `1px solid ${value ? color + '20' : '#F1F5F9'}`,
                 }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: value ? color : 'rgba(255,255,255,0.25)', marginBottom: 6 }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: value ? color : '#94A3B8', marginBottom: 6 }}>
                     {icon} {label}
                   </div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 600, color: value ? color : 'rgba(255,255,255,0.2)' }}>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 600, color: value ? color : '#CBD5E1' }}>
                     {value || 'Not configured'}
                   </div>
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <KV k="ElevenLabs ID" v={agent.elevenlabs_agent_id} mono accent={isSynced ? '#00D082' : undefined} />
+            <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 10, background: '#F8FAFC', border: '1px solid #F1F5F9' }}>
+              <KV k="ElevenLabs ID" v={agent.elevenlabs_agent_id} mono accent={isSynced ? '#10B981' : undefined} />
               {agent.el_last_synced_at && <KV k="Last Synced" v={fmt(agent.el_last_synced_at)} />}
             </div>
           </Section>
@@ -481,20 +481,18 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
               <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
             </svg>
           }>
-            {/* Gauges row */}
+            {/* LLM Temperature gauge */}
             <div style={{
-              display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start',
-              padding: '20px 16px 16px',
-              background: 'rgba(168,154,249,0.04)', borderRadius: 12,
+              display: 'flex', justifyContent: 'center', alignItems: 'center',
+              padding: '16px',
+              background: 'rgba(139,92,246,0.04)', borderRadius: 12,
               border: '1px solid rgba(168,154,249,0.12)', marginBottom: 12,
             }}>
-              <Ring value={agent.voice_stability ?? 0.5}  label="Voice Stability"   color="#A89AF9" />
-              <Ring value={agent.voice_similarity ?? 0.75} label="Voice Similarity"  color="#22D3EE" />
-              <Ring value={agent.llm_temperature}   label="LLM Temperature"   color="#F0B429" />
+              <Ring value={agent.llm_temperature} label="LLM Temperature" color="#F0B429" />
             </div>
 
             {/* Config table */}
-            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, padding: '4px 14px' }}>
+            <div style={{ background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: 10, padding: '4px 14px' }}>
               <KV k="LLM Model"       v={agent.llm_model}                    mono accent="#A89AF9" />
               <KV k="Voice ID"        v={agent.voice_id}                     mono />
               <KV k="Max Duration"    v={fmtDur(agent.max_call_duration_seconds)} />
@@ -524,7 +522,7 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
               <div style={{
                 padding: '12px 16px', borderRadius: 10,
                 background: 'rgba(0,194,184,0.06)', border: '1px solid rgba(0,194,184,0.18)',
-                fontSize: 13, color: 'rgba(255,255,255,0.82)',
+                fontSize: 13, color: '#374151',
                 lineHeight: 1.7, fontStyle: 'italic',
               }}>
                 &ldquo;{agent.first_message}&rdquo;
@@ -542,9 +540,9 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
               {[
                 { key: 'opener',            label: 'Opener',             color: '#38BDF8', d: 0   },
                 { key: 'discovery',         label: 'Discovery',          color: '#A89AF9', d: 50  },
-                { key: 'pitch',             label: 'Pitch',              color: '#00D082', d: 100 },
+                { key: 'pitch',             label: 'Pitch',              color: '#10B981', d: 100 },
                 { key: 'objection_handling',label: 'Objection Handling', color: '#F0B429', d: 150 },
-                { key: 'closing',           label: 'Closing',            color: '#00C2B8', d: 200 },
+                { key: 'closing',           label: 'Closing',            color: '#06B6D4', d: 200 },
                 { key: 'faq',               label: 'FAQ',                color: '#FF4D6D', d: 250 },
               ].map(({ key, label, color, d }) => {
                 const text = agent.call_script?.[key as keyof typeof agent.call_script];
@@ -575,7 +573,7 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
             }>
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, padding: '4px 14px' }}>
+              <div style={{ background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: 10, padding: '4px 14px' }}>
                 {Object.entries(agent.qualification_criteria).map(([k, v]) => (
                   <KV key={k} k={k} v={v} />
                 ))}
@@ -594,15 +592,15 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
                 {(agent.product_catalog as Record<string, unknown>[]).slice(0, 6).map((item, i) => (
                   <div key={i} style={{
                     padding: '9px 12px', borderRadius: 9,
-                    background: 'rgba(168,154,249,0.04)',
+                    background: 'rgba(139,92,246,0.04)',
                     border: '1px solid rgba(168,154,249,0.14)',
-                    fontSize: 11.5, color: 'rgba(255,255,255,0.7)',
+                    fontSize: 11.5, color: '#4B5563',
                     animation: `section-rise 0.35s ${i * 60}ms both`,
                   }}>
                     {typeof item === 'object' && item !== null
                       ? Object.entries(item).map(([k, v]) => (
                         <span key={k} style={{ marginRight: 12 }}>
-                          <span style={{ color: 'rgba(168,154,249,0.6)', fontSize: 10 }}>{k}: </span>
+                          <span style={{ color: 'rgba(139,92,246,0.8)', fontSize: 10 }}>{k}: </span>
                           {String(v)}
                         </span>
                       ))
@@ -610,7 +608,7 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
                   </div>
                 ))}
                 {agent.product_catalog.length > 6 && (
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '4px 0' }}>
+                  <div style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', padding: '4px 0' }}>
                     +{agent.product_catalog.length - 6} more items
                   </div>
                 )}
@@ -621,9 +619,9 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
           {/* ── FOOTER ── */}
           <div style={{
             marginTop: 8, paddingTop: 20,
-            borderTop: '1px solid rgba(255,255,255,0.05)',
+            borderTop: '1px solid #F1F5F9',
             display: 'flex', gap: 16, fontSize: 10.5,
-            color: 'rgba(255,255,255,0.2)', fontFamily: 'JetBrains Mono, monospace',
+            color: '#94A3B8', fontFamily: 'JetBrains Mono, monospace',
           }}>
             <span>ID: {agent.id}</span>
             <span>·</span>
@@ -648,7 +646,7 @@ function ExpandableText({ text, accent }: { text: string; accent: string }) {
     }}>
       <pre style={{
         margin: 0, fontFamily: 'inherit',
-        fontSize: 12, color: 'rgba(255,255,255,0.72)',
+        fontSize: 12, color: '#374151',
         lineHeight: 1.75, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
       }}>
         {shown}

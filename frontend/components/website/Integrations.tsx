@@ -82,9 +82,9 @@ export function IntegrationsSection() {
     <section
       style={{
         padding: '80px 80px',
-        background: 'rgba(6,9,16,0.9)',
-        borderTop: '1px solid rgba(0,208,130,0.07)',
-        borderBottom: '1px solid rgba(0,208,130,0.07)',
+        background: '#F8FAFC',
+        borderTop: '1px solid #E2E8F0',
+        borderBottom: '1px solid #E2E8F0',
       }}
     >
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -112,9 +112,9 @@ export function IntegrationsSection() {
                 fontFamily: 'var(--font-syne), sans-serif',
                 fontWeight: 700,
                 fontSize: 14,
-                background: active === key ? `${tab.color}12` : 'rgba(9,20,38,0.5)',
-                border: `1px solid ${active === key ? tab.color + '50' : 'rgba(0,208,130,0.1)'}`,
-                color: active === key ? tab.color : '#475569',
+                background: active === key ? `${tab.color}12` : '#FFFFFF',
+                border: `1px solid ${active === key ? tab.color + '50' : '#E2E8F0'}`,
+                color: active === key ? tab.color : '#64748B',
                 boxShadow: active === key ? `0 0 24px ${tab.color}20` : 'none',
                 backdropFilter: 'blur(12px)',
               }}
@@ -147,7 +147,7 @@ export function IntegrationsSection() {
                 fontFamily: 'var(--font-syne), sans-serif',
                 fontSize: 28,
                 fontWeight: 800,
-                color: '#F1F5F9',
+                color: '#0F172A',
                 letterSpacing: '-0.025em',
                 marginBottom: 14,
                 lineHeight: 1.15,
@@ -155,12 +155,12 @@ export function IntegrationsSection() {
             >
               {t.headline}
             </h3>
-            <p style={{ fontSize: 14, color: '#4A6080', lineHeight: 1.7, marginBottom: 24, fontFamily: 'var(--font-inter), sans-serif' }}>
+            <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.7, marginBottom: 24, fontFamily: 'var(--font-inter), sans-serif' }}>
               {t.desc}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {t.features.map((f) => (
-                <div key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#4A6080', fontFamily: 'var(--font-inter), sans-serif' }}>
+                <div key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#64748B', fontFamily: 'var(--font-inter), sans-serif' }}>
                   <div
                     style={{
                       width: 18,
@@ -187,12 +187,11 @@ export function IntegrationsSection() {
           {/* Code block */}
           <div
             style={{
-              background: 'rgba(6,15,26,0.9)',
-              border: '1px solid rgba(0,208,130,0.12)',
+              background: '#0F172A',
+              border: '1px solid rgba(255,255,255,0.06)',
               borderRadius: 16,
               overflow: 'hidden',
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              boxShadow: '0 8px 32px rgba(15,23,42,0.15)',
             }}
           >
             <div

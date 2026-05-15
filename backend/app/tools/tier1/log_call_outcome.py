@@ -69,7 +69,7 @@ PARAMS = {
 @register_tool(
     name="log_call_outcome",
     tier=1,
-    execution="client",
+    execution="server",
     description=(
         "Log the outcome of this call before ending the conversation. "
         "Call this once you have a clear sense of the result — typically just before saying goodbye. "

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useCalls } from '@/lib/hooks/useCalls';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { apiFetch } from '@/lib/api';
-import type { CallRecord } from '@/lib/api';
+import type { CallRecord, ElCriterionResult } from '@/lib/api';
 import { getOutcomeColor, getOutcomeLabel, getOutcomeIcon } from '@/lib/outcomeUtils';
 
 // ─── Transfer-pending helpers ─────────────────────────────────────────────────
@@ -41,10 +41,10 @@ function fmtDate(iso?: string) {
 }
 
 function sentimentInfo(score?: number): { label: string; color: string } {
-  if (score == null) return { label: '—', color: '#3D607A' };
-  if (score >= 0.65) return { label: 'Positive', color: '#00D082' };
-  if (score <= 0.35) return { label: 'Negative', color: '#FF4D6D' };
-  return { label: 'Neutral', color: '#7BA5C8' };
+  if (score == null) return { label: '—', color: '#94A3B8' };
+  if (score >= 0.65) return { label: 'Positive', color: '#10B981' };
+  if (score <= 0.35) return { label: 'Negative', color: '#EF4444' };
+  return { label: 'Neutral', color: '#64748B' };
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -52,9 +52,212 @@ function Sk({ w = '100%', h = 14, r = 5 }: { w?: string | number; h?: number; r?
   return (
     <div style={{
       width: w, height: h, borderRadius: r,
-      background: 'linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.07) 50%,rgba(255,255,255,0.04) 75%)',
+      background: 'linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%)',
       backgroundSize: '800px 100%', animation: 'shimmer 1.8s infinite linear',
     }} />
+  );
+}
+
+// ─── Pending section skeleton ─────────────────────────────────────────────────
+function PendingSectionSkeleton({ label }: { label: string }) {
+  return (
+    <div style={{
+      padding: '12px 24px',
+      borderBottom: '1px solid #F1F5F9',
+      flexShrink: 0,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {[70, 55, 80].map((w, i) => (
+          <div key={i} style={{
+            height: 14, borderRadius: 6, width: `${w}%`,
+            background: 'rgba(255,255,255,0.05)',
+            animation: 'pulse-opacity 1.8s ease-in-out infinite',
+            animationDelay: `${i * 150}ms`,
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── EL success badge ─────────────────────────────────────────────────────────
+function renderElSuccessBadge(result: 'success' | 'failure' | 'unknown') {
+  const cfg = {
+    success: { bg: 'rgba(16,185,129,0.15)', color: '#10B981', icon: '✓', text: 'Success' },
+    failure: { bg: 'rgba(239,68,68,0.15)',  color: '#EF4444', icon: '✗', text: 'Failed'  },
+    unknown: { bg: 'rgba(148,163,184,0.1)', color: '#94A3B8', icon: '?', text: 'Unknown' },
+  }[result];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontSize: 11.5, fontWeight: 600, padding: '3px 9px', borderRadius: 9999,
+      background: cfg.bg, color: cfg.color,
+    }}>
+      <span style={{ fontSize: 10 }}>{cfg.icon}</span>
+      {cfg.text}
+    </span>
+  );
+}
+
+// ─── Criterion chip ───────────────────────────────────────────────────────────
+function CriterionChip({ result }: { result: 'success' | 'failure' | 'unknown' }) {
+  const cfg = {
+    success: { bg: 'rgba(16,185,129,0.15)',  color: '#10B981', icon: '✓' },
+    failure: { bg: 'rgba(239,68,68,0.15)',   color: '#EF4444', icon: '✗' },
+    unknown: { bg: 'rgba(148,163,184,0.1)',  color: '#94A3B8', icon: '?' },
+  }[result];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+      background: cfg.bg, color: cfg.color,
+      fontSize: 11, fontWeight: 700,
+    }}>
+      {cfg.icon}
+    </span>
+  );
+}
+
+// ─── Collapsible criterion row ────────────────────────────────────────────────
+function CriterionRow({ criterion, isLast }: { criterion: ElCriterionResult; isLast: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div style={{
+      padding: '10px 0',
+      borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.06)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+        <CriterionChip result={criterion.result} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#0F172A' }}>
+              {criterion.name}
+            </span>
+            {criterion.rationale && (
+              <button
+                onClick={() => setExpanded((v) => !v)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  color: '#64748B', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0,
+                  fontSize: 10.5,
+                }}
+              >
+                {expanded ? 'hide' : 'show'}
+                <svg
+                  width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.5" strokeLinecap="round"
+                  style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {expanded && criterion.rationale && (
+            <div style={{
+              fontSize: 12, color: '#64748B', fontStyle: 'italic',
+              lineHeight: 1.55, marginTop: 5,
+              animation: 'fade-in 0.18s both',
+            }}>
+              {criterion.rationale}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Evaluation Results section ───────────────────────────────────────────────
+function EvaluationResultsSection({ criteria }: { criteria: ElCriterionResult[] }) {
+  if (!criteria || criteria.length === 0) return null;
+  return (
+    <div style={{
+      padding: '14px 24px',
+      borderBottom: '1px solid #F1F5F9',
+      flexShrink: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#8B5CF6', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Evaluation Results
+        </div>
+        <span
+          title="Evaluated by ElevenLabs after the call"
+          style={{
+            width: 14, height: 14, borderRadius: '50%', display: 'inline-flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            background: 'rgba(139,92,246,0.1)', color: '#8B5CF6',
+            fontSize: 9, fontWeight: 700, cursor: 'default',
+          }}
+        >i</span>
+      </div>
+      <div style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 10, padding: '0 12px',
+      }}>
+        {criteria.map((c, i) => (
+          <CriterionRow key={c.id} criterion={c} isLast={i === criteria.length - 1} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Extracted Data section ───────────────────────────────────────────────────
+function ExtractedDataSection({ data }: { data: Record<string, string | boolean | number> }) {
+  const entries = Object.entries(data);
+  if (entries.length === 0) return null;
+  return (
+    <div style={{
+      padding: '14px 24px',
+      borderBottom: '1px solid #F1F5F9',
+      flexShrink: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#06B6D4', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Extracted Data
+        </div>
+        <span
+          title="Automatically extracted by ElevenLabs from the conversation"
+          style={{
+            width: 14, height: 14, borderRadius: '50%', display: 'inline-flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            background: 'rgba(6,182,212,0.1)', color: '#06B6D4',
+            fontSize: 9, fontWeight: 700, cursor: 'default',
+          }}
+        >i</span>
+      </div>
+      <div style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 10, padding: '10px 12px',
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px',
+      }}>
+        {entries.map(([key, val]) => {
+          const isNonString = typeof val !== 'string';
+          return (
+            <div key={key}>
+              <div style={{
+                fontSize: 10, color: '#94A3B8', textTransform: 'uppercase',
+                letterSpacing: '0.05em', marginBottom: 2,
+              }}>
+                {key.replace(/_/g, ' ')}
+              </div>
+              <div style={{
+                fontSize: 13.5, color: '#0F172A',
+                fontFamily: isNonString ? 'var(--font-mono)' : 'inherit',
+              }}>
+                {String(val)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -68,9 +271,9 @@ function FilterPill({ label, active, onClick }: { label: string; active: boolean
       onMouseLeave={() => setHov(false)}
       style={{
         padding: '5px 14px', borderRadius: 9999,
-        border: `1px solid ${active ? 'rgba(0,208,130,0.45)' : hov ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)'}`,
-        background: active ? 'rgba(0,208,130,0.12)' : hov ? 'rgba(255,255,255,0.04)' : 'transparent',
-        color: active ? '#00D082' : hov ? '#7BA5C8' : '#3D607A',
+        border: `1px solid ${active ? '#A7F3D0' : hov ? '#CBD5E1' : '#E2E8F0'}`,
+        background: active ? '#ECFDF5' : hov ? '#0F172A' : '#F8FAFC',
+        color: active ? '#10B981' : hov ? '#334155' : '#64748B',
         fontSize: 12, fontWeight: 600, cursor: 'pointer',
         transition: 'all 0.15s',
       }}
@@ -81,7 +284,7 @@ function FilterPill({ label, active, onClick }: { label: string; active: boolean
 }
 
 // ─── Chat transcript panel ────────────────────────────────────────────────────
-function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => void }) {
+function TranscriptPanel({ call, onClose, width }: { call: CallRecord; onClose: () => void; width: number }) {
   const [detail, setDetail] = useState<CallRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -134,15 +337,22 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
   const transcript = (src as any).transcript_entries ?? (src as any).transcript ?? [];
   const callTs = (src as any).ended_at ?? (src as any).created_at ?? call.created_at;
   const pendingPhase = getPendingPhase(transcript, (src as any).outcome, (src as any).auto_summary, callTs);
+
+  // Determine overall badge: prefer EL analysis result, fallback to outcome badge
+  const elResult = (src as any).el_analysis_results?.call_successful as 'success' | 'failure' | 'unknown' | undefined;
   const oc = getOutcomeColor((src as any).outcome ?? call.outcome);
   const ol = getOutcomeLabel((src as any).outcome ?? call.outcome);
+  const oi = ((src as any).outcome ?? call.outcome) ? getOutcomeIcon((src as any).outcome ?? call.outcome) : null;
+
+  const isProcessing = src.status === 'processing' || src.status === 'in_progress';
+  const criteriaResults = (src as any).el_analysis_results?.criteria_results ?? [];
+  const extractedData = (src as any).el_data_collection as Record<string, string | boolean | number> | undefined;
 
   return (
     <div style={{
-      width: 440, minWidth: 440,
-      background: 'rgba(7,16,30,0.97)',
-      backdropFilter: 'blur(24px)',
-      borderLeft: '1px solid rgba(0,208,130,0.12)',
+      width, minWidth: width,
+      background: '#FFFFFF',
+      borderLeft: '1px solid #E2E8F0',
       display: 'flex', flexDirection: 'column',
       height: '100%', overflow: 'hidden',
       animation: 'slide-in-right 0.3s var(--ease-out)',
@@ -150,15 +360,15 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
       {/* Header */}
       <div style={{
         padding: '20px 24px 16px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid #F1F5F9',
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
               {contact ?? '—'}
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>
+            <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 3 }}>
               {call.agent_name ?? 'Unknown agent'} · {fmtDate(call.started_at)}
             </div>
           </div>
@@ -166,13 +376,13 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
             onClick={onClose}
             style={{
               width: 28, height: 28, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+              background: '#F8FAFC', border: '1px solid #E2E8F0',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: 'var(--text-muted)',
+              cursor: 'pointer', color: '#64748B',
               transition: 'all 0.15s',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,77,109,0.12)'; e.currentTarget.style.color = '#FF4D6D'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#FFF1F2'; e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.borderColor = '#FECDD3'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M18 6L6 18M6 6l12 12" />
@@ -182,19 +392,52 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
 
         {/* Stats strip */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {[
-            { l: 'Duration', v: fmtDuration(call.duration_seconds), c: '#38BDF8' },
-            { l: 'Outcome', v: ol, c: oc },
-            { l: 'Sentiment', v: si.label, c: si.color },
-          ].map(({ l, v, c }) => (
-            <div key={l} style={{
-              background: `${c}10`, border: `1px solid ${c}20`,
-              borderRadius: 8, padding: '5px 10px', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 10, color: c, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: c, marginTop: 1 }}>{v}</div>
+          {/* Duration */}
+          <div style={{
+            background: '#3B82F610', border: '1px solid #3B82F625',
+            borderRadius: 8, padding: '5px 10px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 10, color: '#3B82F6', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Duration</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#3B82F6', marginTop: 1 }}>{fmtDuration(call.duration_seconds)}</div>
+          </div>
+
+          {/* Outcome — EL result takes priority */}
+          <div style={{
+            background: elResult
+              ? (elResult === 'success' ? 'rgba(16,185,129,0.08)' : elResult === 'failure' ? 'rgba(239,68,68,0.08)' : 'rgba(148,163,184,0.08)')
+              : `${oc}10`,
+            border: `1px solid ${elResult
+              ? (elResult === 'success' ? 'rgba(16,185,129,0.25)' : elResult === 'failure' ? 'rgba(239,68,68,0.25)' : 'rgba(148,163,184,0.2)')
+              : `${oc}25`}`,
+            borderRadius: 8, padding: '5px 10px', textAlign: 'center',
+          }}>
+            <div style={{
+              fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+              color: elResult
+                ? (elResult === 'success' ? '#10B981' : elResult === 'failure' ? '#EF4444' : '#94A3B8')
+                : oc,
+            }}>Outcome</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 1 }}>
+              {elResult
+                ? renderElSuccessBadge(elResult)
+                : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: oc }}>
+                    {oi && <span style={{ fontSize: 10 }}>{oi}</span>}
+                    {ol}
+                  </span>
+                )
+              }
             </div>
-          ))}
+          </div>
+
+          {/* Sentiment */}
+          <div style={{
+            background: `${si.color}10`, border: `1px solid ${si.color}25`,
+            borderRadius: 8, padding: '5px 10px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 10, color: si.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sentiment</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: si.color, marginTop: 1 }}>{si.label}</div>
+          </div>
         </div>
       </div>
 
@@ -202,18 +445,32 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
       {(detail ?? call).auto_summary && (
         <div style={{
           padding: '14px 24px',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
+          borderBottom: '1px solid #F1F5F9',
           flexShrink: 0,
-          background: 'rgba(0,208,130,0.04)',
+          background: '#ECFDF5',
         }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#00D082', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7 }}>
             AI Summary
           </div>
-          <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.6 }}>
             {(detail ?? call).auto_summary}
           </div>
         </div>
       )}
+
+      {/* Evaluation Results — skeleton while processing, real data when available */}
+      {isProcessing ? (
+        <PendingSectionSkeleton label="Evaluation Results" />
+      ) : criteriaResults.length > 0 ? (
+        <EvaluationResultsSection criteria={criteriaResults} />
+      ) : null}
+
+      {/* Extracted Data — skeleton while processing, real data when available */}
+      {isProcessing ? (
+        <PendingSectionSkeleton label="Extracted Data" />
+      ) : (extractedData && Object.keys(extractedData).length > 0) ? (
+        <ExtractedDataSection data={extractedData} />
+      ) : null}
 
       {/* Transcript */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
@@ -227,7 +484,7 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
             ))}
           </div>
         ) : transcript.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13.5 }}>
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748B', fontSize: 13.5 }}>
             No transcript available
           </div>
         ) : (
@@ -243,13 +500,13 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
                 return (
                   <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: '4px 0', animation: `fade-in 0.3s ${i * 30}ms both` }}>
                     <div style={{
-                      background: 'rgba(124,110,250,0.08)', border: '1px solid rgba(124,110,250,0.22)',
+                      background: '#F5F3FF', border: '1px solid #EDE9FE',
                       borderRadius: 8, padding: '7px 14px', maxWidth: '92%', textAlign: 'center',
                     }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#7C6EFA', marginBottom: 3 }}>System Event</div>
-                      <div style={{ fontSize: 13, color: '#A89AF9', lineHeight: 1.55 }}>{text}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8B5CF6', marginBottom: 3 }}>System Event</div>
+                      <div style={{ fontSize: 13, color: '#6D28D9', lineHeight: 1.55 }}>{text}</div>
                     </div>
-                    {ts && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{ts}</span>}
+                    {ts && <span style={{ fontSize: 10.5, color: '#64748B', fontFamily: 'var(--font-mono)' }}>{ts}</span>}
                   </div>
                 );
               }
@@ -261,20 +518,20 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
                     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#F59E0B', marginBottom: 4 }}>Human Agent</div>
                     <div style={{
                       maxWidth: '85%',
-                      background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.18)',
+                      background: '#FFFBEB', border: '1px solid #FDE68A',
                       borderRadius: '4px 12px 12px 12px',
-                      padding: '9px 13px', fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.55,
+                      padding: '9px 13px', fontSize: 13.5, color: '#334155', lineHeight: 1.55,
                     }}>
                       {text}
                     </div>
-                    {ts && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 3 }}>{ts}</span>}
+                    {ts && <span style={{ fontSize: 10.5, color: '#64748B', fontFamily: 'var(--font-mono)', marginTop: 3 }}>{ts}</span>}
                   </div>
                 );
               }
 
               // AI agent or customer
               const isAgent = entry.role === 'agent';
-              const accentClr = isAgent ? '#00D082' : '#38BDF8';
+              const accentClr = isAgent ? '#10B981' : '#3B82F6';
               const label = isAgent ? (call.agent_name ?? 'AI Agent') : 'Customer';
               return (
                 <div key={i} style={{
@@ -289,18 +546,18 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
                   }}>
                     {label}
                     {ts && (
-                      <span style={{ color: 'var(--text-muted)', marginLeft: 6, fontWeight: 400, textTransform: 'none', fontSize: 10.5 }}>
+                      <span style={{ color: '#94A3B8', marginLeft: 6, fontWeight: 400, textTransform: 'none', fontSize: 10.5 }}>
                         {ts}
                       </span>
                     )}
                   </div>
                   <div style={{
                     maxWidth: '85%',
-                    background: isAgent ? 'rgba(0,208,130,0.07)' : 'rgba(56,189,248,0.07)',
-                    border: `1px solid ${isAgent ? 'rgba(0,208,130,0.15)' : 'rgba(56,189,248,0.12)'}`,
+                    background: isAgent ? '#ECFDF5' : '#EFF6FF',
+                    border: `1px solid ${isAgent ? '#A7F3D0' : '#BFDBFE'}`,
                     borderRadius: isAgent ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
                     padding: '9px 13px',
-                    fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.55,
+                    fontSize: 13.5, color: '#334155', lineHeight: 1.55,
                   }}>
                     {text}
                   </div>
@@ -311,12 +568,12 @@ function TranscriptPanel({ call, onClose }: { call: CallRecord; onClose: () => v
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 11px', marginTop: 4,
-                background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)',
+                background: '#FFFBEB', border: '1px solid #FDE68A',
                 borderRadius: 8,
               }}>
                 <div style={{
                   width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                  border: '1.5px solid rgba(245,158,11,0.3)', borderTopColor: '#F59E0B',
+                  border: '1.5px solid #FDE68A', borderTopColor: '#F59E0B',
                   animation: 'spin 1s linear infinite',
                 }} />
                 <span style={{ fontSize: 12, color: '#F59E0B' }}>
@@ -342,6 +599,23 @@ export function OrdersView() {
   const [agentFilter, setAgentFilter] = useState<AgentFilter>('all');
   const [outcomeFilter, setOFil]      = useState<OutcomeFilter>('all');
   const [selected, setSelected]       = useState<CallRecord | null>(null);
+  const [panelWidth, setPanelWidth]   = useState(440);
+
+  const startPanelDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = panelWidth;
+    const onMove = (ev: MouseEvent) => {
+      const delta = startX - ev.clientX;
+      setPanelWidth(Math.min(720, Math.max(300, startW + delta)));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   const { data: agentsData } = useAgents();
   const agentList = agentsData?.items ?? [];
@@ -379,6 +653,7 @@ export function OrdersView() {
   return (
     <div style={{
       display: 'flex', height: '100vh', overflow: 'hidden',
+      background: '#F8FAFC',
       animation: 'fade-in 0.4s both',
     }}>
       {/* Main table area */}
@@ -388,13 +663,16 @@ export function OrdersView() {
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
             <div>
-              <h1 style={{
-                fontFamily: 'var(--font-syne)', fontSize: 26, fontWeight: 700,
-                color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 6,
-              }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8', marginBottom: 6 }}>
                 Orders
+              </div>
+              <h1 style={{
+                fontSize: 26, fontWeight: 800,
+                color: '#0F172A', letterSpacing: '-0.03em', marginBottom: 6,
+              }}>
+                Call Records
               </h1>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              <p style={{ fontSize: 13, color: '#64748B' }}>
                 {total.toLocaleString()} call records · click any row to view conversation
               </p>
             </div>
@@ -405,16 +683,15 @@ export function OrdersView() {
             {outcomeFilters.map((f) => (
               <FilterPill key={f.id} label={f.label} active={outcomeFilter === f.id} onClick={() => { setOFil(f.id); setPage(1); }} />
             ))}
-            <div style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.08)', margin: '0 4px' }} />
+            <div style={{ width: 1, height: 22, background: '#E2E8F0', margin: '0 4px' }} />
             <select
               value={agentFilter}
               onChange={(e) => { setAgentFilter(e.target.value); setPage(1); }}
               style={{
-                background: 'rgba(9,20,38,0.80)', border: '1px solid rgba(255,255,255,0.10)',
+                background: '#F8FAFC', border: `1px solid ${agentFilter !== 'all' ? '#A7F3D0' : '#E2E8F0'}`,
                 borderRadius: 9999, padding: '5px 14px', fontSize: 12,
-                color: agentFilter !== 'all' ? '#00D082' : '#3D607A',
+                color: agentFilter !== 'all' ? '#10B981' : '#64748B',
                 cursor: 'pointer', outline: 'none',
-                borderColor: agentFilter !== 'all' ? 'rgba(0,208,130,0.35)' : 'rgba(255,255,255,0.10)',
               }}
             >
               <option value="all">All Agents</option>
@@ -426,10 +703,10 @@ export function OrdersView() {
         {/* Table */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 36px 24px' }}>
           <div style={{
-            background: 'rgba(9,20,38,0.60)',
-            backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 16, overflow: 'hidden',
+            background: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: 20, overflow: 'hidden',
+            boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
           }}>
             {/* Table header */}
             <div style={{
@@ -437,13 +714,13 @@ export function OrdersView() {
               gridTemplateColumns: '125px 150px 150px 155px 72px 82px 1fr',
               gap: 0,
               padding: '11px 20px',
-              background: 'rgba(255,255,255,0.03)',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              background: '#F8FAFC',
+              borderBottom: '1px solid #F1F5F9',
             }}>
               {['Date', 'Customer', 'Agent', 'Status', 'Duration', 'Sentiment', 'Summary'].map((h) => (
                 <div key={h} style={{
                   fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-                  letterSpacing: '0.09em', color: 'var(--text-muted)', paddingRight: 8,
+                  letterSpacing: '0.08em', color: '#94A3B8', paddingRight: 8,
                 }}>
                   {h}
                 </div>
@@ -455,7 +732,7 @@ export function OrdersView() {
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} style={{
                   display: 'grid', gridTemplateColumns: '125px 150px 150px 155px 72px 82px 1fr',
-                  padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  padding: '14px 20px', borderBottom: '1px solid #F1F5F9',
                   gap: 0, alignItems: 'center',
                 }}>
                   <Sk h={11} w="90%" />
@@ -468,7 +745,7 @@ export function OrdersView() {
                 </div>
               ))
             ) : filteredCalls.length === 0 ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              <div style={{ padding: '60px', textAlign: 'center', color: '#64748B', fontSize: 13 }}>
                 No orders found for the selected filters
               </div>
             ) : (
@@ -489,7 +766,7 @@ export function OrdersView() {
               gap: 12, marginTop: 20,
             }}>
               <PaginationBtn label="← Previous" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} />
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: 12, color: '#64748B' }}>
                 Page {page} of {Math.ceil(total / 20)}
               </span>
               <PaginationBtn label="Next →" onClick={() => setPage((p) => p + 1)} disabled={page >= Math.ceil(total / 20)} />
@@ -498,9 +775,23 @@ export function OrdersView() {
         </div>
       </div>
 
-      {/* Transcript panel */}
+      {/* Resize handle + Transcript panel */}
       {selected && (
-        <TranscriptPanel call={selected} onClose={() => setSelected(null)} />
+        <>
+          <div
+            onMouseDown={startPanelDrag}
+            style={{
+              width: 6, flexShrink: 0, cursor: 'col-resize',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent', transition: 'background 0.15s', zIndex: 2,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,208,130,0.10)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <div style={{ width: 2, height: 36, borderRadius: 2, background: 'rgba(0,0,0,0.12)', pointerEvents: 'none' }} />
+          </div>
+          <TranscriptPanel call={selected} onClose={() => setSelected(null)} width={panelWidth} />
+        </>
       )}
     </div>
   );
@@ -525,22 +816,22 @@ function OrderRow({ call, idx, selected, onClick }: {
       style={{
         display: 'grid', gridTemplateColumns: '125px 150px 150px 155px 72px 82px 1fr',
         padding: '13px 20px', alignItems: 'center', gap: 0,
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        borderBottom: '1px solid #F1F5F9',
         background: selected
-          ? 'rgba(0,208,130,0.07)'
-          : hov ? 'rgba(255,255,255,0.03)' : 'transparent',
-        borderLeft: selected ? '2px solid #00D082' : '2px solid transparent',
+          ? '#ECFDF5'
+          : hov ? '#F8FAFC' : 'transparent',
+        borderLeft: selected ? '2px solid #10B981' : '2px solid transparent',
         cursor: 'pointer', transition: 'all 0.15s',
         animation: `fade-in 0.4s ${idx * 40}ms both`,
       }}
     >
-      <div style={{ fontSize: 13, color: 'var(--text-muted)', paddingRight: 8 }}>
+      <div style={{ fontSize: 13, color: '#64748B', paddingRight: 8 }}>
         {fmtDate(call.started_at)}
       </div>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13.5, color: 'var(--text-primary)', paddingRight: 8 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13.5, color: '#0F172A', paddingRight: 8 }}>
         {contact ?? '—'}
       </div>
-      <div style={{ fontSize: 13, color: 'var(--text-secondary)', paddingRight: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ fontSize: 13, color: '#334155', paddingRight: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {call.agent_name ?? '—'}
       </div>
       <div style={{ paddingRight: 8 }}>
@@ -553,7 +844,7 @@ function OrderRow({ call, idx, selected, onClick }: {
           {ol}
         </span>
       </div>
-      <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', paddingRight: 8 }}>
+      <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: '#64748B', paddingRight: 8 }}>
         {fmtDuration(call.duration_seconds)}
       </div>
       <div style={{ paddingRight: 8 }}>
@@ -562,7 +853,7 @@ function OrderRow({ call, idx, selected, onClick }: {
         </span>
       </div>
       <div style={{
-        fontSize: 13, color: 'var(--text-muted)', overflow: 'hidden',
+        fontSize: 13, color: '#64748B', overflow: 'hidden',
         textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
         {call.auto_summary ? call.auto_summary.slice(0, 80) + (call.auto_summary.length > 80 ? '…' : '') : '—'}
@@ -577,8 +868,8 @@ function PaginationBtn({ label, onClick, disabled }: { label: string; onClick: (
       onClick={onClick} disabled={disabled}
       style={{
         padding: '6px 14px', borderRadius: 8,
-        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-        color: disabled ? 'var(--text-disabled)' : 'var(--text-secondary)',
+        background: '#F8FAFC', border: '1px solid #E2E8F0',
+        color: disabled ? '#94A3B8' : '#334155',
         fontSize: 12, fontWeight: 500, cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'all 0.15s',
       }}

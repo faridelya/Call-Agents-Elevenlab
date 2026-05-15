@@ -20,7 +20,7 @@ PARAMS = {
 @register_tool(
     name="update_call_stage",
     tier=1,
-    execution="client",
+    execution="server",
     description="Track the current stage of the sales conversation for analytics and reporting.",
     parameters=PARAMS,
 )

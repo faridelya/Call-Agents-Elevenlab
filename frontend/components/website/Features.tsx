@@ -80,15 +80,14 @@ function FeatureCard({ icon, color, title, desc }: (typeof features)[number]) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        background: hov ? 'rgba(9,20,38,0.80)' : 'rgba(9,20,38,0.55)',
-        border: `1px solid ${hov ? `${color}40` : 'rgba(0,208,130,0.08)'}`,
+        background: hov ? '#FAFBFC' : '#FFFFFF',
+        border: `1px solid ${hov ? `${color}40` : '#E2E8F0'}`,
         borderRadius: 16,
         padding: 26,
         transition: 'all 0.3s',
         cursor: 'default',
         transform: hov ? 'translateY(-3px)' : 'none',
-        boxShadow: hov ? `0 12px 40px ${color}15, 0 0 0 1px ${color}15` : '0 2px 12px rgba(0,0,0,0.2)',
-        backdropFilter: 'blur(20px) saturate(140%)',
+        boxShadow: hov ? `0 12px 40px ${color}15, 0 0 0 1px ${color}15` : '0 1px 4px rgba(15,23,42,0.06)',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -119,10 +118,10 @@ function FeatureCard({ icon, color, title, desc }: (typeof features)[number]) {
       >
         {icon}
       </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: '#E2E8F0', marginBottom: 8, fontFamily: 'var(--font-syne), sans-serif' }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: '#0F172A', marginBottom: 8, fontFamily: 'var(--font-syne), sans-serif' }}>
         {title}
       </div>
-      <div style={{ fontSize: 13, color: '#4A6080', lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
+      <div style={{ fontSize: 13, color: '#64748B', lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
         {desc}
       </div>
     </div>
@@ -144,9 +143,9 @@ export function HowItWorksSection() {
       id="How It Works"
       style={{
         padding: '80px 0',
-        background: 'rgba(6,9,16,0.9)',
-        borderTop: '1px solid rgba(0,208,130,0.07)',
-        borderBottom: '1px solid rgba(0,208,130,0.07)',
+        background: '#F1F5F9',
+        borderTop: '1px solid #E2E8F0',
+        borderBottom: '1px solid #E2E8F0',
       }}
     >
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 80px' }}>
@@ -176,8 +175,8 @@ export function HowItWorksSection() {
                   borderRadius: '50%',
                   background: i === 0
                     ? 'linear-gradient(135deg, #00D082, #00A866)'
-                    : 'rgba(9,20,38,0.8)',
-                  border: `1px solid ${i === 0 ? 'transparent' : 'rgba(0,208,130,0.15)'}`,
+                    : '#FFFFFF',
+                  border: `1px solid ${i === 0 ? 'transparent' : '#CBD5E1'}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -185,7 +184,7 @@ export function HowItWorksSection() {
                   fontFamily: 'var(--font-jetbrains-mono), monospace',
                   fontSize: 13,
                   fontWeight: 700,
-                  color: i === 0 ? '#060F1A' : '#334155',
+                  color: i === 0 ? '#060F1A' : '#64748B',
                   position: 'relative',
                   zIndex: 1,
                   boxShadow: i === 0 ? '0 0 24px rgba(0,208,130,0.5)' : 'none',
@@ -194,10 +193,10 @@ export function HowItWorksSection() {
               >
                 {s.n}
               </div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#E2E8F0', marginBottom: 10, fontFamily: 'var(--font-syne), sans-serif' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', marginBottom: 10, fontFamily: 'var(--font-syne), sans-serif' }}>
                 {s.title}
               </div>
-              <div style={{ fontSize: 12, color: '#4A6080', lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
+              <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.65, fontFamily: 'var(--font-inter), sans-serif' }}>
                 {s.desc}
               </div>
             </div>

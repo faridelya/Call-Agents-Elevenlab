@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 * {
   margin: 0;
@@ -7,94 +7,76 @@
 }
 
 :root {
-  /* ── Primary Green ─────────────────────────────────── */
-  --green-50:  #E6FFF5;
-  --green-100: #B3FFE0;
-  --green-200: #66FFCC;
-  --green-300: #00FFB3;
-  --green-400: #00E699;
-  --green-500: #00D082;  /* main brand */
-  --green-600: #00A866;
-  --green-700: #00874F;
-  --green-800: #006639;
-  --green-900: #004425;
+  /* ── Brand Accents ──────────────────────────────────── */
+  --pink:        #F43F5E;
+  --pink-light:  #FFF1F2;
+  --pink-mid:    #FFE4E6;
 
-  /* ── Teal (complementary) ───────────────────────────── */
-  --teal-400: #00C2B8;
-  --teal-500: #00A89F;
+  --yellow:      #F59E0B;
+  --yellow-light:#FFFBEB;
+  --yellow-mid:  #FEF3C7;
 
-  /* ── Sky Blue (accent) ──────────────────────────────── */
-  --blue-400: #38BDF8;
-  --blue-500: #0EA5E9;
-  --blue-600: #0284C7;
+  --blue:        #3B82F6;
+  --blue-light:  #EFF6FF;
+  --blue-mid:    #DBEAFE;
 
-  /* ── Violet (legacy accent, secondary use) ──────────── */
-  --violet-400: #A78BFA;
-  --violet-500: #8B5CF6;
+  --green:       #10B981;
+  --green-light: #ECFDF5;
+  --green-mid:   #D1FAE5;
 
-  /* ── Amber / Gold ───────────────────────────────────── */
-  --amber-400: #FBBF24;
-  --amber-500: #F0B429;
+  --purple:      #8B5CF6;
+  --purple-light:#F5F3FF;
+  --purple-mid:  #EDE9FE;
 
-  /* ── Coral / Red ────────────────────────────────────── */
-  --red-400:   #FF6B81;
-  --red-500:   #FF4D6D;
+  --cyan:        #06B6D4;
+  --cyan-light:  #ECFEFF;
 
   /* ── Backgrounds ────────────────────────────────────── */
-  --bg-deep:    #020A14;
-  --bg-base:    #060F1A;
-  --bg-surface: #091628;
-  --bg-card:    rgba(9, 20, 38, 0.65);
-  --bg-elevated:rgba(12, 24, 46, 0.80);
-  --bg-overlay: rgba(2, 10, 20, 0.90);
+  --bg-page:     #F8FAFC;
+  --bg-card:     #FFFFFF;
+  --bg-sidebar:  #FFFFFF;
+  --bg-surface:  #F8FAFC;
+  --bg-hover:    #F1F5F9;
+  --bg-active:   #F1F5F9;
 
   /* ── Borders ────────────────────────────────────────── */
-  --border-faint:   rgba(255,255,255,0.04);
-  --border-subtle:  rgba(255,255,255,0.07);
-  --border-default: rgba(255,255,255,0.10);
-  --border-strong:  rgba(255,255,255,0.18);
-  --border-green:   rgba(0,208,130,0.22);
-  --border-green-strong: rgba(0,208,130,0.40);
-  --border-focus:   rgba(0,208,130,0.55);
+  --border:        #E2E8F0;
+  --border-subtle: #F1F5F9;
+  --border-strong: #CBD5E1;
 
   /* ── Text ───────────────────────────────────────────── */
-  --text-primary:   #DFF0FF;
-  --text-secondary: #7BA5C8;
-  --text-muted:     #3D607A;
-  --text-disabled:  #263A4A;
+  --text-primary:   #0F172A;
+  --text-secondary: #334155;
+  --text-muted:     #64748B;
+  --text-disabled:  #94A3B8;
 
   /* ── Semantic ───────────────────────────────────────── */
-  --color-success:     #00D082;
-  --color-success-bg:  rgba(0,208,130,0.10);
-  --color-warning:     #F0B429;
-  --color-warning-bg:  rgba(240,180,41,0.10);
-  --color-danger:      #FF4D6D;
-  --color-danger-bg:   rgba(255,77,109,0.10);
-  --color-info:        #38BDF8;
-  --color-info-bg:     rgba(56,189,248,0.10);
-  --color-teal:        #00C2B8;
-  --color-teal-bg:     rgba(0,194,184,0.10);
-
-  /* ── Brand aliases ──────────────────────────────────── */
-  --brand-primary:   var(--green-500);
-  --brand-secondary: var(--teal-400);
-  --brand-glow:      rgba(0,208,130,0.20);
-  --brand-glow-soft: rgba(0,208,130,0.10);
+  --color-success:     #10B981;
+  --color-success-bg:  #ECFDF5;
+  --color-success-border: #A7F3D0;
+  --color-warning:     #F59E0B;
+  --color-warning-bg:  #FFFBEB;
+  --color-warning-border: #FDE68A;
+  --color-danger:      #EF4444;
+  --color-danger-bg:   #FFF1F2;
+  --color-danger-border: #FECDD3;
+  --color-info:        #3B82F6;
+  --color-info-bg:     #EFF6FF;
+  --color-info-border: #BFDBFE;
 
   /* ── Typography ─────────────────────────────────────── */
+  --font-ui:      'Plus Jakarta Sans', sans-serif;
   --font-display: 'Plus Jakarta Sans', sans-serif;
-  --font-ui:      'Manrope', sans-serif;
   --font-mono:    'JetBrains Mono', monospace;
 
   /* ── Shadows ────────────────────────────────────────── */
-  --shadow-xs:   0 1px 3px rgba(0,0,0,0.5);
-  --shadow-sm:   0 2px 8px rgba(0,0,0,0.5);
-  --shadow-md:   0 4px 20px rgba(0,0,0,0.55);
-  --shadow-lg:   0 8px 40px rgba(0,0,0,0.60);
-  --shadow-xl:   0 16px 64px rgba(0,0,0,0.65);
-  --shadow-glow: 0 0 24px rgba(0,208,130,0.25);
-  --shadow-glow-sm: 0 0 12px rgba(0,208,130,0.20);
-  --glow-green:  0 0 30px rgba(0,208,130,0.15), 0 0 60px rgba(0,208,130,0.08);
+  --shadow-xs:  0 1px 2px rgba(15,23,42,0.05);
+  --shadow-sm:  0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-md:  0 4px 6px rgba(15,23,42,0.06), 0 2px 4px rgba(15,23,42,0.04);
+  --shadow-lg:  0 10px 15px rgba(15,23,42,0.08), 0 4px 6px rgba(15,23,42,0.04);
+  --shadow-xl:  0 20px 25px rgba(15,23,42,0.10), 0 8px 10px rgba(15,23,42,0.04);
+  --shadow-card: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-card-hover: 0 8px 25px rgba(15,23,42,0.10), 0 3px 8px rgba(15,23,42,0.06);
 
   /* ── Motion ─────────────────────────────────────────── */
   --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
@@ -103,16 +85,24 @@
   --duration-normal: 220ms;
   --duration-slow:   380ms;
 
-  /* ── Glass ──────────────────────────────────────────── */
-  --glass-bg:      rgba(9, 20, 38, 0.60);
-  --glass-border:  rgba(255,255,255,0.08);
-  --glass-blur:    blur(20px) saturate(160%);
+  /* ── Legacy aliases for compat ──────────────────────── */
+  --bg-base:    var(--bg-page);
+  --bg-deep:    var(--bg-page);
+  --bg-elevated: var(--bg-card);
+  --bg-overlay: rgba(15,23,42,0.60);
+  --border-faint:   var(--border-subtle);
+  --border-subtle:  var(--border);
+  --border-default: var(--border);
+  --border-strong:  var(--border-strong);
+  --brand-primary:  var(--green);
+  --glass-bg:       var(--bg-card);
+  --glass-border:   var(--border);
 }
 
 html { scroll-behavior: smooth; }
 
 body {
-  background: var(--bg-base);
+  background: var(--bg-page);
   color: var(--text-primary);
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
@@ -122,23 +112,12 @@ body {
   min-height: 100vh;
 }
 
-/* Dot grid overlay for the whole app */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: radial-gradient(rgba(0,208,130,0.04) 1px, transparent 1px);
-  background-size: 32px 32px;
-  pointer-events: none;
-  z-index: 0;
-}
-
 #__next { position: relative; z-index: 1; }
 
-::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(0,208,130,0.15); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(0,208,130,0.30); }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
 input, textarea, select, button { font-family: var(--font-ui); }
 
@@ -184,8 +163,8 @@ input, textarea, select, button { font-family: var(--font-ui); }
 }
 
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(0,208,130,0.25), 0 0 24px rgba(0,208,130,0.10); }
-  50%       { box-shadow: 0 0 20px rgba(0,208,130,0.40), 0 0 40px rgba(0,208,130,0.18); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+  50%       { box-shadow: 0 0 0 4px rgba(16,185,129,0); }
 }
 
 @keyframes bar-wave {
@@ -194,8 +173,8 @@ input, textarea, select, button { font-family: var(--font-ui); }
 }
 
 @keyframes orb-pulse {
-  0%, 100% { opacity: 0.8; transform: scale(1); }
-  50%       { opacity: 1; transform: scale(1.08); }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.7; transform: scale(1.05); }
 }
 
 @keyframes nav-dot {
@@ -205,11 +184,6 @@ input, textarea, select, button { font-family: var(--font-ui); }
 
 @keyframes spin-cw {
   to { transform: rotate(360deg); }
-}
-
-@keyframes card-hover-glow {
-  from { opacity: 0; }
-  to   { opacity: 1; }
 }
 
 @keyframes progress-fill {
@@ -222,13 +196,18 @@ input, textarea, select, button { font-family: var(--font-ui); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes live-ring {
+  0%   { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
 /* ── Shimmer skeleton ───────────────────────────────────────────────────────── */
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgba(255,255,255,0.04) 25%,
-    rgba(255,255,255,0.08) 50%,
-    rgba(255,255,255,0.04) 75%
+    #F1F5F9 25%,
+    #E2E8F0 50%,
+    #F1F5F9 75%
   );
   background-size: 800px 100%;
   animation: shimmer 1.8s infinite linear;
