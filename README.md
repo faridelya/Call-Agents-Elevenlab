@@ -14,7 +14,7 @@ An AI-powered outbound/inbound voice agent SaaS built on ElevenLabs Conversation
 | Database | PostgreSQL 17 + pgvector |
 | Cache / Queue | Redis 7 |
 | Frontend | Next.js 15 (App Router) + custom WebSocket server |
-| Transcription | OpenAI Whisper (human-leg recordings) |
+| Transcription | ElevenLabs STT (human-leg recordings) |
 | Auth | JWT (15 min access / 30 day refresh) |
 
 ---
@@ -25,7 +25,7 @@ An AI-powered outbound/inbound voice agent SaaS built on ElevenLabs Conversation
 - **Real-time tool execution** — agents call tools mid-conversation (look up contacts, log outcomes, transfer to human, leave voicemail, etc.)
 - **Campaign dialer** — bulk outbound campaigns with DNC enforcement, concurrency limits, and per-contact retry logic
 - **Post-call processing** — AI-generated call summaries, outcome classification, and transcript storage
-- **Human transfer** — warm transfer with recording of the human-agent leg, transcribed by Whisper and merged into the call record
+- **Human transfer** — warm transfer with recording of the human-agent leg, transcribed by ElevenLabs STT and merged into the call record
 - **Knowledge base** — attach documents to agents (vector embeddings via pgvector)
 - **Custom tools** — build webhook tools, MCP-connected tools, or configure native ElevenLabs tools from the UI
 - **Event streaming** — real-time call events pushed to the dashboard via WebSocket fan-out
@@ -86,7 +86,7 @@ An AI-powered outbound/inbound voice agent SaaS built on ElevenLabs Conversation
 - [ngrok](https://ngrok.com/) (required for local Twilio webhooks)
 - ElevenLabs account + API key
 - Twilio account + phone number
-- OpenAI API key (Whisper transcription + optional LLM)
+- OpenAI API key _(optional — for LLM summaries; can use Google Gemini or Anthropic Claude instead)_
 
 ---
 
@@ -115,27 +115,49 @@ cp backend/.env.example backend/.env
 Fill in `backend/.env`:
 
 ```env
+# ── App ───────────────────────────────────────────────────────────────────────
+APP_ENV=development          # set to "production" in prod
 SECRET_KEY=your-random-secret
 
-# ElevenLabs
-ELEVENLABS_API_KEY=sk_...
-ELEVENLABS_WEBHOOK_SECRET=    # set after creating the webhook in EL console
+# Auto-patched by start.sh from the running ngrok tunnel — do not set manually in dev
+NGROK_URL=
+BASE_URL=http://localhost:8001
 
-# Twilio
+# ── Database & Cache ──────────────────────────────────────────────────────────
+DATABASE_URL=postgresql+asyncpg://voxara:voxara_dev@localhost:5432/voxara
+REDIS_URL=redis://localhost:6379/0
+
+# ── ElevenLabs ────────────────────────────────────────────────────────────────
+ELEVENLABS_API_KEY=sk_...
+ELEVENLABS_BASE_URL=https://api.elevenlabs.io/v1   # default; only change for enterprise
+ELEVENLABS_WEBHOOK_SECRET=   # set after creating the post-call webhook in EL console
+
+# ── Twilio ────────────────────────────────────────────────────────────────────
 TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=...
-TWILIO_PHONE_NUMBER=+1...
+TWILIO_PHONE_NUMBER=+1...    # default outbound caller ID (E.164)
 
-# OpenAI (Whisper + optional summaries)
-OPENAI_API_KEY=sk-...
+# ── LLM providers (for post-call summaries & outcome classification) ──────────
+# At least one key is required. ElevenLabs STT handles all voice transcription —
+# these keys are only used for text LLM calls (summaries, classification, etc.)
+OPENAI_API_KEY=sk-...        # OpenAI GPT models
+GOOGLE_API_KEY=              # Google Gemini models (optional)
+ANTHROPIC_API_KEY=           # Anthropic Claude models (optional)
 
-# Optional: Google Gemini, Anthropic Claude for LLM features
-GOOGLE_API_KEY=
-ANTHROPIC_API_KEY=
-
-# Encryption key (Fernet) — generate with:
+# ── Encryption ────────────────────────────────────────────────────────────────
+# Fernet key for encrypting stored user credentials — generate once:
 # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ENCRYPTION_KEY=
+
+# ── Auth token lifetimes ──────────────────────────────────────────────────────
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+REFRESH_TOKEN_EXPIRE_DAYS=30
+
+# ── Campaign dialing safety limits ───────────────────────────────────────────
+CAMPAIGN_GLOBAL_MAX_CONCURRENT=10   # max simultaneous campaign calls platform-wide
+CAMPAIGN_MIN_INTERVAL_SECONDS=3     # min seconds between consecutive dials in a campaign
+CAMPAIGN_BACKOFF_SECONDS=30         # back-off when concurrency ceiling is hit
+CAMPAIGN_DEBUG=false                # set to true for verbose campaign pipeline logs
 ```
 
 ### 3. First run — build images and start everything
@@ -258,21 +280,30 @@ Twilio dials out / receives inbound
 
 ## Key Environment Variables
 
-| Variable | Description |
-|---|---|
-| `SECRET_KEY` | JWT signing secret |
-| `BASE_URL` | Public URL of this backend (auto-set by start.sh in dev) |
-| `NGROK_URL` | ngrok tunnel URL (auto-set by start.sh; leave empty in production) |
-| `ELEVENLABS_API_KEY` | ElevenLabs API key |
-| `ELEVENLABS_WEBHOOK_SECRET` | Verifies EL post-call webhook signatures |
-| `TWILIO_ACCOUNT_SID` | Twilio account SID |
-| `TWILIO_AUTH_TOKEN` | Twilio auth token |
-| `TWILIO_PHONE_NUMBER` | Default outbound caller ID (E.164) |
-| `OPENAI_API_KEY` | OpenAI key for Whisper + optional summaries |
-| `ENCRYPTION_KEY` | Fernet key for encrypting stored credentials |
-| `DATABASE_URL` | PostgreSQL async URL |
-| `REDIS_URL` | Redis connection URL |
-| `CAMPAIGN_GLOBAL_MAX_CONCURRENT` | Hard cap on simultaneous campaign calls (default: 10) |
+| Variable | Description | Default |
+|---|---|---|
+| `APP_ENV` | `development` or `production` | `development` |
+| `SECRET_KEY` | JWT signing secret | _(required)_ |
+| `BASE_URL` | Public URL of this backend — auto-patched by start.sh in dev | `http://localhost:8001` |
+| `NGROK_URL` | ngrok tunnel URL — auto-patched by start.sh; leave empty in production | `""` |
+| `DATABASE_URL` | PostgreSQL async URL | local postgres |
+| `REDIS_URL` | Redis connection URL | local redis |
+| `ELEVENLABS_API_KEY` | ElevenLabs API key — used for voice AI and STT transcription | _(required)_ |
+| `ELEVENLABS_BASE_URL` | ElevenLabs API base URL | `https://api.elevenlabs.io/v1` |
+| `ELEVENLABS_WEBHOOK_SECRET` | Verifies EL post-call webhook HMAC signatures | `""` |
+| `TWILIO_ACCOUNT_SID` | Twilio account SID | _(required)_ |
+| `TWILIO_AUTH_TOKEN` | Twilio auth token | _(required)_ |
+| `TWILIO_PHONE_NUMBER` | Default outbound caller ID (E.164) | _(required)_ |
+| `OPENAI_API_KEY` | OpenAI key — used for LLM summaries/classification (not transcription) | `""` |
+| `GOOGLE_API_KEY` | Google Gemini key — alternative LLM provider for post-call processing | `""` |
+| `ANTHROPIC_API_KEY` | Anthropic Claude key — alternative LLM provider for post-call processing | `""` |
+| `ENCRYPTION_KEY` | Fernet key for encrypting stored user credentials | _(required)_ |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | JWT access token lifetime | `15` |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | JWT refresh token lifetime | `30` |
+| `CAMPAIGN_GLOBAL_MAX_CONCURRENT` | Hard cap on simultaneous campaign calls platform-wide | `10` |
+| `CAMPAIGN_MIN_INTERVAL_SECONDS` | Minimum seconds between consecutive dials in a campaign | `3` |
+| `CAMPAIGN_BACKOFF_SECONDS` | Seconds to back off when the concurrency ceiling is hit | `30` |
+| `CAMPAIGN_DEBUG` | Enable verbose campaign pipeline logs | `false` |
 
 ---
 
