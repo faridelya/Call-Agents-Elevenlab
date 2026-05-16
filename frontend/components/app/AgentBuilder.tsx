@@ -101,7 +101,7 @@ const DEFAULT_TOOL_CONFIGS: Record<string, Record<string, string>> = {
   update_crm_record:     { provider: 'hubspot', api_key: '' },
   // EL system tools (from system_catalog.py default_config)
   el_transfer_to_number: {
-    transfers: JSON.stringify([{ id: 'rule_1', number: '', condition: 'customer explicitly requests to speak with a human', transfer_type: 'conference' }]),
+    transfers: JSON.stringify([{ id: 'rule_1', number: '', condition: 'customer explicitly requests to speak with a human', transfer_type: 'conference', post_dial_digits: '' }]),
     client_message_mode: 'model', client_message_fixed: 'Please hold while I connect you to our team.',
     agent_message_mode: 'model',  agent_message_fixed: '',
     disable_interruptions: 'false', tool_error_handling_mode: 'auto',
@@ -1085,18 +1085,18 @@ function ExpandPanel({ open, color = '#F8FAFC', children }: { open: boolean; col
 // ─── Section label ─────────────────────────────────────────────────────────────
 // ─── EL Transfer-to-Number config panel ──────────────────────────────────────
 
-interface TransferRule { id: string; number: string; condition: string; transfer_type: string; }
+interface TransferRule { id: string; number: string; condition: string; transfer_type: string; post_dial_digits?: string; }
 
 function parseTransferRules(raw: unknown): TransferRule[] {
   try {
     const p = JSON.parse(typeof raw === 'string' ? raw : '[]');
     if (Array.isArray(p) && p.length > 0) return p as TransferRule[];
   } catch { /* fall through */ }
-  return [{ id: 'rule_1', number: '', condition: 'customer explicitly requests to speak with a human', transfer_type: 'conference' }];
+  return [{ id: 'rule_1', number: '', condition: 'customer explicitly requests to speak with a human', transfer_type: 'conference', post_dial_digits: '' }];
 }
 
 function newRule(): TransferRule {
-  return { id: `rule_${Date.now()}`, number: '', condition: '', transfer_type: 'conference' };
+  return { id: `rule_${Date.now()}`, number: '', condition: '', transfer_type: 'conference', post_dial_digits: '' };
 }
 
 function ELTransferConfig({ sysKey, cfg, updateSysConfig }: {
@@ -1189,20 +1189,30 @@ function ELTransferConfig({ sysKey, cfg, updateSysConfig }: {
                 <div>
                   <GLabel>Transfer type</GLabel>
                   <GSelect value={rule.transfer_type} onChange={e => updateRule(rule.id, 'transfer_type', e.target.value)}>
-                    <option value="conference">Conference — warm, agent stays</option>
-                    <option value="cold">Cold — immediate, agent drops</option>
-                    <option value="warm">Warm — agent stays briefly</option>
+                    <option value="conference">Conference — warm, supports agent message</option>
+                    <option value="blind">Blind — direct, preserves caller ID</option>
+                    <option value="sip_refer">SIP REFER — SIP protocol only</option>
                   </GSelect>
                 </div>
               </div>
 
-              <div>
-                <GLabel hint="— natural language, tells the model when to use this rule">Routing condition</GLabel>
-                <GInput
-                  value={rule.condition}
-                  onChange={e => updateRule(rule.id, 'condition', e.target.value)}
-                  placeholder="e.g. customer requests to speak with sales team"
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <GLabel hint="— natural language, tells the model when to use this rule">Routing condition</GLabel>
+                  <GInput
+                    value={rule.condition}
+                    onChange={e => updateRule(rule.id, 'condition', e.target.value)}
+                    placeholder="e.g. customer requests to speak with sales team"
+                  />
+                </div>
+                <div>
+                  <GLabel hint="— digits to dial after connecting, e.g. 1w2 (Twilio native only, optional)">Post-dial digits</GLabel>
+                  <GInput
+                    value={rule.post_dial_digits ?? ''}
+                    onChange={e => updateRule(rule.id, 'post_dial_digits', e.target.value)}
+                    placeholder="e.g. 1w2 (optional)"
+                  />
+                </div>
               </div>
             </div>
           ))}
@@ -1277,6 +1287,17 @@ function ELTransferConfig({ sysKey, cfg, updateSysConfig }: {
             border: '1px solid #BFDBFE',
           }}>
             The model will generate a briefing message for the human agent with context from the call.
+          </div>
+        )}
+        {rules.some(r => r.transfer_type !== 'conference') && (
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: 7,
+            marginTop: 10, padding: '7px 10px',
+            background: '#FFFBEB', border: '1px solid #FCD34D',
+            borderRadius: 7, fontSize: 11.5, color: '#92400E',
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Agent message is only spoken on <strong>Conference</strong> transfers (Twilio native). Rules using <em>Blind</em> or <em>SIP REFER</em> will not deliver this message.</span>
           </div>
         )}
       </div>

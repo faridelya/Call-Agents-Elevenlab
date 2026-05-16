@@ -24,8 +24,11 @@ EL_SYSTEM_TOOLS: dict[str, dict] = {
         "el_type": "system",
         "system_tool_type": "transfer_to_number",
         "default_config": {
-            # New: JSON array of transfer rules (replaces single transfer_to + condition)
-            "transfers": '[{"id":"rule_1","number":"","condition":"customer explicitly requests to speak with a human","transfer_type":"conference"}]',
+            # JSON array of transfer rules. transfer_type valid values per EL docs:
+            #   "conference" — warm (default): adds to conference room, supports agent_message (Twilio native only)
+            #   "blind"      — direct transfer, no agent_message, preserves caller ID (Twilio native only)
+            #   "sip_refer"  — SIP REFER protocol, no agent_message, works with phone or SIP URI
+            "transfers": '[{"id":"rule_1","number":"","condition":"customer explicitly requests to speak with a human","transfer_type":"conference","post_dial_digits":""}]',
             # client_message: what the customer hears while on hold
             #   "model" = LLM generates it per-call based on context
             #   "fixed"  = always use the text in client_message_fixed
@@ -204,12 +207,17 @@ def build_system_tool_def(tool_key: str, tool_config: dict) -> dict | None:
                 "system_tool_type": meta["system_tool_type"],
                 "transfers": [
                     {
-                        "transfer_destination": {
-                            "type": "phone",
-                            "phone_number": r.get("number", "").strip(),
-                        },
-                        "condition": r.get("condition") or "customer requests transfer",
-                        "transfer_type": r.get("transfer_type") or "conference",
+                        k: v for k, v in {
+                            "transfer_destination": {
+                                "type": "phone",
+                                "phone_number": r.get("number", "").strip(),
+                            },
+                            "condition": r.get("condition") or "customer requests transfer",
+                            "transfer_type": r.get("transfer_type") or "conference",
+                            # post_dial_digits: optional DTMF digits after connect (Twilio native only)
+                            # Only include when non-empty so the EL API doesn't see an empty string
+                            **({"post_dial_digits": r["post_dial_digits"]} if r.get("post_dial_digits") else {}),
+                        }.items()
                     }
                     for r in valid_rules
                 ],
