@@ -11,10 +11,14 @@ log = structlog.get_logger(__name__)
 
 
 class ElevenLabsService:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
         self._base = settings.elevenlabs_base_url
+        # Use the provided key; fall back to the platform-level key from settings.
+        # Pass api_key explicitly when serving requests for users who have configured
+        # their own ElevenLabs API key in Settings.
+        _key = api_key or settings.elevenlabs_api_key
         self._headers = {
-            "xi-api-key": settings.elevenlabs_api_key,
+            "xi-api-key": _key,
             "Content-Type": "application/json",
         }
 

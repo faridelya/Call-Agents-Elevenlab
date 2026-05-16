@@ -19,9 +19,25 @@ from app.models.tool import Tool
 from app.models.user import User
 from app.schemas.agent import AgentCreate, AgentResponse, AgentToolsUpdate, AgentUpdate, VoiceOption
 from app.schemas.common import MessageResponse, PaginatedResponse
-from app.services.elevenlabs_service import elevenlabs_service
+from app.services.elevenlabs_service import ElevenLabsService, elevenlabs_service
+from app.utils.crypto import decrypt as _decrypt
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+def _el_service_for(user: User) -> ElevenLabsService:
+    """Return an ElevenLabsService keyed to this user's ElevenLabs API key.
+
+    Falls back to the platform-level key from settings when the user hasn't
+    configured their own key in Settings.
+    """
+    key = ""
+    if user.elevenlabs_api_key:
+        try:
+            key = _decrypt(user.elevenlabs_api_key)
+        except Exception:
+            key = user.elevenlabs_api_key
+    return ElevenLabsService(api_key=key or None)
 
 
 async def _warn_duplicate_phone(agent_id: str, user_id: str, phone: str | None, db: AsyncSession) -> None:
@@ -53,8 +69,12 @@ async def _warn_duplicate_phone(agent_id: str, user_id: str, phone: str | None, 
         )
 
 
-async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
-    """Create or update the ElevenLabs agent from a Voxara agent."""
+async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession, user: User | None = None) -> None:
+    """Create or update the ElevenLabs agent from a Voxara agent.
+
+    Uses the user's own ElevenLabs API key when provided; falls back to the
+    platform-level key from settings so that the correct EL account is used.
+    """
     # Check no in-progress calls before updating
     active = await db.execute(
         select(func.count()).select_from(Call).where(
@@ -63,6 +83,9 @@ async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
     )
     if active.scalar() > 0:
         return  # Skip sync — call in progress
+
+    # Use per-user API key when available, otherwise fall back to platform key
+    svc = _el_service_for(user) if user else elevenlabs_service
 
     # Fetch custom (Tier 3) tools for this agent
     from app.models.mcp_server import McpServer
@@ -110,11 +133,12 @@ async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
     if mcp_ids_for_agent:
         agent.mcp_server_ids = mcp_ids_for_agent
 
+    # build_agent_config is a pure function — use the singleton (no API call)
     config = elevenlabs_service.build_agent_config(agent, custom_tools)
 
     if agent.elevenlabs_agent_id:
         try:
-            await elevenlabs_service.update_agent(agent.elevenlabs_agent_id, config)
+            await svc.update_agent(agent.elevenlabs_agent_id, config)
         except ExternalServiceError as e:
             if "document_not_found" in str(e):
                 # EL agent has stale internal document references (deleted tool/KB docs).
@@ -124,15 +148,15 @@ async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
                             el_agent_id=agent.elevenlabs_agent_id,
                             error=str(e)[:200])
                 try:
-                    await elevenlabs_service.delete_agent(agent.elevenlabs_agent_id)
+                    await svc.delete_agent(agent.elevenlabs_agent_id)
                 except Exception:
                     pass
-                el_agent_id = await elevenlabs_service.create_agent(config)
+                el_agent_id = await svc.create_agent(config)
                 agent.elevenlabs_agent_id = el_agent_id
             else:
                 raise
     else:
-        el_agent_id = await elevenlabs_service.create_agent(config)
+        el_agent_id = await svc.create_agent(config)
         agent.elevenlabs_agent_id = el_agent_id
 
     agent.el_config_snapshot = config
@@ -265,7 +289,7 @@ async def create_agent(
     await _warn_duplicate_phone(agent.id, current_user.id, body.twilio_phone_number, db)
 
     try:
-        await _sync_to_elevenlabs(agent, db)
+        await _sync_to_elevenlabs(agent, db, user=current_user)
     except Exception as e:
         log.warning("el_sync_skipped_on_create", agent_id=agent.id, error=str(e))
 
@@ -277,7 +301,8 @@ async def create_agent(
 @router.get("/voices", response_model=list[VoiceOption])
 async def list_voices(current_user: User = Depends(get_current_user)):
     """Fetch all voices available in the user's ElevenLabs library."""
-    voices = await elevenlabs_service.list_voices()
+    svc = _el_service_for(current_user)
+    voices = await svc.list_voices()
     return [
         VoiceOption(
             voice_id=v["voice_id"],
@@ -322,7 +347,7 @@ async def update_agent(
     await _warn_duplicate_phone(agent.id, current_user.id, new_phone, db)
 
     try:
-        await _sync_to_elevenlabs(agent, db)
+        await _sync_to_elevenlabs(agent, db, user=current_user)
     except Exception as e:
         log.warning("el_sync_skipped_on_update", agent_id=agent.id, error=str(e))
 
@@ -392,7 +417,7 @@ async def clone_agent(
     await db.flush()
 
     try:
-        await _sync_to_elevenlabs(clone, db)
+        await _sync_to_elevenlabs(clone, db, user=current_user)
     except ExternalServiceError:
         pass
 
@@ -409,11 +434,26 @@ async def force_sync(
 ):
     """Push the current agent config to ElevenLabs (create if new, update if existing).
 
-    Blocked while any call is in-progress for this agent to prevent mid-call config changes.
-    Raises ExternalServiceError if the ElevenLabs API call fails.
+    Uses the user's own ElevenLabs API key when configured in Settings;
+    falls back to the platform key. Returns a clear 502 with the EL error
+    message when the sync fails so the frontend can surface it properly.
     """
+    from fastapi import HTTPException as _HTTPException
     agent = await get_agent_or_404(agent_id, current_user.id, db)
-    await _sync_to_elevenlabs(agent, db)
+    try:
+        await _sync_to_elevenlabs(agent, db, user=current_user)
+    except ExternalServiceError as exc:
+        # Re-raise with a clean, readable message (strip raw EL JSON noise)
+        raw = str(exc.detail)
+        # Try to extract a human-readable message from EL's JSON error body
+        import json as _json
+        try:
+            parsed = _json.loads(raw.removeprefix("ElevenLabs error: "))
+            # EL wraps errors as {"detail": {"message": "..."}}
+            msg = (parsed.get("detail") or {}).get("message") or parsed.get("message") or raw
+        except Exception:
+            msg = raw
+        raise _HTTPException(status_code=502, detail=f"ElevenLabs sync failed: {msg}")
     await db.commit()
     return MessageResponse(message=f"Agent synced to ElevenLabs: {agent.elevenlabs_agent_id}")
 
@@ -445,7 +485,7 @@ async def update_agent_tools(
     agent.tool_configs = body.tool_configs
 
     try:
-        await _sync_to_elevenlabs(agent, db)
+        await _sync_to_elevenlabs(agent, db, user=current_user)
     except ExternalServiceError:
         pass
 
