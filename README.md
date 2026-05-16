@@ -86,7 +86,7 @@ An AI-powered outbound/inbound voice agent SaaS built on ElevenLabs Conversation
 - [ngrok](https://ngrok.com/) (required for local Twilio webhooks)
 - ElevenLabs account + API key
 - Twilio account + phone number
-- OpenAI API key _(optional — for LLM summaries; can use Google Gemini or Anthropic Claude instead)_
+- OpenAI API key _( — for LLM use in Elevenlab Agent; can use Google Gemini or Anthropic Claude instead)_
 
 ---
 
