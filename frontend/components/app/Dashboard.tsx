@@ -860,7 +860,7 @@ function AgentCard({ agent, status, idx, onEdit, onTest, onToggle, onDelete, onP
       {/* Actions */}
       <div style={{ display: 'flex', gap: 6 }}>
         <AgentActionBtn label="Preview" onClick={onPreview} color="#8B5CF6" bg="#F5F3FF" />
-        <AgentActionBtn label="Test"    onClick={onTest}   color="#3B82F6" bg="#EFF6FF" disabled={!agent.elevenlabs_agent_id} />
+        <AgentActionBtn label="Test" onClick={onTest} color="#3B82F6" bg="#EFF6FF" disabled={!agent.elevenlabs_agent_id} disabledHint="Open Edit → sync to ElevenLabs first" />
         <AgentActionBtn label="Edit"    onClick={onEdit}   color="#10B981" bg="#ECFDF5" />
         <AgentActionBtn
           label={agent.is_active ? 'Pause' : 'Enable'}
@@ -884,26 +884,49 @@ function Tag({ label, color, bg, border }: { label: string; color: string; bg: s
   );
 }
 
-function AgentActionBtn({ label, onClick, color, bg, disabled }: {
-  label: string; onClick: () => void; color: string; bg: string; disabled?: boolean;
+function AgentActionBtn({ label, onClick, color, bg, disabled, disabledHint }: {
+  label: string; onClick: () => void; color: string; bg: string; disabled?: boolean; disabledHint?: string;
 }) {
   const [hov, setHov] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      onMouseEnter={() => !disabled && setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        flex: 1, padding: '7px 0', borderRadius: 8,
-        background: hov ? bg : '#F8FAFC',
-        border: `1px solid ${hov ? color + '30' : '#E2E8F0'}`,
-        color: disabled ? '#CBD5E1' : hov ? color : '#64748B',
-        fontSize: 11, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
-        transition: 'all 0.15s', opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      {label}
-    </button>
+    <div style={{ flex: 1, position: 'relative' }}>
+      <button
+        onClick={disabled ? undefined : onClick}
+        onMouseEnter={() => { if (!disabled) setHov(true); else setShowHint(true); }}
+        onMouseLeave={() => { setHov(false); setShowHint(false); }}
+        style={{
+          width: '100%', padding: '7px 0', borderRadius: 8,
+          background: hov ? bg : '#F8FAFC',
+          border: `1px solid ${hov ? color + '30' : '#E2E8F0'}`,
+          color: disabled ? '#CBD5E1' : hov ? color : '#64748B',
+          fontSize: 11, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
+          transition: 'all 0.15s', opacity: disabled ? 0.5 : 1,
+        }}
+      >
+        {label}
+      </button>
+      {disabled && disabledHint && showHint && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#0F172A', color: '#F8FAFC',
+          fontSize: 10.5, fontWeight: 500, lineHeight: 1.4,
+          padding: '6px 10px', borderRadius: 7,
+          whiteSpace: 'nowrap', pointerEvents: 'none',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 50,
+        }}>
+          {disabledHint}
+          <div style={{
+            position: 'absolute', top: '100%', left: '50%',
+            transform: 'translateX(-50%)',
+            borderWidth: 5, borderStyle: 'solid',
+            borderColor: '#0F172A transparent transparent transparent',
+          }} />
+        </div>
+      )}
+    </div>
   );
 }
 

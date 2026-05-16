@@ -169,6 +169,7 @@ export interface Agent {
   tool_configs: Record<string, unknown>;
   product_catalog: object[];
   qualification_criteria: Record<string, string>;
+  evaluation_criteria?: Array<{ id: string; name: string; conversation_goal_prompt: string; scope: 'conversation' | 'agent' }>;
   knowledge_base_id?: string | null;
   knowledge_base_name?: string | null;
   el_last_synced_at?: string;
