@@ -28,6 +28,8 @@ export const OUTCOME_META: Record<string, { label: string; color: string; icon: 
   call_disconnected:     { label: 'Disconnected',        color: '#3D607A', icon: '○' },
   completed:             { label: 'Completed',           color: '#00C2B8', icon: '●' },
   no_outcome:            { label: 'No Outcome',          color: '#2A3F55', icon: '·' },
+  // Transfer
+  transferred_to_human:  { label: 'Transferred to Human', color: '#F59E0B', icon: '↗' },
 };
 
 export function getOutcomeColor(o?: string): string {

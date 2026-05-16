@@ -614,6 +614,14 @@ async def _finalize_call(call: Call, redis, db: AsyncSession) -> None:
                 "transferred_at":  raw_ctx.get("transferred_at", ""),
                 "fallback_status": raw_ctx.get("transfer_fallback_status", ""),
             }
+            # Stamp forced_outcome onto call.outcome NOW while Redis still exists.
+            # post_call_processing reads this as `hint` — the hint mechanism then
+            # prevents EL/LLM from overriding it.
+            forced = (raw_ctx.get("forced_outcome") or "").strip()
+            if forced:
+                call.outcome = forced
+                log.info("transfer_forced_outcome_stamped",
+                         call_id=call.id, outcome=forced)
     except Exception as exc:
         log.warning("transfer_metadata_read_error", call_id=call.id, error=str(exc))
 
@@ -1090,11 +1098,26 @@ async def elevenlabs_post_call(
                      extras=len(extras),
                      conversation_id=conversation_id)
 
-    # ── Pull any analysis fields EL provides natively ────────────────────────
+    # ── Pull all analysis fields EL provides in the webhook payload ──────────
     el_analysis = data.get("analysis", {})
     if el_analysis:
         call.auto_summary    = el_analysis.get("transcript_summary") or call.auto_summary
         call.sentiment_score = el_analysis.get("user_sentiment_score") or call.sentiment_score
+
+        # Save criteria + data collection immediately — don't wait for ARQ
+        criteria_results = el_analysis.get("criteria_results") or []
+        call_successful_el = el_analysis.get("call_successful") or "unknown"
+        if criteria_results or not call.el_analysis_results:
+            call.el_analysis_results = {
+                "criteria_results": criteria_results,
+                "call_successful": call_successful_el,
+            }
+        data_coll = el_analysis.get("data_collection_results")
+        if data_coll:
+            call.el_data_collection = data_coll
+        if criteria_results:
+            log.info("el_webhook_criteria_saved",
+                     call_id=call.id, criteria_count=len(criteria_results))
 
     # ── Duration from metadata ────────────────────────────────────────────────
     meta = data.get("metadata", {})
@@ -1116,50 +1139,31 @@ async def elevenlabs_post_call(
     if not call.ended_at:
         call.ended_at = datetime.now(timezone.utc).isoformat()
 
-    # ── LLM outcome classification + summary using agent's configured model ───
-    # Run immediately here so the user sees outcome/summary as soon as the
-    # webhook fires — no need to wait for the ARQ safety-net task.
-    # ARQ will detect these fields are already set and skip its LLM step.
-    if call.transcript and call.agent_id:
-        try:
-            from app.models.agent import Agent as AgentModel
-            from app.tasks.post_call_tasks import (
-                _llm_analyze_call, _compute_sentiment, _compute_talk_ratio,
-                OUTCOME_CHOICES,
-            )
-            agent_result = await db.execute(
-                select(AgentModel).where(AgentModel.id == call.agent_id)
-            )
-            agent_obj = agent_result.scalar_one_or_none()
-            if agent_obj:
-                llm_result = await _llm_analyze_call(
-                    call.transcript,
-                    hint_outcome=call.outcome,
-                    llm_model=agent_obj.llm_model or None,
-                    llm_temperature=agent_obj.llm_temperature or None,
-                )
-                if llm_result:
-                    hint = call.outcome
-                    if not hint or llm_result.get("confidence", 0) >= 0.7:
-                        call.outcome = llm_result.get("outcome") or hint
-                    if not call.auto_summary:
-                        call.auto_summary = llm_result.get("summary")
-                    if not call.next_action and llm_result.get("next_action"):
-                        call.next_action = llm_result.get("next_action")
-                    log.info("el_webhook_llm_classified",
-                             call_id=call.id,
-                             outcome=call.outcome,
-                             confidence=llm_result.get("confidence"),
-                             model=agent_obj.llm_model)
+    # ── Set outcome from EL analysis + compute cheap metrics ─────────────────
+    # EL provides call_successful ("success"|"failure"|"unknown") — use it
+    # directly for normal calls; no LLM needed here.  Transfer calls keep
+    # forced_outcome set by _finalize_call.  ARQ re-classifies the full
+    # conversation with LLM only for calls with a human leg.
+    if not call.outcome and el_analysis:
+        call_successful_el = el_analysis.get("call_successful") or "unknown"
+        call.outcome = {
+            "success": "goal_achieved",
+            "failure": "not_interested",
+            "unknown": "follow_up_needed",
+        }.get(call_successful_el, "follow_up_needed")
+        log.info("el_webhook_outcome_from_el",
+                 call_id=call.id, outcome=call.outcome,
+                 call_successful=call_successful_el)
 
-            # Sentiment + talk ratio — cheap, no LLM cost
+    if call.transcript:
+        try:
+            from app.tasks.post_call_tasks import _compute_sentiment, _compute_talk_ratio
             if not call.sentiment_score:
                 call.sentiment_score = _compute_sentiment(call.transcript)
             if not call.talk_ratio:
                 call.talk_ratio = _compute_talk_ratio(call.transcript)
-
         except Exception as exc:
-            log.warning("el_webhook_llm_error", call_id=call.id, error=str(exc))
+            log.warning("el_webhook_metrics_error", call_id=call.id, error=str(exc))
 
     await db.commit()
 

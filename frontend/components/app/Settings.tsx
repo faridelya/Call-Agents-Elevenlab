@@ -541,11 +541,6 @@ function CredentialsTab() {
       {creds && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
           <WebhookSection webhookBaseUrl={creds.webhook_base_url} />
-          <ElevenLabsWebhookSection
-            webhookBaseUrl={creds.webhook_base_url}
-            secretMasked={creds.elevenlabs_webhook_secret_masked}
-            configured={creds.elevenlabs_webhook_configured}
-          />
         </div>
       )}
     </div>
