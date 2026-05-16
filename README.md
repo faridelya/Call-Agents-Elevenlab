@@ -315,3 +315,19 @@ Twilio dials out / receives inbound
 - **DNC enforcement** — applied at both `POST /calls/outbound` and inside the `dial_next_contact` ARQ task
 - **Agent signing secret** — all tier-2 HTTP callbacks include `X-Voxara-Secret` validated against `agent.signing_secret`
 - **Migrations** — `alembic upgrade head` runs automatically on container start
+
+---
+
+## Screenshots
+
+**Landing page**
+
+![Voxara landing page](docs/screenshots/landing.png)
+
+**Voice Agents dashboard**
+
+![Voice agents dashboard](docs/screenshots/dashboard.png)
+
+**Call Records**
+
+![Call records view](docs/screenshots/call-records.png)
