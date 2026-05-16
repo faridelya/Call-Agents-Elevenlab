@@ -701,14 +701,15 @@ export function OrdersView() {
         </div>
 
         {/* Table */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 36px 24px' }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '0 36px 24px' }}>
           <div style={{
             background: '#FFFFFF',
             border: '1px solid #E2E8F0',
             borderRadius: 20, overflow: 'hidden',
             boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
+            display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0,
           }}>
-            {/* Table header */}
+            {/* Table header — frozen */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: '125px 150px 150px 155px 72px 82px 1fr',
@@ -716,6 +717,7 @@ export function OrdersView() {
               padding: '11px 20px',
               background: '#F8FAFC',
               borderBottom: '1px solid #F1F5F9',
+              flexShrink: 0,
             }}>
               {['Date', 'Customer', 'Agent', 'Status', 'Duration', 'Sentiment', 'Summary'].map((h) => (
                 <div key={h} style={{
@@ -727,7 +729,8 @@ export function OrdersView() {
               ))}
             </div>
 
-            {/* Rows */}
+            {/* Rows — scrollable */}
+            <div style={{ overflowY: 'auto', flex: 1 }}>
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} style={{
@@ -757,13 +760,14 @@ export function OrdersView() {
                 />
               ))
             )}
+            </div>{/* end scrollable rows */}
           </div>
 
           {/* Pagination */}
           {total > 20 && (
             <div style={{
               display: 'flex', justifyContent: 'center', alignItems: 'center',
-              gap: 12, marginTop: 20,
+              gap: 12, marginTop: 20, flexShrink: 0,
             }}>
               <PaginationBtn label="← Previous" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} />
               <span style={{ fontSize: 12, color: '#64748B' }}>
