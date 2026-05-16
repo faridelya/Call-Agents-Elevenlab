@@ -207,17 +207,14 @@ def build_system_tool_def(tool_key: str, tool_config: dict) -> dict | None:
                 "system_tool_type": meta["system_tool_type"],
                 "transfers": [
                     {
-                        k: v for k, v in {
-                            "transfer_destination": {
-                                "type": "phone",
-                                "phone_number": r.get("number", "").strip(),
-                            },
-                            "condition": r.get("condition") or "customer requests transfer",
-                            "transfer_type": r.get("transfer_type") or "conference",
-                            # post_dial_digits: optional DTMF digits after connect (Twilio native only)
-                            # Only include when non-empty so the EL API doesn't see an empty string
-                            **({"post_dial_digits": r["post_dial_digits"]} if r.get("post_dial_digits") else {}),
-                        }.items()
+                        "transfer_destination": {
+                            "type": "phone",
+                            "phone_number": r.get("number", "").strip(),
+                        },
+                        "condition": r.get("condition") or "customer requests transfer",
+                        "transfer_type": r.get("transfer_type") or "conference",
+                        # post_dial_digits omitted — EL ConvAI API does not accept a plain
+                        # string here; the field is stored in UI config only for future use.
                     }
                     for r in valid_rules
                 ],

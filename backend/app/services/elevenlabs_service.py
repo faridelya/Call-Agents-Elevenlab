@@ -27,7 +27,12 @@ class ElevenLabsService:
 
     # ── Agent CRUD ────────────────────────────────────────────────────────────
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=4))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=4),
+        retry=retry_if_exception_type(httpx.RequestError),
+        reraise=True,
+    )
     async def create_agent(self, config: dict) -> str:
         async with self._client() as c:
             r = await c.post(f"{self._base}/convai/agents/create", json=config)
@@ -47,7 +52,12 @@ class ElevenLabsService:
             if r.status_code not in (200, 204):
                 raise ExternalServiceError("ElevenLabs", r.text)
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=4))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=4),
+        retry=retry_if_exception_type(httpx.RequestError),
+        reraise=True,
+    )
     async def delete_agent(self, agent_id: str) -> None:
         async with self._client() as c:
             r = await c.delete(f"{self._base}/convai/agents/{agent_id}")
@@ -424,21 +434,19 @@ class ElevenLabsService:
             "auth": {"enable_auth": False},
         }
 
-        # Data collection — attach under platform_settings if configured
+        # Data collection — EL expects a dict keyed by field name, not a list
         data_collection = getattr(agent, "data_collection", None) or []
         if data_collection:
             try:
-                platform_settings["data_collection"] = [
-                    {
-                        "id": d["id"],
-                        "name": d["name"],
+                platform_settings["data_collection"] = {
+                    d["name"]: {
                         "type": d.get("type", "string"),
                         "description": d.get("description", ""),
                     }
                     for d in data_collection
-                ]
+                    if d.get("name")
+                }
             except Exception:
-                # Don't break sync if EL rejects data_collection format
                 pass
 
         return {
