@@ -100,7 +100,12 @@ const DEFAULT_TOOL_CONFIGS: Record<string, Record<string, string>> = {
   check_crm_record:      { provider: 'hubspot', api_key: '' },
   update_crm_record:     { provider: 'hubspot', api_key: '' },
   // EL system tools (from system_catalog.py default_config)
-  el_transfer_to_number: { transfer_to: '', condition: 'customer explicitly requests to speak with a human', transfer_type: 'conference', disable_interruptions: 'false', tool_error_handling_mode: 'auto' },
+  el_transfer_to_number: {
+    transfers: JSON.stringify([{ id: 'rule_1', number: '', condition: 'customer explicitly requests to speak with a human', transfer_type: 'conference' }]),
+    client_message_mode: 'model', client_message_fixed: 'Please hold while I connect you to our team.',
+    agent_message_mode: 'model',  agent_message_fixed: '',
+    disable_interruptions: 'false', tool_error_handling_mode: 'auto',
+  },
   el_end_conversation:   { disable_interruptions: 'false', tool_error_handling_mode: 'auto' },
   el_language_detection: { disable_interruptions: 'false', tool_error_handling_mode: 'auto' },
 };
@@ -1078,6 +1083,247 @@ function ExpandPanel({ open, color = '#F8FAFC', children }: { open: boolean; col
 }
 
 // ─── Section label ─────────────────────────────────────────────────────────────
+// ─── EL Transfer-to-Number config panel ──────────────────────────────────────
+
+interface TransferRule { id: string; number: string; condition: string; transfer_type: string; }
+
+function parseTransferRules(raw: unknown): TransferRule[] {
+  try {
+    const p = JSON.parse(typeof raw === 'string' ? raw : '[]');
+    if (Array.isArray(p) && p.length > 0) return p as TransferRule[];
+  } catch { /* fall through */ }
+  return [{ id: 'rule_1', number: '', condition: 'customer explicitly requests to speak with a human', transfer_type: 'conference' }];
+}
+
+function newRule(): TransferRule {
+  return { id: `rule_${Date.now()}`, number: '', condition: '', transfer_type: 'conference' };
+}
+
+function ELTransferConfig({ sysKey, cfg, updateSysConfig }: {
+  sysKey: string;
+  cfg: Record<string, unknown>;
+  updateSysConfig: (key: string, field: string, value: unknown) => void;
+}) {
+  const rules = parseTransferRules(cfg.transfers);
+
+  const setRules = (next: TransferRule[]) =>
+    updateSysConfig(sysKey, 'transfers', JSON.stringify(next));
+
+  const addRule    = () => setRules([...rules, newRule()]);
+  const removeRule = (id: string) => setRules(rules.filter(r => r.id !== id));
+  const updateRule = (id: string, field: keyof TransferRule, val: string) =>
+    setRules(rules.map(r => r.id === id ? { ...r, [field]: val } : r));
+
+  const clientMode  = String(cfg.client_message_mode  ?? 'model');
+  const agentMode   = String(cfg.agent_message_mode   ?? 'model');
+  const clientFixed = String(cfg.client_message_fixed ?? '');
+  const agentFixed  = String(cfg.agent_message_fixed  ?? '');
+
+  const ruleNumbers = rules.map(r => r.number).filter(Boolean);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* ── Transfer Rules ── */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <GLabel>Transfer Rules</GLabel>
+          <button
+            onClick={addRule}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 11px', borderRadius: 7, fontSize: 11.5, fontWeight: 600,
+              border: '1px dashed #7C6EFA60', background: '#7C6EFA08',
+              color: '#7C6EFA', cursor: 'pointer', fontFamily: 'var(--font-ui), sans-serif',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#7C6EFA15'; e.currentTarget.style.borderColor = '#7C6EFA'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#7C6EFA08'; e.currentTarget.style.borderColor = '#7C6EFA60'; }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Department
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {rules.map((rule, idx) => (
+            <div key={rule.id} style={{
+              background: '#FAFAFA', border: '1px solid #E2E8F0',
+              borderRadius: 12, padding: '14px 16px',
+              position: 'relative',
+            }}>
+              {/* Rule header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
+                  color: '#7C6EFA', background: '#7C6EFA12', borderRadius: 5, padding: '3px 8px',
+                }}>
+                  Rule {idx + 1}
+                </span>
+                {rules.length > 1 && (
+                  <button
+                    onClick={() => removeRule(rule.id)}
+                    style={{
+                      fontSize: 11, color: '#94A3B8', background: 'none', border: '1px solid #E2E8F0',
+                      borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
+                      fontFamily: 'var(--font-ui), sans-serif', transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.borderColor = '#FCA5A5'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <GLabel required>Phone number (E.164)</GLabel>
+                  <GInput
+                    type="tel"
+                    value={rule.number}
+                    onChange={e => updateRule(rule.id, 'number', e.target.value)}
+                    placeholder="+15551234567"
+                  />
+                </div>
+                <div>
+                  <GLabel>Transfer type</GLabel>
+                  <GSelect value={rule.transfer_type} onChange={e => updateRule(rule.id, 'transfer_type', e.target.value)}>
+                    <option value="conference">Conference — warm, agent stays</option>
+                    <option value="cold">Cold — immediate, agent drops</option>
+                    <option value="warm">Warm — agent stays briefly</option>
+                  </GSelect>
+                </div>
+              </div>
+
+              <div>
+                <GLabel hint="— natural language, tells the model when to use this rule">Routing condition</GLabel>
+                <GInput
+                  value={rule.condition}
+                  onChange={e => updateRule(rule.id, 'condition', e.target.value)}
+                  placeholder="e.g. customer requests to speak with sales team"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Client Message ── */}
+      <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: '14px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div>
+            <GLabel>Client Message</GLabel>
+            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: -4 }}>
+              Spoken to the customer while they wait on hold during transfer
+            </div>
+          </div>
+          <GSelect
+            value={clientMode}
+            onChange={e => updateSysConfig(sysKey, 'client_message_mode', e.target.value)}
+            style={{ width: 'auto', minWidth: 160, fontSize: 12 }}
+          >
+            <option value="model">Model generates</option>
+            <option value="fixed">Fixed text</option>
+          </GSelect>
+        </div>
+        {clientMode === 'fixed' ? (
+          <GTextarea
+            value={clientFixed}
+            onChange={e => updateSysConfig(sysKey, 'client_message_fixed', e.target.value)}
+            rows={2}
+            placeholder="e.g. Please hold while I connect you to our team — this will only take a moment."
+          />
+        ) : (
+          <div style={{
+            fontSize: 12, color: '#64748B', fontStyle: 'italic',
+            padding: '8px 10px', background: '#EFF6FF', borderRadius: 7,
+            border: '1px solid #BFDBFE',
+          }}>
+            The model will generate a personalised hold message for the customer based on the conversation context.
+          </div>
+        )}
+      </div>
+
+      {/* ── Agent Message ── */}
+      <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: '14px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div>
+            <GLabel>Agent Message</GLabel>
+            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: -4 }}>
+              Spoken to the human agent when they pick up, before being connected to the customer
+            </div>
+          </div>
+          <GSelect
+            value={agentMode}
+            onChange={e => updateSysConfig(sysKey, 'agent_message_mode', e.target.value)}
+            style={{ width: 'auto', minWidth: 160, fontSize: 12 }}
+          >
+            <option value="model">Model generates</option>
+            <option value="fixed">Fixed text</option>
+          </GSelect>
+        </div>
+        {agentMode === 'fixed' ? (
+          <GTextarea
+            value={agentFixed}
+            onChange={e => updateSysConfig(sysKey, 'agent_message_fixed', e.target.value)}
+            rows={2}
+            placeholder="e.g. Hi, AI transfer. Customer is asking about a billing issue. Please assist."
+          />
+        ) : (
+          <div style={{
+            fontSize: 12, color: '#64748B', fontStyle: 'italic',
+            padding: '8px 10px', background: '#EFF6FF', borderRadius: 7,
+            border: '1px solid #BFDBFE',
+          }}>
+            The model will generate a briefing message for the human agent with context from the call.
+          </div>
+        )}
+      </div>
+
+      {/* ── LLM Parameters info ── */}
+      <div style={{
+        background: '#F0FDF4', border: '1px solid #A7F3D0',
+        borderRadius: 10, padding: '12px 14px',
+      }}>
+        <div style={{
+          fontSize: 10, fontWeight: 800, letterSpacing: '0.09em', textTransform: 'uppercase',
+          color: '#059669', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          What the model passes when calling this tool
+        </div>
+        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5, color: '#1E293B', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div>
+            <span style={{ color: '#7C6EFA', fontWeight: 700 }}>transfer_number</span>
+            <span style={{ color: '#64748B' }}> (string, required)</span>
+            {ruleNumbers.length > 0
+              ? <span style={{ color: '#374151' }}> — picks from: {ruleNumbers.join(', ')}</span>
+              : <span style={{ color: '#F59E0B' }}> — configure at least one number above</span>
+            }
+          </div>
+          <div>
+            <span style={{ color: '#7C6EFA', fontWeight: 700 }}>client_message</span>
+            <span style={{ color: '#64748B' }}> (string, required)</span>
+            <span style={{ color: '#374151' }}> — {clientMode === 'fixed' ? 'fixed: "' + (clientFixed || '…') + '"' : 'model generates per call'}</span>
+          </div>
+          <div>
+            <span style={{ color: '#7C6EFA', fontWeight: 700 }}>agent_message</span>
+            <span style={{ color: '#64748B' }}> (string, required)</span>
+            <span style={{ color: '#374151' }}> — {agentMode === 'fixed' ? 'fixed: "' + (agentFixed || '…') + '"' : 'model generates per call'}</span>
+          </div>
+          <div>
+            <span style={{ color: '#7C6EFA', fontWeight: 700 }}>reason</span>
+            <span style={{ color: '#64748B' }}> (string, optional)</span>
+            <span style={{ color: '#374151' }}> — explanation for the transfer</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
 function SectionLabel({ label, accent = '#10B981', hint }: { label: string; accent?: string; hint?: string }) {
   return (
     <div style={{
@@ -1370,40 +1616,7 @@ function ToolsTab({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {/* EL Transfer config */}
                   {sys.key === 'el_transfer_to_number' && (
-                    <>
-                      <div>
-                        <GLabel>Transfer Phone Number</GLabel>
-                        <GInput type="tel" value={cfg.transfer_to ?? ''} onChange={(e) => updateSysConfig(sys.key, 'transfer_to', e.target.value)} placeholder="+1 (555) 000-0000" />
-                      </div>
-                      <div>
-                        <GLabel>Transfer Condition</GLabel>
-                        <GInput value={cfg.condition ?? ''} onChange={(e) => updateSysConfig(sys.key, 'condition', e.target.value)} placeholder={String(sysDef.condition ?? 'customer explicitly requests to speak with a human')} />
-                      </div>
-                      <div>
-                        <GLabel>Transfer Type</GLabel>
-                        <GSelect value={cfg.transfer_type ?? String(sysDef.transfer_type ?? 'conference')} onChange={(e) => updateSysConfig(sys.key, 'transfer_type', e.target.value)}>
-                          <option value="conference">Conference — agent stays on call</option>
-                          <option value="cold">Cold — direct transfer, agent drops</option>
-                          <option value="warm">Warm — agent stays briefly</option>
-                        </GSelect>
-                      </div>
-                      {/* Limitation notice */}
-                      <div style={{
-                        background: '#FFF7ED', border: '1px solid #FED7AA',
-                        borderRadius: 8, padding: '10px 14px',
-                        display: 'flex', gap: 10, alignItems: 'flex-start',
-                      }}>
-                        <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>⚠</span>
-                        <div>
-                          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#92400E', marginBottom: 3 }}>
-                            Human-agent conversation not recorded
-                          </div>
-                          <div style={{ fontSize: 12, color: '#B45309', lineHeight: 1.55 }}>
-                            ElevenLabs handles this transfer natively — audio after the handoff is routed directly by EL and is not captured by this platform. The call summary and evaluation criteria will cover only the AI-to-customer conversation before the transfer. If you need a full transcript including the human-agent portion, use the <strong>Transfer to Human (Custom)</strong> tool instead.
-                          </div>
-                        </div>
-                      </div>
-                    </>
+                    <ELTransferConfig sysKey={sys.key} cfg={cfg as Record<string, unknown>} updateSysConfig={updateSysConfig} />
                   )}
                   {/* Advanced: disable_interruptions + error handling — all EL system tools */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

@@ -15,41 +15,34 @@ EL_SYSTEM_TOOLS: dict[str, dict] = {
         "label": "Transfer to Number",
         "subtitle": "ElevenLabs Native",
         "description": (
-            "ElevenLabs built-in call transfer. Routes the active call to a phone number "
-            "using SIP REFER or cold/warm dial — no backend callback required."
+            "ElevenLabs built-in call transfer. Routes the active call to a configured "
+            "phone number — no backend callback required. Supports multiple departments "
+            "with per-rule routing conditions, client hold messages, and agent briefings."
         ),
         "icon": "phone-forward",
         "color": "#7C6EFA",
         "el_type": "system",
         "system_tool_type": "transfer_to_number",
         "default_config": {
+            # New: JSON array of transfer rules (replaces single transfer_to + condition)
+            "transfers": '[{"id":"rule_1","number":"","condition":"customer explicitly requests to speak with a human","transfer_type":"conference"}]',
+            # client_message: what the customer hears while on hold
+            #   "model" = LLM generates it per-call based on context
+            #   "fixed"  = always use the text in client_message_fixed
+            "client_message_mode": "model",
+            "client_message_fixed": "Please hold while I connect you to our team.",
+            # agent_message: spoken to the human agent when they pick up (warm transfer briefing)
+            "agent_message_mode": "model",
+            "agent_message_fixed": "",
+            # Behaviour
+            "disable_interruptions": False,
+            "tool_error_handling_mode": "auto",
+            # Legacy single-number fields kept for backward compat (no longer shown in UI)
             "transfer_to": "",
             "condition": "customer explicitly requests to speak with a human agent",
             "transfer_type": "conference",
-            "disable_interruptions": False,
-            "tool_error_handling_mode": "auto",
         },
-        "config_fields": [
-            {
-                "key": "transfer_to",
-                "label": "Transfer Phone Number",
-                "type": "string",
-                "description": "E.164 phone number to transfer the call to (e.g. +15551234567).",
-            },
-            {
-                "key": "condition",
-                "label": "Transfer Condition",
-                "type": "string",
-                "description": "When should the agent initiate the transfer? (natural language condition)",
-            },
-            {
-                "key": "transfer_type",
-                "label": "Transfer Type",
-                "type": "select",
-                "options": ["conference", "cold", "warm"],
-                "description": "Type of transfer: conference (default), cold, or warm.",
-            },
-        ],
+        "config_fields": [],  # UI-driven; not used by the generic renderer
     },
     "el_end_conversation": {
         "label": "End Conversation",
@@ -119,39 +112,106 @@ def build_system_tool_def(tool_key: str, tool_config: dict) -> dict | None:
 
     # ── Special case: el_transfer_to_number ───────────────────────────────────
     if tool_key == "el_transfer_to_number":
-        transfer_to = (tool_config.get("transfer_to") or "").strip()
-        if not transfer_to:
-            # Don't include the tool if no phone number is configured
-            return None
+        import json as _json
 
-        condition = (
-            tool_config.get("condition")
-            or "customer explicitly requests to speak with a human"
+        # ── Parse transfer rules (new multi-rule format) ──────────────────────
+        raw_transfers = tool_config.get("transfers")
+        transfer_rules: list[dict] = []
+        if raw_transfers:
+            if isinstance(raw_transfers, str):
+                try:
+                    transfer_rules = _json.loads(raw_transfers)
+                except Exception:
+                    pass
+            elif isinstance(raw_transfers, list):
+                transfer_rules = raw_transfers
+
+        # Backward compat: legacy single transfer_to + condition fields
+        if not transfer_rules:
+            legacy_number = (tool_config.get("transfer_to") or "").strip()
+            if legacy_number:
+                transfer_rules = [{
+                    "number": legacy_number,
+                    "condition": tool_config.get("condition") or "customer requests to speak with a human",
+                    "transfer_type": tool_config.get("transfer_type") or "conference",
+                }]
+
+        # Filter to rules that have a phone number
+        valid_rules = [r for r in transfer_rules if (r.get("number") or "").strip()]
+        if not valid_rules:
+            return None  # No numbers configured — omit the tool from EL sync
+
+        # ── client_message guidance ───────────────────────────────────────────
+        # "model" = LLM generates a personalised message each call
+        # "fixed" = always use the exact text configured by the user
+        client_mode = (tool_config.get("client_message_mode") or "model").strip()
+        client_fixed = (tool_config.get("client_message_fixed") or "").strip()
+        if client_mode == "fixed" and client_fixed:
+            client_guidance = (
+                f'Always set client_message to exactly this text: "{client_fixed}" '
+                f'— do not change or personalise it.'
+            )
+        else:
+            client_guidance = (
+                "Generate a natural, personalised client_message for the customer "
+                "while they wait on hold — tailor it to the conversation context and "
+                "reason for the transfer."
+            )
+
+        # ── agent_message guidance ────────────────────────────────────────────
+        agent_mode = (tool_config.get("agent_message_mode") or "model").strip()
+        agent_fixed = (tool_config.get("agent_message_fixed") or "").strip()
+        if agent_mode == "fixed" and agent_fixed:
+            agent_guidance = (
+                f'Always set agent_message to exactly this text: "{agent_fixed}" '
+                f'— do not change it.'
+            )
+        else:
+            agent_guidance = (
+                "Generate an agent_message that gives the human agent brief context "
+                "about the customer and the reason for transfer before they are "
+                "connected, e.g. 'AI transfer — customer is asking about a billing "
+                "charge on their account. Name: [name if known].' Keep it concise."
+            )
+
+        # ── Transfer type note (for multi-rule agents) ────────────────────────
+        if len(valid_rules) > 1:
+            rule_summary = "; ".join(
+                f'"{r.get("number", "")}": {r.get("condition", "")}'
+                for r in valid_rules
+            )
+            routing_note = f" Routing rules — {rule_summary}."
+        else:
+            routing_note = ""
+
+        custom_desc = (tool_config.get("description") or "").strip()
+        base_desc = custom_desc if custom_desc else meta["description"]
+        full_description = (
+            f"{base_desc}{routing_note} "
+            f"client_message: {client_guidance} "
+            f"agent_message: {agent_guidance}"
         )
-        transfer_type = tool_config.get("transfer_type") or "conference"
+
         raw_di = tool_config.get("disable_interruptions", False)
         disable_interruptions = raw_di if isinstance(raw_di, bool) else str(raw_di).lower() == "true"
         tool_error_handling_mode = tool_config.get("tool_error_handling_mode", "auto")
 
-        # Allow custom description override from tool_configs
-        custom_desc = (tool_config.get("description") or "").strip()
-        description = custom_desc if custom_desc else meta["description"]
-
         return {
             "type": "system",
             "name": meta["system_tool_type"],
-            "description": description,
+            "description": full_description,
             "params": {
                 "system_tool_type": meta["system_tool_type"],
                 "transfers": [
                     {
                         "transfer_destination": {
                             "type": "phone",
-                            "phone_number": transfer_to,
+                            "phone_number": r.get("number", "").strip(),
                         },
-                        "condition": condition,
-                        "transfer_type": transfer_type,
+                        "condition": r.get("condition") or "customer requests transfer",
+                        "transfer_type": r.get("transfer_type") or "conference",
                     }
+                    for r in valid_rules
                 ],
             },
             "disable_interruptions": disable_interruptions,
