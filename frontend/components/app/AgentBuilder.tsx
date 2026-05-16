@@ -87,6 +87,7 @@ const DEFAULT_TOOL_CONFIGS: Record<string, Record<string, string>> = {
   // Tier 2 registered
   transfer_to_human: {
     transfer_to: '', mode: 'cold',
+    post_transfer_outcome: 'transferred_to_human',
     connecting_message: "Connecting you now — please hold while we transfer your call.",
     unavailable_message: "I'm sorry — I wasn't able to connect you to a human agent because no transfer number has been configured. Please contact us directly and I'll do everything I can to help you in the meantime.",
     config_error_message: "I'm sorry — the transfer could not be completed due to a configuration issue. I apologize for the inconvenience. Is there anything I can help you with directly?",
@@ -1386,6 +1387,22 @@ function ToolsTab({
                           <option value="warm">Warm — agent stays briefly</option>
                         </GSelect>
                       </div>
+                      {/* Limitation notice */}
+                      <div style={{
+                        background: '#FFF7ED', border: '1px solid #FED7AA',
+                        borderRadius: 8, padding: '10px 14px',
+                        display: 'flex', gap: 10, alignItems: 'flex-start',
+                      }}>
+                        <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>⚠</span>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#92400E', marginBottom: 3 }}>
+                            Human-agent conversation not recorded
+                          </div>
+                          <div style={{ fontSize: 12, color: '#B45309', lineHeight: 1.55 }}>
+                            ElevenLabs handles this transfer natively — audio after the handoff is routed directly by EL and is not captured by this platform. The call summary and evaluation criteria will cover only the AI-to-customer conversation before the transfer. If you need a full transcript including the human-agent portion, use the <strong>Transfer to Human (Custom)</strong> tool instead.
+                          </div>
+                        </div>
+                      </div>
                     </>
                   )}
                   {/* Advanced: disable_interruptions + error handling — all EL system tools */}
@@ -1778,6 +1795,19 @@ function ToolConfigPanel({ tool, config, onChange, liveDescriptions, defaultConf
                 <option value="warm">Warm — agent stays briefly</option>
               </GSelect>
             </div>
+          </div>
+          <div>
+            <GLabel hint="— outcome label saved for this call after transfer">Post-transfer outcome</GLabel>
+            <GSelect value={config.post_transfer_outcome ?? 'transferred_to_human'} onChange={(e) => onChange('post_transfer_outcome', e.target.value)}>
+              <option value="transferred_to_human">Transferred to Human</option>
+              <option value="goal_achieved">Goal Achieved</option>
+              <option value="issue_resolved">Issue Resolved</option>
+              <option value="interested">Interested</option>
+              <option value="callback_requested">Callback Requested</option>
+              <option value="follow_up_needed">Follow-up Needed</option>
+              <option value="not_interested">Not Interested</option>
+              <option value="call_disconnected">Call Disconnected</option>
+            </GSelect>
           </div>
           <div>
             <GLabel hint="— spoken to caller when connecting">Connecting message</GLabel>
@@ -2268,18 +2298,18 @@ function AnalysisTab({
   }
 
   const cardStyle: React.CSSProperties = {
-    background: 'rgba(255,255,255,0.02)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: '#F8FAFC',
+    border: '1px solid #E2E8F0',
     borderRadius: 10,
     padding: '14px 16px',
     marginBottom: 10,
   };
 
   const inputStyle: React.CSSProperties = {
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.1)',
+    background: '#FFFFFF',
+    border: '1px solid #E2E8F0',
     borderRadius: 6,
-    color: '#F1F5F9',
+    color: '#1E293B',
     padding: '8px 10px',
     fontSize: 13,
     width: '100%',
@@ -2289,8 +2319,8 @@ function AnalysisTab({
   };
 
   const addBtnStyle: React.CSSProperties = {
-    background: 'rgba(124,110,250,0.12)',
-    color: '#A89AF9',
+    background: 'rgba(124,110,250,0.10)',
+    color: '#7C6EFA',
     border: '1px solid rgba(124,110,250,0.25)',
     borderRadius: 6,
     padding: '6px 12px',
@@ -2300,9 +2330,9 @@ function AnalysisTab({
   };
 
   const removeBtnStyle: React.CSSProperties = {
-    background: 'rgba(239,68,68,0.1)',
+    background: 'rgba(239,68,68,0.08)',
     color: '#EF4444',
-    border: 'none',
+    border: '1px solid rgba(239,68,68,0.15)',
     borderRadius: 4,
     padding: '2px 6px',
     cursor: 'pointer',
@@ -2316,7 +2346,7 @@ function AnalysisTab({
       {/* Section 1: Success Evaluation Criteria */}
       <div style={{ marginBottom: 32 }}>
         <div style={{ marginBottom: 16 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#F1F5F9', margin: '0 0 6px 0', fontFamily: 'var(--font-ui), sans-serif' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1E293B', margin: '0 0 6px 0', fontFamily: 'var(--font-ui), sans-serif' }}>
             Success Evaluation Criteria
           </h3>
           <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.55 }}>
@@ -2358,9 +2388,9 @@ function AnalysisTab({
                     style={{
                       padding: '4px 12px', borderRadius: 9999, fontSize: 12, cursor: 'pointer',
                       fontFamily: 'var(--font-ui), sans-serif',
-                      background: crit.scope === scope ? 'rgba(124,110,250,0.18)' : 'rgba(255,255,255,0.04)',
-                      border: `1px solid ${crit.scope === scope ? 'rgba(124,110,250,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                      color: crit.scope === scope ? '#A89AF9' : '#64748B',
+                      background: crit.scope === scope ? 'rgba(124,110,250,0.10)' : '#F8FAFC',
+                      border: `1px solid ${crit.scope === scope ? 'rgba(124,110,250,0.35)' : '#E2E8F0'}`,
+                      color: crit.scope === scope ? '#7C6EFA' : '#64748B',
                       transition: 'all 0.15s',
                     }}
                   >
@@ -2378,7 +2408,7 @@ function AnalysisTab({
       {/* Section 2: Data Collection */}
       <div>
         <div style={{ marginBottom: 16 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#F1F5F9', margin: '0 0 6px 0', fontFamily: 'var(--font-ui), sans-serif' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1E293B', margin: '0 0 6px 0', fontFamily: 'var(--font-ui), sans-serif' }}>
             Data Collection
           </h3>
           <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.55 }}>

@@ -90,7 +90,7 @@ class TwilioService:
         data: dict[str, Any] = {"To": to, "From": from_, "Url": twiml_url}
         if status_callback:
             data["StatusCallback"] = status_callback
-            data["StatusCallbackEvent"] = "initiated ringing answered completed"
+            data["StatusCallbackEvent"] = "initiated ringing answered completed failed"
             data["StatusCallbackMethod"] = "POST"
         idempotency_key = str(uuid.uuid4())
         logger.info("twilio_create_call to=%s from=%s idempotency=%s", to, from_, idempotency_key)
@@ -115,6 +115,16 @@ class TwilioService:
             await self._end_call_inner(call_sid)
         except _TwilioTransientError as e:
             raise ExternalServiceError("Twilio", str(e)) from e
+
+    async def fetch_call_status(self, call_sid: str) -> str | None:
+        """Return the Twilio call status string, or None on any error."""
+        try:
+            r = await self._request("GET", self._url(f"Calls/{call_sid}.json"))
+            if r.status_code == 200:
+                return r.json().get("status")
+        except Exception:
+            pass
+        return None
 
     @retry(
         stop=stop_after_attempt(3),

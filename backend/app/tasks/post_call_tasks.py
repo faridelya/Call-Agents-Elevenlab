@@ -50,6 +50,8 @@ OUTCOME_CHOICES = {
     "do_not_call":         "Contact requested to be removed from the calling list.",
     "wrong_number":        "The number reached the wrong person or is no longer valid.",
     "call_disconnected":   "The call ended unexpectedly before the conversation concluded.",
+    # ── Transfer ─────────────────────────────────────────────────────────────────
+    "transferred_to_human": "Call was transferred to a live human agent.",
 }
 
 # Outcomes that count as positive / converted for analytics
@@ -122,66 +124,122 @@ async def post_call_processing(
             if raw_stages:
                 call.stage_timeline = [json.loads(s) for s in raw_stages]
 
-        # ── 2. Classify outcome + generate summary ────────────────────────────
-        # Primary: fetch analysis from EL (evaluation criteria results + summary).
-        # Fallback: existing LLM analyze path if EL data is unavailable.
+        # Log transcript role breakdown — helps confirm if EL native transfer
+        # included any human-leg roles in the transcript it returned
+        if call.transcript:
+            role_counts: dict = {}
+            for e in call.transcript:
+                k = e.get("role", "unknown")
+                role_counts[k] = role_counts.get(k, 0) + 1
+            log.info("post_call_transcript_roles",
+                     call_id=call_id,
+                     total_entries=len(call.transcript),
+                     role_breakdown=role_counts)
+
+        # ── 2. EL criteria + outcome/summary ─────────────────────────────────
+        # EL criteria are ALWAYS fetched and saved (60 s after call they are
+        # finalized and more complete than the webhook snapshot).
         #
-        # Exception: if a human_agent entry exists (from transcribe_human_leg) we
-        # always force re-classification so the full conversation informs the outcome.
+        # Summary/outcome paths:
+        #  A) Normal call (no human leg, already classified by webhook):
+        #     Criteria refreshed; summary/outcome not re-computed.
+        #  B) Normal call (no human leg, not yet classified):
+        #     Use EL analysis directly — no LLM.  LLM fallback only when EL
+        #     provides no summary (rare: very short or failed calls).
+        #  C) Transfer call (has_human_leg from transcribe_human_leg):
+        #     LLM on FULL transcript (AI conversation + human leg).  EL criteria
+        #     cover the pre-transfer portion and are still saved.
+
         has_human_leg = any(e.get("role") == "human_agent" for e in (call.transcript or []))
         already_classified = bool(call.auto_summary and call.outcome) and not has_human_leg
+
+        # ── 2a. Always fetch EL analysis for criteria ─────────────────────────
+        el_analysis: dict = {}
+        el_conv_id = getattr(call, "elevenlabs_conversation_id", None)
+        if el_conv_id:
+            el_analysis = await _fetch_el_analysis(el_conv_id)
+
+        analysis_results = el_analysis.get("analysis_results") or []
+        if analysis_results or not call.el_analysis_results:
+            call_successful_el = el_analysis.get("call_successful", "unknown")
+            call.el_analysis_results = {
+                "criteria_results": analysis_results,
+                "call_successful": call_successful_el,
+            }
+        data_coll = el_analysis.get("data_collection_results")
+        if data_coll:
+            call.el_data_collection = data_coll
+        if analysis_results:
+            log.info("post_call_el_criteria_stored",
+                     call_id=call_id,
+                     criteria_count=len(analysis_results),
+                     call_successful=el_analysis.get("call_successful", "unknown"))
+
+        # ── 2b. Summary + outcome ─────────────────────────────────────────────
         if already_classified:
             log.info("post_call_llm_skipped",
                      call_id=call_id,
                      reason="el_webhook_already_classified",
                      outcome=call.outcome)
         else:
-            if has_human_leg and call.auto_summary and call.outcome:
-                log.info("post_call_llm_reclassify",
+            if has_human_leg:
+                log.info("post_call_human_leg_reclassify",
                          call_id=call_id,
-                         note="Human leg transcript present — re-classifying with full conversation")
+                         note="Human leg present — LLM will classify full conversation")
+                if not llm_model and call.agent_id:
+                    from app.models.agent import Agent as AgentModel
+                    agent_result = await db.execute(
+                        select(AgentModel).where(AgentModel.id == call.agent_id)
+                    )
+                    agent_obj = agent_result.scalar_one_or_none()
+                    if agent_obj:
+                        llm_model = agent_obj.llm_model or ""
+                        llm_temperature = agent_obj.llm_temperature or 0.0
 
-            # Preserve the hint from log_call_outcome tool (live call signal)
             hint = call.outcome
 
-            # ── 2a. Try EL analysis first ─────────────────────────────────
-            el_analysis: dict = {}
-            el_conv_id = getattr(call, "elevenlabs_conversation_id", None)
-            if el_conv_id:
-                el_analysis = await _fetch_el_analysis(el_conv_id)
+            if has_human_leg:
+                # Full conversation — LLM sees AI + human leg
+                analysis = await _llm_analyze_call(
+                    call.transcript,
+                    hint_outcome=hint,
+                    llm_model=llm_model or None,
+                    llm_temperature=llm_temperature or None,
+                )
+                if analysis:
+                    if not hint or analysis.get("confidence", 0) >= 0.7:
+                        call.outcome = analysis.get("outcome") or hint
+                    call.auto_summary = analysis.get("summary") or call.auto_summary
+                    if analysis.get("next_action"):
+                        call.next_action = analysis.get("next_action")
+                    log.info("post_call_human_leg_classified",
+                             call_id=call_id,
+                             outcome=call.outcome,
+                             hint_was=hint,
+                             confidence=analysis.get("confidence"))
+                elif el_analysis.get("transcript_summary") and not call.auto_summary:
+                    call.auto_summary = el_analysis["transcript_summary"]
+                    if el_analysis.get("call_summary_title"):
+                        call.call_summary_title = el_analysis["call_summary_title"]
+                    log.info("post_call_human_leg_el_summary_fallback",
+                             call_id=call_id, reason="no llm_model for full conversation")
 
-            if el_analysis.get("transcript_summary"):
-                # Use EL data as primary source
+            elif el_analysis.get("transcript_summary"):
+                # Normal path: use EL analysis directly, no LLM
                 call.auto_summary = el_analysis["transcript_summary"]
-
                 title = el_analysis.get("call_summary_title")
                 if title:
                     call.call_summary_title = title
-
                 call_successful = el_analysis.get("call_successful", "unknown")
-                # Map EL call_successful to Voxara outcome (hint takes priority if set)
                 outcome_from_el = {
                     "success": "goal_achieved",
                     "failure": "not_interested",
                     "unknown": "follow_up_needed",
                 }.get(call_successful, "follow_up_needed")
-
                 if not hint:
                     call.outcome = outcome_from_el
                 else:
-                    # hint was set during live call — keep it unless EL strongly disagrees
                     call.outcome = hint
-
-                analysis_results = el_analysis.get("analysis_results") or []
-                call.el_analysis_results = {
-                    "criteria_results": analysis_results,
-                    "call_successful": call_successful,
-                }
-
-                data_coll = el_analysis.get("data_collection_results")
-                if data_coll:
-                    call.el_data_collection = data_coll
-
                 log.info("post_call_el_analysis_applied",
                          call_id=call_id,
                          outcome=call.outcome,
@@ -190,7 +248,7 @@ async def post_call_processing(
                          hint_was=hint)
 
             else:
-                # ── 2b. Fallback: LLM classify ────────────────────────────
+                # Fallback: LLM (no EL analysis available — very short/failed call)
                 analysis = await _llm_analyze_call(
                     call.transcript,
                     hint_outcome=hint,
@@ -286,11 +344,22 @@ async def _fetch_el_analysis(el_conversation_id: str) -> dict:
         analysis_results = analysis.get("criteria_results") or []
         data_collection_results = analysis.get("data_collection_results") or None
 
+        # Log role breakdown of EL transcript to detect if human-leg entries came back
+        el_transcript = data.get("transcript") or []
+        role_counts: dict = {}
+        for entry in el_transcript:
+            r_key = entry.get("role", "unknown")
+            role_counts[r_key] = role_counts.get(r_key, 0) + 1
+
         log.info("fetch_el_analysis_ok",
                  conversation_id=el_conversation_id,
                  call_successful=call_successful,
                  criteria_count=len(analysis_results),
-                 has_summary=bool(transcript_summary))
+                 has_summary=bool(transcript_summary),
+                 el_transcript_entries=len(el_transcript),
+                 el_transcript_roles=role_counts,
+                 has_criteria=bool(analysis_results),
+                 has_data_collection=bool(data_collection_results))
 
         return {
             "transcript_summary": transcript_summary,
@@ -963,6 +1032,26 @@ async def transcribe_human_leg(ctx: dict, call_id: str, recording_sid: str) -> N
                  call_id=call_id,
                  entries_added=len(new_entries),
                  method="dual_channel" if (diarized_entries and wav_bytes) else "diarization")
+
+    # ── 5. Re-enqueue post_call_processing for full-conversation analysis ─────
+    # Now that the human leg is appended, run post_call_processing again so the
+    # FULL transcript (AI conversation + human agent conversation) is summarized
+    # and classified with LLM outcome labels. EL criteria (pre-transfer only) are
+    # preserved. llm_model passed as "" — post_call_processing reads it from agent DB.
+    try:
+        from arq import create_pool as _arq_pool
+        from arq.connections import RedisSettings as _RedisSettings
+        from datetime import timedelta
+        from app.config import settings as _settings
+        pool = await _arq_pool(_RedisSettings.from_dsn(_settings.redis_url))
+        await pool.enqueue_job(
+            "post_call_processing", call_id, "", 0.0, "",
+            _defer_by=timedelta(seconds=5),
+        )
+        await pool.aclose()
+        log.info("transcribe_human_leg_post_call_requeued", call_id=call_id)
+    except Exception as exc:
+        log.warning("transcribe_human_leg_requeue_error", call_id=call_id, error=str(exc))
 
 
 async def _update_campaign_counters(call, db) -> None:

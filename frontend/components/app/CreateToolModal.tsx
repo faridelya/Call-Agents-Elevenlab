@@ -963,7 +963,7 @@ export function CreateToolModal({ agentId, initialType, editTool, onSave, onClos
           {/* Type selector tabs */}
           {!isEdit && (
             <div style={{ display: 'flex', gap: 6 }}>
-              {(['webhook', 'client', 'mcp'] as ToolType[]).map((t) => {
+              {(['webhook', 'mcp'] as ToolType[]).map((t) => {
                 const m = TYPE_META[t];
                 const active = toolType === t;
                 return (

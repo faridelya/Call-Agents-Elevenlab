@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useCalls } from '@/lib/hooks/useCalls';
 import { apiFetch } from '@/lib/api';
-import type { CallRecord } from '@/lib/api';
+import type { CallRecord, ElCriterionResult } from '@/lib/api';
 import { getOutcomeColor, getOutcomeLabel, getOutcomeIcon } from '@/lib/outcomeUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -147,6 +147,99 @@ function Bubble({ role, text, timestamp, agentName }: {
   );
 }
 
+// ─── EL criteria result row ───────────────────────────────────────────────────
+function CriterionRow({ criterion, isLast }: { criterion: ElCriterionResult; isLast: boolean }) {
+  const resultMeta = {
+    success: { label: 'Success', color: '#10B981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.18)' },
+    failure: { label: 'Failure', color: '#EF4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.18)' },
+    unknown: { label: 'Unknown', color: '#94A3B8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.18)' },
+  }[criterion.result ?? 'unknown'] ?? { label: 'Unknown', color: '#94A3B8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.18)' };
+
+  return (
+    <div style={{
+      display: 'flex', gap: 10, alignItems: 'flex-start',
+      padding: '9px 0',
+      borderBottom: isLast ? 'none' : '1px solid #F1F5F9',
+    }}>
+      <span style={{
+        flexShrink: 0, marginTop: 1,
+        fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 9999,
+        background: resultMeta.bg, color: resultMeta.color, border: `1px solid ${resultMeta.border}`,
+        letterSpacing: '0.04em',
+      }}>
+        {resultMeta.label}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: criterion.rationale ? 3 : 0 }}>
+          {criterion.name}
+        </div>
+        {criterion.rationale && (
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            {criterion.rationale}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EvaluationResultsSection({ criteria }: { criteria: ElCriterionResult[] }) {
+  if (!criteria || criteria.length === 0) return null;
+  return (
+    <div style={{ padding: '12px 20px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#8B5CF6', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Evaluation Results
+        </div>
+        <span title="Evaluated by ElevenLabs after the call" style={{
+          width: 14, height: 14, borderRadius: '50%', display: 'inline-flex',
+          alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          background: 'rgba(139,92,246,0.10)', color: '#8B5CF6', fontSize: 9, fontWeight: 700, cursor: 'default',
+        }}>i</span>
+      </div>
+      <div style={{ border: '1px solid #F1F5F9', borderRadius: 8, padding: '0 10px', background: '#FAFAFE' }}>
+        {criteria.map((c, i) => (
+          <CriterionRow key={c.id} criterion={c} isLast={i === criteria.length - 1} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExtractedDataSection({ data }: { data: Record<string, string | boolean | number> }) {
+  const entries = Object.entries(data);
+  if (entries.length === 0) return null;
+  return (
+    <div style={{ padding: '12px 20px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#06B6D4', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Extracted Data
+        </div>
+        <span title="Automatically extracted by ElevenLabs from the conversation" style={{
+          width: 14, height: 14, borderRadius: '50%', display: 'inline-flex',
+          alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          background: 'rgba(6,182,212,0.10)', color: '#06B6D4', fontSize: 9, fontWeight: 700, cursor: 'default',
+        }}>i</span>
+      </div>
+      <div style={{
+        border: '1px solid #F1F5F9', borderRadius: 8, padding: '10px 12px', background: '#F0FDFF',
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px 16px',
+      }}>
+        {entries.map(([key, val]) => (
+          <div key={key}>
+            <div style={{ fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+              {key.replace(/_/g, ' ')}
+            </div>
+            <div style={{ fontSize: 13, color: '#0F172A', fontFamily: typeof val !== 'string' ? 'var(--font-mono)' : 'inherit' }}>
+              {String(val)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Transfer-pending helpers ─────────────────────────────────────────────────
 function hasTransferEvent(transcript: any[]): boolean {
   return transcript.some(e => e.role === 'system' && (e.text || '').includes('[Transfer]'));
@@ -231,6 +324,9 @@ function CallDetail({ call, onClose, width }: { call: CallRecord; onClose: () =>
     { l: 'Status', v: (src as any).status ?? call.status ?? '—', c: '#06B6D4' },
   ];
 
+  const criteriaResults: ElCriterionResult[] = (src as any).el_analysis_results?.criteria_results ?? [];
+  const extractedData = (src as any).el_data_collection as Record<string, string | boolean | number> | undefined;
+
   return (
     <div style={{
       width, flexShrink: 0,
@@ -291,6 +387,16 @@ function CallDetail({ call, onClose, width }: { call: CallRecord; onClose: () =>
             {(detail ?? call).auto_summary}
           </div>
         </div>
+      )}
+
+      {/* EL Evaluation Results */}
+      {criteriaResults.length > 0 && (
+        <EvaluationResultsSection criteria={criteriaResults} />
+      )}
+
+      {/* EL Extracted Data */}
+      {extractedData && Object.keys(extractedData).length > 0 && (
+        <ExtractedDataSection data={extractedData} />
       )}
 
       {/* Transcript */}

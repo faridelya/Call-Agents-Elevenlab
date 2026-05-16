@@ -188,6 +188,10 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
         )
 
     # ── 4. Stamp transfer metadata in Redis ───────────────────────────────────
+    # post_transfer_outcome is configurable per-agent; defaults to "transferred_to_human".
+    # post_call_processing reads this so the outcome label doesn't get overridden by EL/LLM.
+    post_transfer_outcome = (cfg.get("post_transfer_outcome") or "transferred_to_human").strip()
+
     now_iso = datetime.now(timezone.utc).isoformat()
     await redis.hset(
         f"call:{ctx.call_record_id}",
@@ -197,6 +201,7 @@ async def handler(params: dict, ctx: CallContext, db, redis) -> str:
             "transfer_type": transfer_type,
             "transfer_reason": reason,
             "transferred_at": now_iso,
+            "forced_outcome": post_transfer_outcome,
         },
     )
     log.info(

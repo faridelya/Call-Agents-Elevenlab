@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 import httpx
 import structlog
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from app.config import settings
 from app.core.exceptions import ExternalServiceError
@@ -31,7 +31,12 @@ class ElevenLabsService:
                 raise ExternalServiceError("ElevenLabs", r.text)
             return r.json()["agent_id"]
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=4))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=4),
+        retry=retry_if_exception_type(httpx.RequestError),
+        reraise=True,
+    )
     async def update_agent(self, agent_id: str, config: dict) -> None:
         async with self._client() as c:
             r = await c.patch(f"{self._base}/convai/agents/{agent_id}", json=config)

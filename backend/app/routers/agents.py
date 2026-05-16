@@ -113,7 +113,24 @@ async def _sync_to_elevenlabs(agent: Agent, db: AsyncSession) -> None:
     config = elevenlabs_service.build_agent_config(agent, custom_tools)
 
     if agent.elevenlabs_agent_id:
-        await elevenlabs_service.update_agent(agent.elevenlabs_agent_id, config)
+        try:
+            await elevenlabs_service.update_agent(agent.elevenlabs_agent_id, config)
+        except ExternalServiceError as e:
+            if "document_not_found" in str(e):
+                # EL agent has stale internal document references (deleted tool/KB docs).
+                # Delete the broken EL agent and recreate it fresh.
+                log.warning("el_sync_stale_docs_recreating",
+                            agent_id=agent.id,
+                            el_agent_id=agent.elevenlabs_agent_id,
+                            error=str(e)[:200])
+                try:
+                    await elevenlabs_service.delete_agent(agent.elevenlabs_agent_id)
+                except Exception:
+                    pass
+                el_agent_id = await elevenlabs_service.create_agent(config)
+                agent.elevenlabs_agent_id = el_agent_id
+            else:
+                raise
     else:
         el_agent_id = await elevenlabs_service.create_agent(config)
         agent.elevenlabs_agent_id = el_agent_id

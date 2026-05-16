@@ -58,6 +58,32 @@ async def cleanup_stale_calls(ctx: dict) -> None:
                     await _finalize_call(call, redis, db)
                     log.info("sweep_finalized_call",
                              call_id=call.id, el_status=el_status)
+                continue
+
+            # No EL conversation — call never connected. Poll Twilio for the
+            # final status so failed/no-answer calls don't stay stuck forever.
+            if call.twilio_call_sid:
+                try:
+                    from app.services.twilio_service import TwilioService
+                    from app.models.user import User
+                    from sqlalchemy import select as _select
+                    user_result = await db.execute(
+                        _select(User).where(User.id == call.user_id)
+                    )
+                    user = user_result.scalar_one_or_none()
+                    if user and user.twilio_account_sid and user.twilio_auth_token:
+                        twilio = TwilioService(user.twilio_account_sid, user.twilio_auth_token)
+                        twilio_status = await twilio.fetch_call_status(call.twilio_call_sid)
+                        final = ("completed", "failed", "busy", "no-answer", "canceled")
+                        if twilio_status in final:
+                            call.status = twilio_status
+                            call.ended_at = call.ended_at or datetime.now(timezone.utc).isoformat()
+                            from app.routers.webhooks import _finalize_call
+                            await _finalize_call(call, redis, db)
+                            log.info("sweep_twilio_polled_final",
+                                     call_id=call.id, twilio_status=twilio_status)
+                except Exception as exc:
+                    log.warning("sweep_twilio_poll_failed", call_id=call.id, error=str(exc))
 
         await db.commit()
 

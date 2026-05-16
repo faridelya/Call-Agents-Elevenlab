@@ -365,3 +365,84 @@ async def end_call(
         await _finalize_call(call, redis, db)
         await db.commit()
     return MessageResponse(message="Call ended")
+
+
+@router.get("/{call_id}/debug/el-conversation")
+async def debug_el_conversation(
+    call_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Debug endpoint: fetch raw EL conversation data for a call and compare with DB state.
+
+    Use after a test call to inspect what ElevenLabs returned — transcript roles,
+    criteria results, call_successful, and whether a human-leg transcript came back.
+    Also shows what is currently stored in the DB for this call.
+    """
+    import httpx
+    from app.config import settings as cfg
+
+    call = await get_call_or_404(call_id, current_user.id, db)
+
+    el_raw: dict = {}
+    el_error: str | None = None
+
+    if call.elevenlabs_conversation_id:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                r = await client.get(
+                    f"{cfg.elevenlabs_base_url}/convai/conversations/{call.elevenlabs_conversation_id}",
+                    headers={"xi-api-key": cfg.elevenlabs_api_key},
+                )
+            if r.status_code == 200:
+                el_raw = r.json()
+            else:
+                el_error = f"EL API returned HTTP {r.status_code}: {r.text[:300]}"
+        except Exception as exc:
+            el_error = str(exc)
+
+    # Summarise transcript roles from EL raw response
+    el_transcript = el_raw.get("transcript") or []
+    el_roles: dict[str, int] = {}
+    for entry in el_transcript:
+        role = entry.get("role", "unknown")
+        el_roles[role] = el_roles.get(role, 0) + 1
+
+    # Summarise transcript roles stored in DB
+    db_transcript = call.transcript or []
+    db_roles: dict[str, int] = {}
+    for entry in db_transcript:
+        role = entry.get("role", "unknown")
+        db_roles[role] = db_roles.get(role, 0) + 1
+
+    analysis = el_raw.get("analysis") or {}
+
+    return {
+        "call_id": call_id,
+        "elevenlabs_conversation_id": call.elevenlabs_conversation_id,
+        "call_status": call.status,
+        # ── What EL returned ─────────────────────────────────────────────────
+        "el_fetch_error": el_error,
+        "el_transcript_entry_count": len(el_transcript),
+        "el_transcript_role_breakdown": el_roles,
+        "el_analysis": {
+            "call_successful": analysis.get("call_successful"),
+            "transcript_summary": analysis.get("transcript_summary"),
+            "call_summary_title": analysis.get("call_summary_title"),
+            "criteria_results_count": len(analysis.get("criteria_results") or []),
+            "criteria_results": analysis.get("criteria_results") or [],
+            "data_collection_results": analysis.get("data_collection_results"),
+        },
+        "el_metadata": el_raw.get("metadata"),
+        # ── What is stored in DB ──────────────────────────────────────────────
+        "db_transcript_entry_count": len(db_transcript),
+        "db_transcript_role_breakdown": db_roles,
+        "db_outcome": call.outcome,
+        "db_auto_summary": call.auto_summary,
+        "db_el_analysis_results": call.el_analysis_results,
+        "db_el_data_collection": call.el_data_collection,
+        "db_sentiment_score": call.sentiment_score,
+        # ── Transfer info ─────────────────────────────────────────────────────
+        "has_human_leg_in_db": any(e.get("role") == "human_agent" for e in db_transcript),
+        "has_human_leg_in_el": any(e.get("role") == "human_agent" for e in el_transcript),
+    }

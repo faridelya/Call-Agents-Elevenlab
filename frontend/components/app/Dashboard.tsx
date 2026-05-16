@@ -16,8 +16,9 @@ import { AgentPreviewDrawer } from './AgentPreviewDrawer';
 
 function fmtDuration(secs: number) {
   if (!secs) return '—';
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
+  const rounded = Math.round(secs);
+  const m = Math.floor(rounded / 60);
+  const s = rounded % 60;
   return `${m}m ${String(s).padStart(2, '0')}s`;
 }
 
