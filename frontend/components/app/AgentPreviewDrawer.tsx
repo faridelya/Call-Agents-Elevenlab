@@ -196,11 +196,19 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
   const isActive = agent.is_active;
   const isSynced = Boolean(agent.elevenlabs_agent_id);
 
-  const hasScript    = Object.values(agent.call_script ?? {}).some(Boolean);
-  const hasTools     = (agent.enabled_tools ?? []).length > 0;
-  const hasCriteria  = Object.keys(agent.qualification_criteria ?? {}).length > 0;
-  const hasCatalog   = (agent.product_catalog ?? []).length > 0;
-  const hasAnalysis  = (agent.evaluation_criteria ?? []).length > 0;
+  const hasScript      = Object.values(agent.call_script ?? {}).some(Boolean);
+  const hasTools       = (agent.enabled_tools ?? []).length > 0;
+  const hasCriteria    = Object.keys(agent.qualification_criteria ?? {}).length > 0;
+  const hasCatalog     = (agent.product_catalog ?? []).length > 0;
+  const hasAnalysis    = (agent.evaluation_criteria ?? []).length > 0;
+  const hasDataCollect = (agent.data_collection ?? []).length > 0;
+
+  const DC_TYPE_COLOR: Record<string, string> = {
+    string:  '#7C6EFA',
+    number:  '#F59E0B',
+    boolean: '#10B981',
+    enum:    '#22D3EE',
+  };
 
   const statusColor = isActive ? '#10B981' : '#F59E0B';
 
@@ -208,8 +216,8 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
     <>
       <style>{STYLES}</style>
 
-      {/* Backdrop */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.3)', backdropFilter: 'blur(2px)' }} />
+      {/* Backdrop — no blur so the left panel stays fully readable */}
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.25)' }} />
 
       {/* Drawer */}
       <div style={{
@@ -480,9 +488,68 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
             </Section>
           )}
 
-          {/* ── 9. QUALIFICATION CRITERIA ── */}
+          {/* ── 9. DATA COLLECTION ── */}
+          {hasDataCollect && (
+            <Section title={`Data Collection (${agent.data_collection!.length} field${agent.data_collection!.length === 1 ? '' : 's'})`} delay={330} icon={
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3S3 13.66 3 12"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+              </svg>
+            }>
+              <div style={{ fontSize: 11.5, color: '#64748B', marginBottom: 10, padding: '7px 10px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8 }}>
+                Structured data ElevenLabs extracts from each call and stores for post-call analysis.
+              </div>
+
+              {/* Column headers */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px', gap: 8, padding: '0 12px', marginBottom: 4 }}>
+                <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94A3B8' }}>Field / Description</span>
+                <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94A3B8', textAlign: 'right' }}>Type</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {agent.data_collection!.map((field, i) => {
+                  const typeColor = DC_TYPE_COLOR[field.type] ?? '#94A3B8';
+                  return (
+                    <div key={field.id} style={{
+                      display: 'grid', gridTemplateColumns: '1fr auto',
+                      gap: 12, alignItems: 'flex-start',
+                      padding: '10px 14px', borderRadius: 9,
+                      background: '#F8FAFC', border: '1px solid #E2E8F0',
+                      animation: `badge-pop 0.3s ${i * 50}ms both`,
+                    }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: field.description ? 4 : 0 }}>
+                          <span style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: typeColor, flexShrink: 0, display: 'inline-block',
+                          }} />
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.03em' }}>
+                            {field.name}
+                          </span>
+                        </div>
+                        {field.description && (
+                          <p style={{ margin: 0, fontSize: 11.5, color: '#64748B', lineHeight: 1.55, paddingLeft: 13 }}>
+                            {field.description}
+                          </p>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: 9.5, fontWeight: 600, color: typeColor,
+                        background: typeColor + '12', border: `1px solid ${typeColor}28`,
+                        padding: '2px 8px', borderRadius: 10, letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap', alignSelf: 'flex-start',
+                      }}>
+                        {field.type}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          )}
+
+          {/* ── 11. QUALIFICATION CRITERIA ── */}
           {hasCriteria && (
-            <Section title="Lead Qualification Criteria" delay={350} icon={
+            <Section title="Lead Qualification Criteria" delay={370} icon={
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
@@ -495,9 +562,9 @@ export function AgentPreviewDrawer({ agent, onClose, onEdit }: Props) {
             </Section>
           )}
 
-          {/* ── 10. PRODUCT CATALOG ── */}
+          {/* ── 12. PRODUCT CATALOG ── */}
           {hasCatalog && (
-            <Section title={`Product Catalog (${agent.product_catalog.length} items)`} delay={390} icon={
+            <Section title={`Product Catalog (${agent.product_catalog.length} items)`} delay={410} icon={
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
               </svg>
